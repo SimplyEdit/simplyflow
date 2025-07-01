@@ -9,6 +9,6 @@ Object.assign(window.simply, {
 	bind,
 	model,
 	state
-}
+})
 
 export default window.simply
