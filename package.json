@@ -1,0 +1,51 @@
+{
+  "name": "simplyflow",
+  "version": "0.1.0",
+  "description": "Flow based programming in javascript, with signals and effects",
+  "main": "src/flow.mjs",
+  "type": "module",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "build": "esbuild src/flow.mjs --bundle --outfile=dist/simply.flow.min.js --minify --sourcemap",
+    "build-dev": "esbuild src/flow.mjs --bundle --outfile=dist/simply.flow.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simplyedit/simplyflow.git"
+  },
+  "keywords": [
+    "UI",
+    "components",
+    "declarative",
+    "reactive"
+  ],
+  "author": "auke@muze.nl",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/simplyedit/simplyflow/issues"
+  },
+  "homepage": "https://github.com/simplyedit/simplyflow#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "esbuild": "^0.24.2",
+    "globals": "^15.13.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+
+  },
+  "files": [
+    "README.md",
+    "dist/",
+    "src/"
+  ],
+  "jest": {
+    "transform": {},
+    "testEnvironment": "jsdom"
+  }
+}
