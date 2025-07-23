@@ -1,0 +1,161 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>viewmodel</title>
+<link rel="stylesheet" href="ds.css">
+<link rel="stylesheet" href="source.css">
+<link rel="stylesheet" href="datatable.css">
+<script type="module">
+  if (!("anchorName" in document.documentElement.style)) {
+    import("https://unpkg.com/@oddbird/css-anchor-positioning");
+  }
+</script>
+<main>
+
+<nav class="ds-buttonbar ds-align-right">
+	<button data-simply-command="pagePrev" class="ds-button"><svg class="ds-icon ds-icon-feather">
+			<use xlink:href="feather-sprite.svg#chevron-left"></use>
+		</svg></button>
+	<span data-flow-field="numbers.state.options.paging.page"></span> /
+	<span data-flow-field="numbers.state.options.paging.max"></span>
+	<button data-simply-command="pageNext" class="ds-button"><svg class="ds-icon ds-icon-feather">
+			<use xlink:href="feather-sprite.svg#chevron-right"></use>
+		</svg></button>
+</nav>
+<h1>Datatable</h1>
+<div class="ds-datatable-main">
+	<button class="ds-dropdown ds-dropdown ds-datatable-column-select" popovertarget="menu" popovertargetaction="toggle">
+		<svg class="ds-icon ds-icon-feather">
+			<use xlink:href="feather-sprite.svg#plus"></use>
+		</svg>
+	</button>
+	<nav class="ds-datatable-column-toggle ds-dropdown-nav ds-dropdown-right ds-align-left" popover id="menu">
+		<ul class="ds-dropdown-list" data-flow-map="numbers.state.options.columns">
+			<template>
+				<li class="ds-dropdown-item" data-simply-command="dsToggleColumn">
+					<label>
+						<input type="checkbox" value=":empty" data-flow-field="hidden">
+						<span data-flow-field="name"></span>
+					</label>
+				</li>
+			</template>
+		</ul>
+	</nav>
+	<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers">
+	<thead>
+		<tr data-flow-map="numbers.state.options.columns">
+			<template data-flow-field="hidden" data-flow-match=":empty">
+				<th data-flow-field="name" data-simply-command="toggleSort"></th>
+			</template>
+		</tr>
+	</thead>
+	<tbody data-flow-list="numbers.view.current">
+		<template>
+			<tr data-flow-map=":value">
+				<template>
+					<td data-flow-field=":value"></td>
+				</template>
+			</tr>
+		</template>
+	</tbody>
+	</table>
+</div>
+</main>
+<div data-foo="&quot;foo%2Ebar&quot;"><div>
+<script src="https://cdn.jsdelivr.net/gh/simplyedit/simplyview/dist/simply.everything.js"></script>
+<script class="source" type="module">
+	import {signal, effect, batch} from '../src/state.mjs'
+	import {bind} from '../src/bind.mjs'
+	import {model, paging, sort, filter, columns} from '../src/model.mjs'
+	
+	// generate a random list of numbers
+	const data = []
+	for (let i=0; i<110; i++) {
+		data.push({id:i,value:Math.floor(Math.random()*1000)})
+	}
+
+	// create a new SimplyFlowModel from it
+	const numbersModel = model({
+		data,
+		options: {
+		}
+	})
+
+	// adds a sort effect, this must come before
+	// the paging effect, since the content of each
+	// page depends on the sort order of the entire list
+	numbersModel.addEffect(sort({ sortBy: 'value'}))
+
+	// adds a paging effect
+	numbersModel.addEffect(paging({
+		pageSize: 25
+	}))
+
+	// adds the effect to render visible columns
+	numbersModel.addEffect(columns({
+		id: {
+			name: 'ID'
+		},
+		value: {
+			name: 'Value'
+		}
+	}))
+
+	numbersModel.container = document.body
+	// set up databinding to render the numbers list
+	bind({
+		container: numbersModel.container,
+		attribute: 'data-flow',
+		root: {
+			numbers: numbersModel
+		}
+	})
+
+	// add commands to handle user interaction
+	simply.command(numbersModel, {
+		pagePrev: function(el, value) {
+			this.app.state.options.paging.page--
+		},
+		pageNext: function(el, value) {
+			this.app.state.options.paging.page++
+		},
+		toggleSort: function(el, value) {
+			batch(() => {
+				const sortBy = el.innerText.trim().toLowerCase()
+				this.app.state.options.sort.sortBy = sortBy
+				const dir = this.app.state.options.sort.direction
+				if (dir=='asc') {
+					this.app.state.options.sort.direction = 'desc'
+				} else {
+					this.app.state.options.sort.direction = 'asc'
+				}
+			})
+		},
+		dsToggleColumnSelect: function(el, value) {
+			el.querySelector('.ds-datatable-column-toggle').classList.toggle('ds-selected')
+		},
+		dsToggleColumn: function(el, value) {
+			const key = el.dataset.flowKey
+			const column = this.app.state.options.columns[key]
+			column.hidden = column.hidden ? 0 : 1
+		}
+	})
+
+	// update the sort indicators in the column on changes
+	let lastSortColumn = null
+	effect(() => {
+		const sortBy = numbersModel.state.options.sort.sortBy
+		const sortDirection = numbersModel.state.options.sort.direction
+		if (lastSortColumn) {
+			lastSortColumn.classList.remove('ds-datatable-sorted-ascending')
+			lastSortColumn.classList.remove('ds-datatable-sorted-descending')
+		}
+		lastSortColumn = numbersModel.container.querySelector(`th[data-flow-key="${sortBy}"]`)
+		if (lastSortColumn) {
+			lastSortColumn.classList.add(`ds-datatable-sorted-${sortDirection}ending`)
+		}
+	})
+
+	// make the numbersModel available in the console
+	window.numbersModel = numbersModel
+	
+</script>

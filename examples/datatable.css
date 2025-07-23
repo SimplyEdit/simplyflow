@@ -1,0 +1,14 @@
+.ds-datatable-main {
+	position: relative;
+}
+.ds-datatable-column-select {
+	position: absolute;
+	right: 0;
+	z-index: 101;
+	background: transparent;
+	border: 0;
+}
+.ds-dropdown-nav {
+	border: 0;
+	margin-top: 0.1rem;
+}
