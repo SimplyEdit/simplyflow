@@ -1,23 +1,31 @@
-<h1>Examples</h1>
-<h2>Counter</h2>
-<link rel="stylesheet" href="examples.css">
+<!doctype html>
+<meta charset="utf-8">
+<title>Todo</title>
+<link rel="stylesheet" href="ds.css">
+<link rel="stylesheet" href="source.css">
+<link rel="stylesheet" href="datatable.css">
+<body>
+<main>
+	<h1>Examples</h1>
+	<h2>Counter</h2>
+	<link rel="stylesheet" href="examples.css">
 
-<div id="counterApp">
-	<input type="text" data-flow-field="counter">
-	<button data-simply-command="add1">+</button>
-	<button data-simply-command="sub1">-</button>
-	<div>Counter is now: <span data-flow-field="counter"></span></div>
-</div>
+	<div id="counterApp">
+		<input type="text" data-flow-field="counter">
+		<button data-simply-command="add1">+</button>
+		<button data-simply-command="sub1">-</button>
+		<div>Counter is now: <span data-flow-field="counter"></span></div>
+	</div>
 
-<div id="counterApp2">
-	<input type="text" data-flow-field="counter">
-	<button data-simply-command="add1">+</button>
-	<button data-simply-command="sub1">-</button>
-	<div>Counter is now: <span data-flow-field="counter"></span></div>
-</div>
-
+	<div id="counterApp2">
+		<input type="text" data-flow-field="counter">
+		<button data-simply-command="add1">+</button>
+		<button data-simply-command="sub1">-</button>
+		<div>Counter is now: <span data-flow-field="counter"></span></div>
+	</div>
+</main>
 <script src="https://cdn.jsdelivr.net/gh/simplyedit/simplyview/dist/simply.everything.js"></script>
-<script>
+<script class="source">
 	var counterApp = simply.app({
 		container: document.getElementById('counterApp'),
 		commands: {

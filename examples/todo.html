@@ -1,21 +1,29 @@
-<h1>Examples</h1>
-<h2>Todo</h2>
-<link rel="stylesheet" href="examples.css">
+<!doctype html>
+<meta charset="utf-8">
+<title>Todo</title>
+<link rel="stylesheet" href="ds.css">
+<link rel="stylesheet" href="source.css">
+<link rel="stylesheet" href="datatable.css">
+<body>
+<main>
+	<h1>Examples</h1>
+	<h2>Todo</h2>
 
-<div id="todoApp">
-	<form data-simply-command="addEntry">
-		<input type="text" name="newItem" class="new-todo" placeholder="What needs to be done?" autocomplete="off">
-	</form>
-	<ul class="todo-list" data-flow-list="items">
-		<template>
-			<li>
-				<label data-flow-field="item">Item</label>
-			</li>
-		</template>
-	</ul>
-</div>
+	<div id="todoApp">
+		<form data-simply-command="addEntry">
+			<input type="text" name="newItem" class="new-todo" placeholder="What needs to be done?" autocomplete="off">
+		</form>
+		<ul class="todo-list" data-flow-list="items">
+			<template>
+				<li>
+					<label data-flow-field="item">Item</label>
+				</li>
+			</template>
+		</ul>
+	</div>
+</main>
 <script src="https://cdn.jsdelivr.net/gh/simplyedit/simplyview/dist/simply.everything.js"></script>
-<script>
+<script class="source">
 	var todoApp = simply.app({
 		container: document.getElementById('todoApp'),
 		commands: {
