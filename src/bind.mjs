@@ -510,7 +510,7 @@ export function transformObjectByTemplates(context) {
     }
     // clean up remaining items
     while (items.length) {
-        item = items.shift()
+        let item = items.shift()
         item.remove()
     }
 }
