@@ -6,7 +6,7 @@ import {signal, effect, batch} from './state.mjs'
  * effect changes, or when an effect earlier in the chain of
  * effects changes.
  */
-class SimplyModel {
+class SimplyFlowModel {
 
 	/**
 	 * Creates a new datamodel, with a state property that contains
@@ -39,7 +39,7 @@ class SimplyModel {
 }
 
 export function model(options) {
-	return new SimplyModel(options)
+	return new SimplyFlowModel(options)
 }
 
 export function sort(options={}) {
