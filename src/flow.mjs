@@ -7,7 +7,7 @@ if (!window.simply) {
 }
 Object.assign(window.simply, {
 	bind,
-	model,
+	flow: model,
 	state
 })
 
