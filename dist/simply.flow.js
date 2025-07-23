@@ -910,7 +910,7 @@
     paging: () => paging,
     sort: () => sort
   });
-  var SimplyModel = class {
+  var SimplyFlowModel = class {
     /**
      * Creates a new datamodel, with a state property that contains
      * all the data passed to this constructor
@@ -940,7 +940,7 @@
     }
   };
   function model(options) {
-    return new SimplyModel(options);
+    return new SimplyFlowModel(options);
   }
   function sort(options = {}) {
     return function(data) {
@@ -1046,7 +1046,7 @@
   }
   Object.assign(window.simply, {
     bind,
-    model: model_exports,
+    flow: model_exports,
     state: state_exports
   });
   var flow_default = window.simply;
