@@ -3,21 +3,20 @@
 <link rel="stylesheet" href="examples.css">
 
 <div id="counterApp">
-	<input type="text" data-simply-field="counter">
+	<input type="text" data-flow-field="counter">
 	<button data-simply-command="add1">+</button>
 	<button data-simply-command="sub1">-</button>
-	<div>Counter is now: <span data-simply-field="counter"></span></div>
+	<div>Counter is now: <span data-flow-field="counter"></span></div>
 </div>
 
 <div id="counterApp2">
-	<input type="text" data-simply-field="counter">
+	<input type="text" data-flow-field="counter">
 	<button data-simply-command="add1">+</button>
 	<button data-simply-command="sub1">-</button>
-	<div>Counter is now: <span data-simply-field="counter"></span></div>
+	<div>Counter is now: <span data-flow-field="counter"></span></div>
 </div>
 
-<script src="//cdn.simplyedit.io/1/simply-edit.js"></script>
-<script src="../dist/simply.everything.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/simplyedit/simplyview/dist/simply.everything.js"></script>
 <script>
 	var counterApp = simply.app({
 		container: document.getElementById('counterApp'),
@@ -49,4 +48,22 @@
 		}
 	});
 
+</script>
+<script src="../dist/simply.flow.js"></script>
+<script>
+	counterApp.view = simply.state.signal(counterApp.view)
+
+	simply.bind({
+		container: document.getElementById('counterApp'),
+		attribute: 'data-flow',
+		root: counterApp.view
+	})
+
+	counterApp2.view = simply.state.signal(counterApp2.view)
+
+	simply.bind({
+		container: document.getElementById('counterApp2'),
+		attribute: 'data-flow',
+		root: counterApp2.view
+	})
 </script>
