@@ -51,9 +51,9 @@ In the latter case you can access the functions like this:
 ```
 
 Read more about the bundled libraries here:
-- [simply.bind](docs/simply.bind.md)
-- [simply.flow](docs/simply.flow.md)
-- [simply.state](docs/simply.state.md)
+- [simply.bind](docs/bind.md)
+- [simply.flow](docs/flow.md)
+- [simply.state](docs/state.md)
 
 Or check the [examples](examples/) for more information.
 
