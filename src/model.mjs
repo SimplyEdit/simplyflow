@@ -140,7 +140,7 @@ export function columns(options={}) {
 			return data.current.map(input => {
 				let result = {}
 				for (let key of Object.keys(this.state.options.columns)) {
-					if (!this.state.options.columns[key].hidden) {
+					if (!this.state.options.columns[key]?.hidden) {
 						result[key] = input[key]
 					}
 				}
