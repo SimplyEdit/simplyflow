@@ -191,3 +191,56 @@ Finally the model library provides an effect that allows you to select which pro
 Options are:
 
 - columns: An object with the properties you want to show or hide. Each property must be an object with an optional sub property `hidden`. If set to true, the column (property) will be filtered out.
+
+## Rendering
+
+You can render the final data using the SimplyFlow bind library, like this:
+
+```html
+<!doctype html>
+<table data-flow-list="myModel.view">
+	<template>
+		<tr data-flow-map=":value">
+			<template>
+				<td data-flow-field=":value"></td>
+			</template>
+		</tr>
+	</template>
+</table>
+<script>
+	// implement setup and myModel instantiation here
+
+	bind({
+		attribute: 'data-flow',
+		root: {
+			myModel
+		}
+	})
+</script>
+```
+
+Or you can create your own render effect and add it as the final step, like this:
+
+```javascript
+	import {model, sort, paging, filter, columns} from 'simplyflow/src/model.mjs'
+
+	const myModel = model({
+		data
+	})
+
+	myModel.addEffect(sort({ sortBy: 'value'}))
+
+	myModel.addEffect(paging({ pageSize: 10 }))
+
+	myModel.addEffect(columns({
+		columns: {
+			id: {
+				hidden: true
+			}
+		}
+	}))
+
+	myModel.addEffect((data) => {
+		// render the data with your own code.
+	})
+```
