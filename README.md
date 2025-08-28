@@ -52,7 +52,7 @@ In the latter case you can access the functions like this:
 
 Read more about the bundled libraries here:
 - [simply.bind](docs/bind.md)
-- [simply.modelw](docs/model.md)
+- [simply.model](docs/model.md)
 - [simply.state](docs/state.md)
 
 Or check the [examples](examples/) for more information.
