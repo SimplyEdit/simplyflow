@@ -1,6 +1,6 @@
 # Introduction
 
-SimplyFlow is a collection of components intenden to be used with SimplyView[https://github.com/simplyedit/simplyview/]
+SimplyFlow is a collection of components intended to be used with SimplyView[https://github.com/simplyedit/simplyview/]
 , but they can also be used standalone. SimplyFlow is experimental and, once vetted
 will be integrated into SimplyView.
 
@@ -16,6 +16,12 @@ or using GIT
 ```shell
 git clone https://github.com/SimplyEdit/simplyflow.git
 ```
+or using a CDN
+
+```
+<script src="https://cdn.jsdelivr.net/npm/simplyflow/dist/simply.flow.js"></script>
+```
+
 
 ## Usage
 
