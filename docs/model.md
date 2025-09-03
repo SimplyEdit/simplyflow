@@ -1,6 +1,6 @@
 # SimplyFlow: model
 
-This implements a viewmodel base class that allows you to easily add sorting, paging and filtering (among others,) using effects ([see State](./state.md)
+This implements a viewmodel base class that allows you to easily add sorting, paging and filtering (among others,) using effects ([see State](./state.md))
 
 ```javascript
 	import {model, sort, paging} from 'simplyflow/src/model.mjs'
