@@ -33,15 +33,15 @@ flowchart LR
 		C[page options]
 
 	D --> X
-    A --> X(filtering)
+    A --> X(Filtering)
     X --> X2[filtered data]
     B --> Y(Sorting)
     X2 --> Y
     Y --> A2[sorted data]
-    C --> Z(paging)
+    C --> Z(Paging)
     Z --> A3[paged data]
     A2 --> Z
-    A3 --> E(render)
+    A3 --> E(Render)
 ```
 
 This is a diagram that shows the model implemented above, with an extra filter step included. If the data changes, the model will sort the data and then page the data and finally render it. If the page changes, the model will use the already sorted data and apply paging again and then render it. It will not sort the data again, since those inputs haven't changed.
