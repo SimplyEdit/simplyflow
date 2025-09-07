@@ -26,17 +26,22 @@ This implements a viewmodel base class that allows you to easily add sorting, pa
 This library uses signals and effects to implement a flow-based programming model. In a normal programming model, when you change data, you then need to call functions or methods to make sure that the changes update the program state and rendering. In a flow based model, data changes automatically trigger those updates.
 
 ```mermaid
-flowchart TD
-    D[filter options] --> X
-    A[data] --> X(filtering)
+flowchart LR
+    A[data]
+		B[sort options]
+		D[filter options]
+		C[page options]
+
+	D --> X
+    A --> X(Filtering)
     X --> X2[filtered data]
-    B[sort options] --> Y(Sorting)
+    B --> Y(Sorting)
     X2 --> Y
     Y --> A2[sorted data]
-    C[page options] --> Z(paging)
+    C --> Z(Paging)
     Z --> A3[paged data]
     A2 --> Z
-    A3 --> E(render)
+    A3 --> E(Render)
 ```
 
 This is a diagram that shows the model implemented above, with an extra filter step included. If the data changes, the model will sort the data and then page the data and finally render it. If the page changes, the model will use the already sorted data and apply paging again and then render it. It will not sort the data again, since those inputs haven't changed.
