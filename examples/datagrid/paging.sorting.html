@@ -1,8 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>datatable</title>
-<link rel="stylesheet" href="ds.css">
-<link rel="stylesheet" href="source.css">
+<link rel="stylesheet" href="../css/ds.css">
+<link rel="stylesheet" href="../css/source.css">
 <link rel="stylesheet" href="datatable.css">
 <script type="module">
   if (!("anchorName" in document.documentElement.style)) {
@@ -13,19 +13,19 @@
 
 <nav class="ds-buttonbar ds-align-right">
 	<button data-simply-command="pagePrev" class="ds-button"><svg class="ds-icon ds-icon-feather">
-			<use xlink:href="feather-sprite.svg#chevron-left"></use>
+			<use xlink:href="../css/feather-sprite.svg#chevron-left"></use>
 		</svg></button>
 	<span data-flow-field="numbers.state.options.paging.page"></span> /
 	<span data-flow-field="numbers.state.options.paging.max"></span>
 	<button data-simply-command="pageNext" class="ds-button"><svg class="ds-icon ds-icon-feather">
-			<use xlink:href="feather-sprite.svg#chevron-right"></use>
+			<use xlink:href="../css/feather-sprite.svg#chevron-right"></use>
 		</svg></button>
 </nav>
 <h1>Datatable</h1>
 <div class="ds-datatable-main">
 	<button class="ds-dropdown ds-dropdown ds-datatable-column-select" popovertarget="menu" popovertargetaction="toggle">
 		<svg class="ds-icon ds-icon-feather">
-			<use xlink:href="feather-sprite.svg#plus"></use>
+			<use xlink:href="../css/feather-sprite.svg#plus"></use>
 		</svg>
 	</button>
 	<nav class="ds-datatable-column-toggle ds-dropdown-nav ds-dropdown-right ds-align-left" popover id="menu">
@@ -44,7 +44,7 @@
 	<thead>
 		<tr data-flow-map="numbers.state.options.columns">
 			<template data-flow-field="hidden" data-flow-match=":empty">
-				<th data-flow-field="name" data-simply-command="toggleSort"></th>
+				<th data-simply-command="toggleSort" data-flow-field="name"></th>
 			</template>
 		</tr>
 	</thead>
@@ -60,12 +60,12 @@
 	</table>
 </div>
 </main>
-<div data-foo="&quot;foo%2Ebar&quot;"><div>
-<script src="https://cdn.jsdelivr.net/gh/simplyedit/simplyview/dist/simply.everything.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
 <script class="source" type="module">
-	import {signal, effect, batch} from '../src/state.mjs'
-	import {bind} from '../src/bind.mjs'
-	import {model, paging, sort, filter, columns} from '../src/model.mjs'
+	import {signal, effect, batch} from '../../src/state.mjs'
+	import {bind} from '../../src/bind.mjs'
+	import {model, paging, sort, filter, columns} from '../../src/model.mjs'
 	
 	// generate a random list of numbers
 	const data = []
@@ -111,32 +111,35 @@
 	})
 
 	// add commands to handle user interaction
-	simply.command(numbersModel, {
-		pagePrev: function(el, value) {
-			this.app.state.options.paging.page--
-		},
-		pageNext: function(el, value) {
-			this.app.state.options.paging.page++
-		},
-		toggleSort: function(el, value) {
-			batch(() => {
-				const sortBy = el.innerText.trim().toLowerCase()
-				this.app.state.options.sort.sortBy = sortBy
-				const dir = this.app.state.options.sort.direction
-				if (dir=='asc') {
-					this.app.state.options.sort.direction = 'desc'
-				} else {
-					this.app.state.options.sort.direction = 'asc'
-				}
-			})
-		},
-		dsToggleColumnSelect: function(el, value) {
-			el.querySelector('.ds-datatable-column-toggle').classList.toggle('ds-selected')
-		},
-		dsToggleColumn: function(el, value) {
-			const key = el.dataset.flowKey
-			const column = this.app.state.options.columns[key]
-			column.hidden = column.hidden ? 0 : 1
+	simply.command({
+		app: numbersModel,
+		commands: {
+			pagePrev: function(el, value) {
+				this.state.options.paging.page--
+			},
+			pageNext: function(el, value) {
+				this.state.options.paging.page++
+			},
+			toggleSort: function(el, value) {
+				batch(() => {
+					const sortBy = el.innerText.trim().toLowerCase()
+					this.state.options.sort.sortBy = sortBy
+					const dir = this.state.options.sort.direction
+					if (dir=='asc') {
+						this.state.options.sort.direction = 'desc'
+					} else {
+						this.state.options.sort.direction = 'asc'
+					}
+				})
+			},
+			dsToggleColumnSelect: function(el, value) {
+				el.querySelector('.ds-datatable-column-toggle').classList.toggle('ds-selected')
+			},
+			dsToggleColumn: function(el, value) {
+				const key = el.dataset.flowKey
+				const columns = this.state.options.columns
+				columns[key].hidden = columns[key].hidden ? 0 : 1
+			}
 		}
 	})
 

@@ -1,14 +1,13 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Todo</title>
-<link rel="stylesheet" href="ds.css">
-<link rel="stylesheet" href="source.css">
-<link rel="stylesheet" href="datatable.css">
+<link rel="stylesheet" href="../css/ds.css">
+<link rel="stylesheet" href="../css/source.css">
+<link rel="stylesheet" href="../css/examples.css">
 <body>
 <main>
 	<h1>Examples</h1>
 	<h2>Counter</h2>
-	<link rel="stylesheet" href="examples.css">
 
 	<div id="counterApp">
 		<input type="text" data-flow-field="counter">
@@ -24,54 +23,51 @@
 		<div>Counter is now: <span data-flow-field="counter"></span></div>
 	</div>
 </main>
-<script src="https://cdn.jsdelivr.net/gh/simplyedit/simplyview/dist/simply.everything.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
+<script src="../../dist/simply.flow.js"></script>
 <script class="source">
 	var counterApp = simply.app({
 		container: document.getElementById('counterApp'),
 		commands: {
 			add1: function() {
-				counterApp.view.counter++;
+				this.state.counter++;
 			},
 			sub1: function() {
-				counterApp.view.counter--;
+				this.state.counter--;
 			}
 		},
-		view: {
+		state: simply.state.signal({
 			counter: 1
-		}
+		})
 	});
 
 	var counterApp2 = simply.app({
 		container: document.getElementById('counterApp2'),
 		commands: {
 			add1: function() {
-				counterApp2.view.counter++;
+				this.state.counter++;
 			},
 			sub1: function() {
-				counterApp2.view.counter--;
+				this.state.counter--;
 			}
 		},
-		view: {
-			counter: 2
-		}
+		state: simply.state.signal({
+			counter: 1
+		})
 	});
 
 </script>
-<script src="../dist/simply.flow.js"></script>
 <script>
-	counterApp.view = simply.state.signal(counterApp.view)
 
 	simply.bind({
 		container: document.getElementById('counterApp'),
 		attribute: 'data-flow',
-		root: counterApp.view
+		root: counterApp.state
 	})
-
-	counterApp2.view = simply.state.signal(counterApp2.view)
 
 	simply.bind({
 		container: document.getElementById('counterApp2'),
 		attribute: 'data-flow',
-		root: counterApp2.view
+		root: counterApp2.state
 	})
 </script>

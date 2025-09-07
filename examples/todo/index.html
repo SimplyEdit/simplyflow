@@ -1,9 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Todo</title>
-<link rel="stylesheet" href="ds.css">
-<link rel="stylesheet" href="source.css">
-<link rel="stylesheet" href="datatable.css">
+<link rel="stylesheet" href="../css/ds.css">
+<link rel="stylesheet" href="../css/source.css">
 <body>
 <main>
 	<h1>Examples</h1>
@@ -22,7 +21,8 @@
 		</ul>
 	</div>
 </main>
-<script src="https://cdn.jsdelivr.net/gh/simplyedit/simplyview/dist/simply.everything.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
+<script src="../../dist/simply.flow.js"></script>
 <script class="source">
 	var todoApp = simply.app({
 		container: document.getElementById('todoApp'),
@@ -34,14 +34,14 @@
 		},
 		actions: {
 			addEntry: function(item) {
-				todoApp.view.items.push({
+				this.state.items.push({
 					item: item,
 					completed: 0
 				});
 				return Promise.resolve();			
 			}
 		},
-		view: {
+		state: simply.state.signal({
 			items: [
 				{
 					item: 'something'
@@ -50,16 +50,13 @@
 					item: 'something else'
 				}
 			]
-		}
+		})
 	});
 </script>
-<script src="../dist/simply.flow.js"></script>
 <script>
-	todoApp.view = simply.state.signal(todoApp.view)
-
 	simply.bind({
 		container: document.getElementById('todoApp'),
 		attribute: 'data-flow',
-		root: todoApp.view
+		root: todoApp.state
 	})
 </script>
