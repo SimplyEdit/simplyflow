@@ -1,7 +1,9 @@
 # Introduction
 
-SimplyFlow is a collection of components intenden to be used with SimplyView[https://github.com/simplyedit/simplyview/]
-, but they can also be used standalone. SimplyFlow is experimental and, once vetted
+SimplyFlow implements flow based programming in javascript using signals and effects. It als implements reactive databinding.
+
+SimplyFlow is intended to be used with [SimplyView](https://github.com/simplyedit/simplyview/)
+, but can also be used standalone. SimplyFlow is experimental and, once vetted,
 will be integrated into SimplyView.
 
 ## Install
