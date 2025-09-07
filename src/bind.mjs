@@ -128,9 +128,9 @@ class SimplyBind {
         // must come after setting up the observer, or included templates
         // won't trigger their own bindings
         const bindings = this.options.container.querySelectorAll(
-            '['+this.options.attribute+'-field]'+
+            ':is(['+this.options.attribute+'-field]'+
             ',['+this.options.attribute+'-list]'+
-            ',['+this.options.attribute+'-map]'
+            ',['+this.options.attribute+'-map]):not(template)'
         )
         if (bindings.length) {
             applyBindings(bindings)
@@ -339,7 +339,7 @@ export function defaultFieldTransformer(context) {
         transformSelect.call(this, context)
     } else if (el.tagName=='A') {
         transformAnchor.call(this, context)
-    } else {
+    } else if (el.tagName!=='TEMPLATE') { // never touch templates!
         transformElement.call(this, context)
     }
     return context
@@ -481,9 +481,7 @@ export function transformObjectByTemplates(context) {
         let item = items.shift()
         if (!item) { // more properties than rendered items
             let clone = this.applyTemplate(context)
-            if (clone.firstElementChild) {
-                el.appendChild(clone)
-            }
+            el.appendChild(clone)
             continue
         }
         if (item.getAttribute[attribute+'-key']!=key) { 
@@ -492,9 +490,7 @@ export function transformObjectByTemplates(context) {
             let outOfOrderItem = el.querySelector(':scope > ['+attribute+'-key="'+key+'"]') //FIXME: escape key
             if (!outOfOrderItem) {
                 let clone = this.applyTemplate(context)
-                if (clone.firstElementChild) {
-                    el.insertBefore(clone, item)
-                }
+                el.insertBefore(clone, item)
                 continue // new template doesn't need replacement, so continue 
             } else {
                 el.insertBefore(outOfOrderItem, item)
