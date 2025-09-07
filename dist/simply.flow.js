@@ -493,7 +493,7 @@
         childList: true
       });
       const bindings = this.options.container.querySelectorAll(
-        "[" + this.options.attribute + "-field],[" + this.options.attribute + "-list],[" + this.options.attribute + "-map]"
+        ":is([" + this.options.attribute + "-field],[" + this.options.attribute + "-list],[" + this.options.attribute + "-map]):not(template)"
       );
       if (bindings.length) {
         applyBindings(bindings);
@@ -661,7 +661,7 @@
       transformSelect.call(this, context);
     } else if (el.tagName == "A") {
       transformAnchor.call(this, context);
-    } else {
+    } else if (el.tagName !== "TEMPLATE") {
       transformElement.call(this, context);
     }
     return context;
@@ -776,9 +776,7 @@
       let item = items.shift();
       if (!item) {
         let clone = this.applyTemplate(context);
-        if (clone.firstElementChild) {
-          el.appendChild(clone);
-        }
+        el.appendChild(clone);
         continue;
       }
       if (item.getAttribute[attribute + "-key"] != key) {
@@ -786,9 +784,7 @@
         let outOfOrderItem = el.querySelector(":scope > [" + attribute + '-key="' + key + '"]');
         if (!outOfOrderItem) {
           let clone = this.applyTemplate(context);
-          if (clone.firstElementChild) {
-            el.insertBefore(clone, item);
-          }
+          el.insertBefore(clone, item);
           continue;
         } else {
           el.insertBefore(outOfOrderItem, item);
@@ -1030,7 +1026,7 @@
         return data.current.map((input) => {
           let result = {};
           for (let key of Object.keys(this.state.options.columns)) {
-            if (!this.state.options.columns[key].hidden) {
+            if (!this.state.options.columns[key]?.hidden) {
               result[key] = input[key];
             }
           }
