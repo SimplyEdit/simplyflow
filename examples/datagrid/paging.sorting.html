@@ -23,28 +23,11 @@
 </nav>
 <h1>Datatable</h1>
 <div class="ds-datatable-main">
-	<button class="ds-dropdown ds-dropdown ds-datatable-column-select" popovertarget="menu" popovertargetaction="toggle">
-		<svg class="ds-icon ds-icon-feather">
-			<use xlink:href="../css/feather-sprite.svg#plus"></use>
-		</svg>
-	</button>
-	<nav class="ds-datatable-column-toggle ds-dropdown-nav ds-dropdown-right ds-align-left" popover id="menu">
-		<ul class="ds-dropdown-list" data-flow-map="numbers.state.options.columns">
-			<template>
-				<li class="ds-dropdown-item" data-simply-command="dsToggleColumn">
-					<label>
-						<input type="checkbox" value=":empty" data-flow-field="hidden">
-						<span data-flow-field="name"></span>
-					</label>
-				</li>
-			</template>
-		</ul>
-	</nav>
 	<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers">
 	<thead>
-		<tr data-flow-map="numbers.state.options.columns">
-			<template data-flow-field="hidden" data-flow-match=":empty">
-				<th data-simply-command="toggleSort" data-flow-field="name"></th>
+		<tr data-flow-list="columns">
+			<template>
+				<th data-simply-command="toggleSort" data-flow-field=":value"></th>
 			</template>
 		</tr>
 	</thead>
@@ -90,23 +73,14 @@
 		pageSize: 25
 	}))
 
-	// adds the effect to render visible columns
-	numbersModel.addEffect(columns({
-		id: {
-			name: 'ID'
-		},
-		value: {
-			name: 'Value'
-		}
-	}))
-
 	numbersModel.container = document.body
 	// set up databinding to render the numbers list
 	bind({
 		container: numbersModel.container,
 		attribute: 'data-flow',
 		root: {
-			numbers: numbersModel
+			numbers: numbersModel,
+			columns: ['ID','Value']
 		}
 	})
 
@@ -131,14 +105,6 @@
 						this.state.options.sort.direction = 'asc'
 					}
 				})
-			},
-			dsToggleColumnSelect: function(el, value) {
-				el.querySelector('.ds-datatable-column-toggle').classList.toggle('ds-selected')
-			},
-			dsToggleColumn: function(el, value) {
-				const key = el.dataset.flowKey
-				const columns = this.state.options.columns
-				columns[key].hidden = columns[key].hidden ? 0 : 1
 			}
 		}
 	})

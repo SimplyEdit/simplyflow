@@ -13,6 +13,8 @@
 		grid-area: left;
 		padding: 1em;
 		min-width: 33vw;
+		height: 100%;
+		overflow: auto;
 	}
 	.source {
 		grid-area: right;
