@@ -61,32 +61,6 @@ img {
 /* Basic styles: Typography
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital@0;1&display=swap');
-@font-face {
- font-family:Periodico Display;
- font-style:normal;
- font-weight:800;
- src:url(/files/fonts/PeriodicoDisplay-Rg.woff) format("woff"),
- url(/files/fonts/PeriodicoDisplay-Rg.woff2) format("woff")
-}
-@font-face {
- font-family:Periodico Display;
- font-style:normal;
- font-weight:500;
- src:url(/files/fonts/PeriodicoDisplay-Rg.woff) format("woff"),
- url(/files/fonts/PeriodicoDisplay-Rg.woff2) format("woff")
-}
-@font-face {
- font-family:Periodico Display;
- font-style:italic;
- font-weight:500;
- src:url(/files/fonts/PeriodicoDisplay-Rg.woff) format("woff"),
- url(/files/fonts/PeriodicoDisplay-Rg.woff2) format("woff")
-}
-:root {
-    --ds-body-font: 'Montserrat', sans-serif;
-    --ds-heading-font: 'Periodico Display', serif;
-}
 
 
 /* Basic styles: Typography
@@ -1244,6 +1218,7 @@ input.slo-search {
 .ds-scrollbox {
     --ds-scrollbox-height: calc(8 * var(--ds-line-height));
     max-height: var(--ds-scrollbox-height);
+    position: relative;
     overflow: auto;
 	background:
 		/* Shadow covers */
