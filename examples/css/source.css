@@ -12,6 +12,7 @@
 	main {
 		grid-area: left;
 		padding: 1em;
+		min-width: 33vw;
 	}
 	.source {
 		grid-area: right;
