@@ -122,7 +122,7 @@ export function filter(options) {
 		this.state.options[options.name] = options
 		return effect(() => {
 			if (this.state.options[options.name].enabled) {
-				return data.filter(this.state.options.matches)
+				return data.filter(this.state.options[options.name].matches)
 			}
 		})
 	}
@@ -146,6 +146,47 @@ export function columns(options={}) {
 				}
 				return result
 			})
+		})
+	}
+}
+
+export function scroll(options) {
+	if (!options.container) {
+		throw new Error('scroll needs a container option to calculate the number of visible rows')
+	}
+
+	return function(data) {
+		this.state.options.scroll = Object.assign({
+			offset: 0,
+			rowHeight: 26
+		}, options)
+		const scrollOptions = this.state.options.scroll
+
+		const scrollbar = scrollOptions.scrollbar || scrollOptions.container.querySelector('[data-flow-scrollbar]')
+		if (!scrollbar) {
+			throw new Error('scroll needs a scrollbar, or an element with the attribute "data-flow-scrollbar"')
+		}
+		scrollOptions.container.addEventListener('scroll', (evt) => {
+			scrollOptions.offset = Math.floor(scrollOptions.container.scrollTop/scrollOptions.rowHeight)
+			console.log('scrolling',scrollOptions.offset)
+		})
+
+		effect(() => {
+			let size = data.current.length * scrollOptions.rowHeight
+			scrollbar.style.height = size + 'px'
+		})
+
+		return effect(() => {
+			scrollOptions.rows = Math.ceil(scrollOptions.container.getBoundingClientRect().height / scrollOptions.rowHeight)
+			scrollOptions.data = data.current
+			let start = Math.min(scrollOptions.offset, data.current.length-1)
+			let end   = start + scrollOptions.rows
+			if (end > data.current.length) {
+				end   = data.current.length
+				start = end - scrollOptions.rows
+			}
+			console.log('virtual scroll',start,end)
+			return data.current.slice(start, end)
 		})
 	}
 }
