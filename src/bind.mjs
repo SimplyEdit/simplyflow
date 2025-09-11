@@ -331,16 +331,26 @@ export function defaultFieldTransformer(context) {
 
     if (templates?.length) {
         transformLiteralByTemplates.call(this, context)
-    } else if (el.tagName=='INPUT') {
-        transformInput.call(this, context)
-    } else if (el.tagName=='BUTTON') {
-        transformButton.call(this, context)
-    } else if (el.tagName=='SELECT') {
-        transformSelect.call(this, context)
-    } else if (el.tagName=='A') {
-        transformAnchor.call(this, context)
-    } else if (el.tagName!=='TEMPLATE') { // never touch templates!
-        transformElement.call(this, context)
+    } else {
+        switch(el.tagName) {
+            case 'INPUT':
+                transformInput.call(this, context)
+                break
+            case 'BUTTON':
+                transformButton.call(this, context)
+                break
+            case 'SELECT':
+                transformSelect.call(this, context)
+                break
+            case 'A':
+                transformAnchor.call(this, context)
+                break
+            case 'TEMPLATE': // never touch templates!
+                break
+            default:
+                transformElement.call(this, context)
+                break
+        }
     }
     return context
 }
