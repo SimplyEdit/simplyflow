@@ -1015,6 +1015,9 @@
     if (!options?.name || typeof options.name !== "string") {
       throw new Error("filter requires options.name to be a string");
     }
+    if (this.state.options[options.name]) {
+      throw new Error("a filter with this name already exists on this model");
+    }
     if (!options.matches || typeof options.matches !== "function") {
       throw new Error("filter requires options.matches to be a function");
     }
@@ -1047,37 +1050,42 @@
     };
   }
   function scroll(options) {
-    if (!options.container) {
-      throw new Error("scroll needs a container option to calculate the number of visible rows");
-    }
     return function(data) {
       this.state.options.scroll = Object.assign({
         offset: 0,
-        rowHeight: 26
+        rowHeight: 26,
+        rowCount: 20,
+        itemsPerRow: 1,
+        size: data.current.length
       }, options);
       const scrollOptions = this.state.options.scroll;
-      const scrollbar = scrollOptions.scrollbar || scrollOptions.container.querySelector("[data-flow-scrollbar]");
-      if (!scrollbar) {
-        throw new Error('scroll needs a scrollbar, or an element with the attribute "data-flow-scrollbar"');
+      const scrollbar = scrollOptions.scrollbar || scrollOptions.container?.querySelector("[data-flow-scrollbar]");
+      if (scrollbar) {
+        if (scrollOptions.container) {
+          scrollOptions.container.addEventListener("scroll", (evt) => {
+            scrollOptions.offset = Math.floor(
+              scrollOptions.container.scrollTop / (scrollOptions.rowHeight * scrollOptions.itemsPerRow)
+            );
+          });
+        }
+        effect(() => {
+          scrollOptions.size = data.current.length * scrollOptions.rowHeight;
+          scrollbar.style.height = scrollOptions.size + "px";
+        });
       }
-      scrollOptions.container.addEventListener("scroll", (evt) => {
-        scrollOptions.offset = Math.floor(scrollOptions.container.scrollTop / scrollOptions.rowHeight);
-        console.log("scrolling", scrollOptions.offset);
-      });
-      effect(() => {
-        let size = data.current.length * scrollOptions.rowHeight;
-        scrollbar.style.height = size + "px";
-      });
       return effect(() => {
-        scrollOptions.rows = Math.ceil(scrollOptions.container.getBoundingClientRect().height / scrollOptions.rowHeight);
+        if (scrollOptions.container) {
+          scrollOptions.rowCount = Math.ceil(
+            scrollOptions.container.getBoundingClientRect().height / scrollOptions.rowHeight
+          );
+        }
         scrollOptions.data = data.current;
         let start = Math.min(scrollOptions.offset, data.current.length - 1);
-        let end = start + scrollOptions.rows;
+        let end = start + scrollOptions.rowCount;
         if (end > data.current.length) {
           end = data.current.length;
-          start = end - scrollOptions.rows;
+          start = end - scrollOptions.rowCount;
         }
-        console.log("virtual scroll", start, end);
         return data.current.slice(start, end);
       });
     };
