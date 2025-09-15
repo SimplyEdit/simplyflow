@@ -141,18 +141,19 @@ export function filter(options) {
 	if (!options?.name || typeof options.name!=='string') {
 		throw new Error('filter requires options.name to be a string')
 	}
-	if (this.state.options[options.name]) {
-		throw new Error('a filter with this name already exists on this model')
-	}
 	if (!options.matches || typeof options.matches!=='function') {
 		throw new Error('filter requires options.matches to be a function')
 	}
 	return function(data) {
+		if (this.state.options[options.name]) {
+			throw new Error('a filter with this name already exists on this model')
+		}
 		this.state.options[options.name] = options
 		return effect(() => {
 			if (this.state.options[options.name].enabled) {
-				return data.filter(this.state.options[options.name].matches)
+				return data.current.filter(this.state.options[options.name].matches.bind(this))
 			}
+			return data.current
 		})
 	}
 }

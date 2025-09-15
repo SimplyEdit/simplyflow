@@ -1,0 +1,118 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>datatable</title>
+<link rel="stylesheet" href="../css/ds.css">
+<link rel="stylesheet" href="../css/source.css">
+<link rel="stylesheet" href="datatable.css">
+<script type="importmap">
+	{
+		"imports": {
+			"simplyflow/": "../../"
+		}
+	}
+</script>
+<script type="module">
+  if (!("anchorName" in document.documentElement.style)) {
+    import("https://unpkg.com/@oddbird/css-anchor-positioning");
+  }
+</script>
+<main>
+
+<h1>Datatable</h1>
+<div class="ds-datatable-main">
+	<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers">
+	<thead>
+		<tr data-flow-map="options.columns">
+			<template data-flow-field="hidden" data-flow-match=":empty">
+				<th data-flow-field="name"></th>
+			</template>
+		</tr>
+	</thead>
+	<tbody data-flow-list="users.current">
+		<template>
+			<tr data-flow-map=":value">
+				<template>
+					<td data-flow-field=":value"></td>
+				</template>
+			</tr>
+		</template>
+	</tbody>
+	</table>
+</div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
+<script class="source" type="module">
+	import {signal, effect, batch} from 'simplyflow/src/state.mjs'
+	import {bind} from 'simplyflow/src/bind.mjs'
+	import {model, paging, sort, filter, columns} from 'simplyflow/src/model.mjs'
+	
+	async function main() {
+		let response = await fetch('users.json')
+		let users = await response.json()
+
+		const usersModel = model({
+			data: users,
+			options: {}
+		})
+
+		usersModel.addEffect(columns({
+			first_name: {
+				name: 'First Name'
+			},
+			last_name: {
+				name: 'Last Name'
+			},
+			email: {
+				name: 'E-mail'
+			},
+			city: {
+				name: 'City',
+				hidden: true
+			},
+			street: {
+				name: 'Address',
+				hidden: true
+			},
+			gender_abbr: {
+				name: 'Gender',
+				hidden: true
+			},
+			username: {
+				name: 'Username',
+				hidden: true
+			}		
+		}))
+
+		usersModel.addEffect(filter({
+			name: 'lastNameFilter',
+			filterBy: 'A',
+			enabled: true,
+			matches: function(row) {
+				return row.last_name[0]==this.filterBy
+			} 
+		}))
+
+		const usersApp = simply.app({
+			commands: {
+				filter: function(el,value) {
+					console.log('filter nyi')
+				}
+			},
+			state: signal({
+				users: usersModel.view,
+				options: usersModel.state.options
+			})
+		})
+
+		bind({
+			attribute: 'data-flow',
+			root: usersApp.state
+		})
+
+		// make the numbersModel available in the console
+		window.usersModel = usersModel
+		window.usersApp = usersApp
+	}
+	main()	
+</script>
