@@ -33,12 +33,10 @@
 			}
 		},
 		actions: {
-			addEntry: function(item) {
+			addEntry: async function(item) {
 				this.state.items.push({
-					item: item,
-					completed: 0
+					item: item
 				});
-				return Promise.resolve();			
 			}
 		},
 		state: simply.state.signal({
