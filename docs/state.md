@@ -28,7 +28,55 @@ expect(D).toEqual({
 })
 ```
 
-Effects return a signal. Each time an effect returns a value, it is assigned to `.current` in that signal.
+Effects return a signal. Each time an effect returns a value, it is assigned to `.current` in that signal. 
+
+_Note_: You can use the computed signal of an effect inside another effect, but make sure to always use `x.current` inside the effect function. If you assign `foo = x.current` and then use `foo` inside the effect, the system cannot 'see' that you are using a signal. The 'notifier' is called only when you access a property of the signal, e.g. `x.property` and not `x`.
+
+So do this:
+```javasript
+const options = signal({
+	count: 1
+})
+
+const result = effect(() => {
+	return options.count * 2 // access to .count property of signal options is detected
+})
+// result.current is now 2
+
+effect(() => {
+	document.querySelector('output').innerHTML = result.current // access to .current property of signal result is detected
+})
+// output now contains '2'
+
+options.count++
+// result.current is now 4
+// output now contains '4'
+```
+
+Do not do this:
+```javascript
+const options = signal({
+	count: 1
+})
+
+// DON'T DO THIS!
+const count = options.count
+const result = effect(() => {
+	return count * 2 // access not detected
+})
+
+// DON'T DO THIS!
+const result2 = result.current
+effect(() => {
+	document.querySelector('output').innerHTML = result2 // access not detected
+})
+
+options.count++
+```
+
+Since `result.current` is accessed outside the effect function, the system does not notice that `result2` uses a signal inside the final effect. So if you change `result.current` later, e.g. when you set `options.count` to a new value, `result.current` is updated, but `result2` is not. And even if it is, it won't trigger the final effect again.
+
+The inverse of this does work. You can access child properties of a signal, and if the signal changes such that the child properties change or even disappear, the effect will be called again.
 
 ## Differences to other Signal libraries
 
@@ -51,7 +99,7 @@ Effects return a signal. Each time an effect returns a value, it is assigned to 
 
 ## Similarities
 
-Effects are run in-order, glitch-free. You cannot create effects that have circular dependencies, except for the clockEffect - since that breaks the infinite cycle by only doing a single update per clock update.
+Effects are run in-order, glitch-free. You cannot create effects that have circular dependencies, as that would create an infinite loop. However, you can create circular dependencies with a clockEffect - since that breaks the infinite cycle by only doing a single update per clock update.
 
 ## API
 
@@ -63,7 +111,7 @@ const mySignal = signal({
 })
 ```
 
-Creates a signal from a given object. This object may also be an Array, a Set or a Map, or an instance of your own class definition.
+Creates a signal from a given object. This object may also be an Array, a Set or a Map, or an instance of your own class definition. It must be an object, you cannot use a string, number. boolean, null or any other value that is not an object.
 
 The returned signal is a completely transparent Proxy for that object, and you should be able to use it anywhere that the original object could be used.
 
@@ -77,7 +125,7 @@ const myComputedSignal = effect(() => {
 })
 ```
 
-An effect is a function that is called immediately when one of the signals it uses changes. This is a synchronous update, so this works:
+An effect is a function that is called immediately when one of the signals it uses changes. It returns a new Signal, called myComputedSignal in the code above. This signal will always have a single property `.current` which contains the result of the last time the effect is called. Effects update their signals synchronously, so this works:
 
 ```javascript
 let counter = signal({
@@ -152,10 +200,12 @@ let count = 1
 let baz = effect(() => {
 	return '"'+foo.value+'":"'+bar.value+'"'+(count++)
 })
+
 batch(() +> {
 	foo.value = 'foo'
 	bar.value = 'bar'
 })
+
 console.log(baz.current) // displays: "foo:bar"1
 ```
 
@@ -169,12 +219,14 @@ The batch() function allows you to prevent this.
 
 ```javascript
 let foo = signal({ value: 1 })
+
 let bar = throttledEffect(
 	() => {
 		return foo.value + 1 // imagine a very cpu intensive operation here
 	},
 	10 // run at most once per 10ms
 )
+
 for (let i=0;i<100;i++) {
 	foo.value++
 }
@@ -191,20 +243,26 @@ In the example code above, the effect is run twice. Once upon definition, as all
 ```javascript
 let foo = signal({ value: 0 })
 let clock = signal({ time: 0 })
+
 let bar = clockEffect(
 	() => {
 		console.log(clock.time+': '+foo.value)
 	},
 	clock
 ) // console prints '0:0'
+
 foo.value++
 // no console log triggered
+
 clock.time++
 // console prints '1:1'
+
 clock.time++
 // no console log triggered
+
 foo.value++
 // no console log triggered
+
 clock.time++
 // console prints '3:2'
 ```
@@ -221,6 +279,7 @@ const foo = signal({value: 1})
 const bar = effect(() => {
 	return foo+1
 })
+
 destroy(bar)
 ```
 
@@ -235,8 +294,10 @@ const foo = signal({value: 1})
 const bar = signal({value: 2})
 const baz = effect(() => {
 	let f = foo.value // foo.value is tracked
+
 	return untracked(() => {
 		return f + bar.value // bar.value is not tracked
 	})
+
 })
 ```
