@@ -4,6 +4,13 @@
 <link rel="stylesheet" href="../css/ds.css">
 <link rel="stylesheet" href="../css/source.css">
 <link rel="stylesheet" href="datatable.css">
+<script type="importmap">
+	{
+		"imports": {
+			"simplyflow/": "../../"
+		}
+	}
+</script>
 <script type="module">
   if (!("anchorName" in document.documentElement.style)) {
     import("https://unpkg.com/@oddbird/css-anchor-positioning");
@@ -46,9 +53,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
 <script class="source" type="module">
-	import {signal, effect, batch} from '../../src/state.mjs'
-	import {bind} from '../../src/bind.mjs'
-	import {model, paging, sort, filter, columns} from '../../src/model.mjs'
+	import {signal, effect, batch} from 'simplyflow/src/state.mjs'
+	import {bind} from 'simplyflow/src/bind.mjs'
+	import {model, paging, sort, filter, columns} from 'simplyflow/src/model.mjs'
 	
 	// generate a random list of numbers
 	const data = []
