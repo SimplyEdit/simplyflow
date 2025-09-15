@@ -245,7 +245,41 @@ Or you can create your own render effect and add it as the final step, like this
 		}
 	}))
 
-	myModel.addEffect((data) => {
+	myModel.addEffect(function(data) {
 		// render the data with your own code.
 	})
 ```
+
+## Custom addEffect functions
+
+The model library provides a number of functions for use with addEffect, as described above. But you can easily create your own. `addEffect` expects a function like this:
+
+```javascript
+function(data) {
+	return effect(() => {
+		// do something with a copy data.current
+		const newData = data.current.slice()
+		return newData
+	})
+}
+```
+
+You must return an effect. You must not change `data.current` itself inside the effect, that will trigger an infinite loop. You must always return a copy of `data.current`, or an altered version of it.
+
+The model library adds helper functions (like `sort`, `paging`,etc.) that allow you to set options. These have the following format:
+
+```javascript
+function helper(options={}) {
+	this.state.options.helper = options
+	return function(data) {
+		return effect(() => {
+			// your code here
+		})
+	}
+}
+```
+
+## Arrow functions
+
+A function you create for use in `model.addEffect` can be either an arrow function ( `(data) => {}` ) or a normal function ( `function(data) {}`). Just remember that arrow functions cannot be bound. This means that if you want to access `this` inside an `addEffect` function, you must use a normal function, not an arrow function. `addEffect` will call your function, with `this` set to the model. If you do this, you can later change the options through `model.state.options.yourOptionName`, and since this is also a signal, any changes will trigger your effect again.
+
