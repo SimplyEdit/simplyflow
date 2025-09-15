@@ -25,7 +25,7 @@ class SimplyBind {
         const getBindingAttribute = (el) => {
             const foundAttribute = bindAttributes.find(attr => el.hasAttribute(attr))
             if (!foundAttribute) {
-                console.error('No matching attribute found',el)
+                console.error('No matching attribute found',el,attr)
             }
             return foundAttribute
         }
@@ -119,7 +119,7 @@ class SimplyBind {
             updateBindings(changes)
         })
 
-        this.observer.observe(options.container, {
+        this.observer.observe(this.options.container, {
             subtree: true,
             childList: true
         })
@@ -364,7 +364,7 @@ export function defaultListTransformer(context) {
     const attribute      = this.options.attribute
 
     if (!Array.isArray(value)) {
-        console.error('Value is not an array.', el, value)
+        console.error('Value is not an array.', el, path, value)
     } else if (!templates?.length) {
         console.error('No templates found in', el)
     } else {
@@ -382,7 +382,7 @@ export function defaultMapTransformer(context) {
     const attribute      = this.options.attribute
 
     if (typeof value != 'object') {
-        console.error('Value is not an object.', el, value)
+        console.error('Value is not an object.', el, path, value)
     } else if (!templates?.length) {
         console.error('No templates found in', el)
     } else {
