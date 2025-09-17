@@ -232,7 +232,7 @@ export function scroll(options) {
 			throttledEffect(() => {
 				scrollOptions.size = data.current.length * scrollOptions.rowHeight
 				scrollbar.style.height = scrollOptions.size + 'px'
-			}, 100)
+			}, 50)
 		}
 
 		return throttledEffect(() => {
@@ -252,6 +252,6 @@ export function scroll(options) {
 				start = end - scrollOptions.rowCount
 			}
 			return data.current.slice(start, end)
-		}, 100)
+		}, 50)
 	}
 }
