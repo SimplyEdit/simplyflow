@@ -90,7 +90,7 @@ export function sort(options={}) {
 				return data.current.toSorted(sort?.sortFn)
 			}
 			return data.current
-		}, 200)
+		}, 50)
 	}
 }
 
@@ -125,7 +125,7 @@ export function paging(options={}) {
 				const end = start + paging.pageSize
 				return data.current.slice(start, end)
 			})
-		}, 200)
+		}, 50)
 	}
 }
 
@@ -154,7 +154,7 @@ export function filter(options) {
 				return data.current.filter(this.state.options[options.name].matches.bind(this))
 			}
 			return data.current
-		}, 200)
+		}, 50)
 	}
 }
 
@@ -186,7 +186,7 @@ export function columns(options={}) {
 				}
 				return result
 			})
-		}, 200)
+		}, 50)
 	}
 }
 
