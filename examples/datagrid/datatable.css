@@ -13,8 +13,24 @@ main,
 	border: 0;
 	margin-top: 0.1rem;
 }
+:root button.ds-dropdown {
+	height: unset;
+	min-height: unset;
+	line-height: var(--ds-line-height);
+}
+:root button.ds-dropdown .ds-icon {
+	height: var(--ds-line-height);
+}
 .ds-datatable thead {
 	z-index: 100;
+}
+.ds-datatable th {
+	vertical-align: top;
+	position: relative;
+}
+.ds-datatable th::after {
+	top: 0;
+	right: 0;
 }
 .ds-datatable-scrollbar {
 	position: absolute;
@@ -34,4 +50,7 @@ main,
 	top: 0px;
 	width: 100%;
 	height: 100%;
+}
+.ds-datatable-filter {
+	display: none;
 }
