@@ -1,4 +1,4 @@
-import {signal, effect, batch} from './state.mjs'
+import {signal, effect, throttledEffect, batch} from './state.mjs'
 
 /**
  * This class implements a pluggable data model, where you can
@@ -84,13 +84,13 @@ export function sort(options={}) {
 		}, options);
 		// then return the effect, which is called when
 		// either the data or the sort options change
-		return effect(() => {
+		return throttledEffect(() => {
 			const sort = this.state.options.sort
 			if (sort?.sortBy && sort?.direction) {
 				return data.current.toSorted(sort?.sortFn)
 			}
 			return data.current
-		})
+		}, 200)
 	}
 }
 
@@ -112,7 +112,7 @@ export function paging(options={}) {
 			pageSize: 20,
 			max: 1
 		}, options)
-		return effect(() => {
+		return throttledEffect(() => {
 			return batch(() => {
 				const paging = this.state.options.paging
 				if (!paging.pageSize) {
@@ -125,7 +125,7 @@ export function paging(options={}) {
 				const end = start + paging.pageSize
 				return data.current.slice(start, end)
 			})
-		})
+		}, 200)
 	}
 }
 
@@ -149,12 +149,12 @@ export function filter(options) {
 			throw new Error('a filter with this name already exists on this model')
 		}
 		this.state.options[options.name] = options
-		return effect(() => {
+		return throttledEffect(() => {
 			if (this.state.options[options.name].enabled) {
 				return data.current.filter(this.state.options[options.name].matches.bind(this))
 			}
 			return data.current
-		})
+		}, 200)
 	}
 }
 
@@ -176,7 +176,7 @@ export function columns(options={}) {
 	}
 	return function(data) {
 		this.state.options.columns = options
-		return effect(() => {
+		return throttledEffect(() => {
 			return data.current.map(input => {
 				let result = {}
 				for (let key of Object.keys(this.state.options.columns)) {
@@ -186,7 +186,7 @@ export function columns(options={}) {
 				}
 				return result
 			})
-		})
+		}, 200)
 	}
 }
 
@@ -229,13 +229,13 @@ export function scroll(options) {
 				})
 			}
 
-			effect(() => {
+			throttledEffect(() => {
 				scrollOptions.size = data.current.length * scrollOptions.rowHeight
 				scrollbar.style.height = scrollOptions.size + 'px'
-			})
+			}, 100)
 		}
 
-		return effect(() => {
+		return throttledEffect(() => {
 			if (scrollOptions.container) {
 				//TODO: add a resize listener so that if the size of the container
 				// changes, the rowCount is calculated again
@@ -252,6 +252,6 @@ export function scroll(options) {
 				start = end - scrollOptions.rowCount
 			}
 			return data.current.slice(start, end)
-		})
+		}, 100)
 	}
 }
