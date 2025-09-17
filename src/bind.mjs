@@ -35,6 +35,10 @@ class SimplyBind {
 
         const render = (el) => {
             this.bindings.set(el, throttledEffect(() => {
+                if (!el.isConnected) {
+                    destroy(this.bindings.get(el))
+                    return
+                }
                 const context = {
                     templates: el.querySelectorAll(':scope > template'),
                     attribute: getBindingAttribute(el)
