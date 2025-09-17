@@ -24,7 +24,17 @@
 	<thead>
 		<tr data-flow-map="options.columns">
 			<template data-flow-field="hidden" data-flow-match=":empty">
-				<th data-flow-field="name"></th>
+				<th>
+					<span data-flow-field="name"></span>
+          <button class="ds-button ds-button-naked ds-dropdown" data-simply-command="toggleFilter">
+           	<svg class="ds-icon ds-icon-feather">
+            	<use xlink:href="../css/feather-sprite.svg#filter"></use>
+          	</svg>
+          </button>
+				  <div class="ds-datatable-filter">
+				    <input type="text" placeholder="filter" data-simply-command="filter" data-simply-immediate=1>
+				  </div>
+				</th>
 			</template>
 		</tr>
 	</thead>
@@ -84,19 +94,40 @@
 			}		
 		}))
 
+
 		usersModel.addEffect(filter({
-			name: 'lastNameFilter',
-			filterBy: 'A',
+			name: 'propertyFilter',
+			filters: {
+				'last_name': /^A/i
+			},
 			enabled: true,
 			matches: function(row) {
-				return row.last_name[0]==this.filterBy
-			} 
+				for (let property in this.filters) {
+					let filterBy = this.filters[property]
+					if (filterBy && !row[property].match(filterBy[Symbol.xRay])) {
+						return false
+					}
+				}
+				return true
+			}
 		}))
 
 		const usersApp = simply.app({
 			commands: {
 				filter: function(el,value) {
-					console.log('filter nyi')
+					// find property name
+					const property = el.closest('[data-flow-key').dataset.flowKey
+					// set column filter
+					usersModel.state.options.propertyFilter.filters[property] = new RegExp(value, 'i')
+				},
+				toggleFilter: function(el, value) {
+					const filter = el.parentElement.querySelector('.ds-datatable-filter')
+					if (filter.style.display=='block') {
+						filter.style.display = 'none'
+					} else {
+						filter.style.display = 'block'
+						filter.querySelector('input').focus()
+					}
 				}
 			},
 			state: signal({
@@ -110,9 +141,24 @@
 			root: usersApp.state
 		})
 
+		simply.activate.addListener('linkpopover', function() {
+			const popover = this.parentElement.querySelector('.ds-dropdown-nav')
+			if (!popover) {
+				console.error('no popover found to link', this)
+				return
+			}
+			if (!popover.id) {
+				popover.id = 'id_'+Math.random().toString(36).substring(2,4)
+			}
+			this.setAttribute('popovertarget', popover.id)
+		})
+
+
 		// make the numbersModel available in the console
 		window.usersModel = usersModel
 		window.usersApp = usersApp
 	}
 	main()	
+
+
 </script>

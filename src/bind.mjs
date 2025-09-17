@@ -35,6 +35,14 @@ class SimplyBind {
 
         const render = (el) => {
             this.bindings.set(el, throttledEffect(() => {
+                if (!el.isConnected) {
+                    // el is no longer part of this document
+                    destroy(this.bindings.get(el))
+                    // doing this here instead of in a mutationobserver
+                    // allows an element to be temporary removed and then inserted
+                    // without the binding having to be reset
+                    return
+                }
                 const context = {
                     templates: el.querySelectorAll(':scope > template'),
                     attribute: getBindingAttribute(el)
@@ -43,7 +51,7 @@ class SimplyBind {
                 context.value = getValueByPath(this.options.root, context.path)
                 context.element = el
                 runTransformers(context)
-            }, 100))
+            }, 50))
         }
 
         // finds and runs applicable transformers
@@ -87,7 +95,9 @@ class SimplyBind {
         // this renders each of those elements
         const applyBindings = (bindings) => {
             for (let bindingEl of bindings) {
-                render(bindingEl)
+                if (!this.bindings.get(bindingEl)) { // bindingEl may have moved from somewhere else in this document
+                    render(bindingEl)
+                }
             }
         }
 
