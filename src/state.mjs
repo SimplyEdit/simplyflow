@@ -2,11 +2,17 @@ const iterate = Symbol('iterate')
 if (!Symbol.xRay) {
     Symbol.xRay = Symbol('xRay')
 }
+if (!Symbol.Signal) {
+    Symbol.Signal = Symbol('Signal')
+}
 
 const signalHandler = {
     get: (target, property, receiver) => {
         if (property===Symbol.xRay) {
             return target // don't notifyGet here, this is only called by set
+        }
+        if (property===Symbol.Signal) {
+            return true
         }
         const value = target?.[property] // Reflect.get fails on a Set.
         notifyGet(receiver, property)
@@ -116,7 +122,13 @@ const signals = new WeakMap()
  * to allow reactive functions to be triggered when signal values change.
  */
 export function signal(v) {
-    if (!signals.has(v)) {
+    if (v[Symbol.Signal]) { // avoid wrapping a Signal inside a Signal
+        let target = v[Symbol.xRay]
+        if (!signals.has(target)) {
+            signals.set(target, v)
+        }
+        v = target
+    } else if (!signals.has(v)) {
         signals.set(v, new Proxy(v, signalHandler))
     }
     return signals.get(v)
