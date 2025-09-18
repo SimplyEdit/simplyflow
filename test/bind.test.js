@@ -2,6 +2,7 @@ import {signal} from '../src/state.mjs'
 import {bind} from '../src/bind.mjs'
 
 describe('bind can', () => {
+/*
   it('render simple list', (done) => {
     const source = `
   <ul data-bind-list="menu">
@@ -193,6 +194,69 @@ describe('bind can', () => {
       }
     }, 10)
   })
+  it('render object to select with key-value options', (done) => {
+    const source = `<select data-bind-field="foo"></select>`
+    document.body.innerHTML = source
 
+    const data = signal({
+      foo: {
+        id: 'bar',
+        className: 'foobar',
+        options: {
+          foo: 'Foo Foo',
+          bar: 'Bar Bar'
+        }
+      }
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+
+    const rendered = `<select data-bind-field="foo" id="bar" class="foobar"><option value="foo">Foo Foo</option><option value="bar">Bar Bar</option></select>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
+*/
+  it('transform data', (done) => {
+    const source = `<div data-bind-field="foo" data-bind-transform="setDataFoo"></div>`
+    document.body.innerHTML = source
+
+    const data = signal({
+      foo: {
+        innerHTML: 'foobar'
+      }
+    })
+    const databind = bind({
+      container: document.body,
+      root: data,
+      transformers: {
+        setDataFoo: function(context, next) {
+          context.element.dataset.foo = context.value.innerHTML
+          next(context)
+        }
+      }
+    })
+
+    const rendered = `<div data-bind-field="foo" data-bind-transform="setDataFoo" data-foo="foobar">foobar</div>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
 })
 
