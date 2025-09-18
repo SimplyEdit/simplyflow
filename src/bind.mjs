@@ -709,11 +709,11 @@ export function transformSelect(context)
         if (value.selected) {
             transformSelect(Object.asssign({}, context, {value:value.selected}))
         }
-        setProperties(el, value, 'name', 'id', 'selectedIndex') // allow innerHTML? if so call transformElement instead
+        setProperties(el, value, 'name', 'id', 'selectedIndex', 'className') // allow innerHTML? if so call transformElement instead
     }
 }
 
-export function addOption(option)
+export function addOption(select, option)
 {
     if (!option) {
         return
