@@ -647,8 +647,8 @@ export function transformLiteralByTemplates(context)
  */
 export function transformInput(context)
 {
-    const el    = context.element
-    const value = context.value
+    const el  = context.element
+    let value = context.value
 
     transformElement(context)
     if (typeof value == 'undefined') {
@@ -682,8 +682,8 @@ export function transformButton(context)
  */
 export function transformSelect(context)
 {
-    const el    = context.element
-    const value = context.value
+    const el  = context.element
+    let value = context.value
 
     if (value === null) {
         value = ''
@@ -790,8 +790,8 @@ export function transformMeta(context)
  */
 export function transformElement(context)
 {
-    const el    = context.element
-    const value = context.value
+    const el  = context.element
+    let value = context.value
 
     if (typeof value=='undefined' || value==null) {
         value = ''
