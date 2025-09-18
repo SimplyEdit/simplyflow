@@ -103,7 +103,7 @@ describe('bind can', () => {
     }, 10)
   })
   it('render object to generic div', (done) => {
-    const source = `<div data-bind-field="foo"></div`
+    const source = `<div data-bind-field="foo"></div>`
     document.body.innerHTML = source
 
     const data = signal({
@@ -131,5 +131,68 @@ describe('bind can', () => {
       }
     }, 10)
   })
+  it('render object to anchor', (done) => {
+    const source = `<a data-bind-field="foo"></a>`
+    document.body.innerHTML = source
+
+    const data = signal({
+      foo: {
+        innerHTML: 'innerHTML',
+        id: 'bar',
+        className: 'foobar',
+        title: 'title',
+        href: '#somewhere',
+        target: '_blank',
+        name: 'baz'
+      }
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+
+    const rendered = `<a data-bind-field="foo" title="title" id="bar" class="foobar" target="_blank" href="#somewhere" name="baz">innerHTML</a>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
+  it('render object to select', (done) => {
+    const source = `<select data-bind-field="foo"></select>`
+    document.body.innerHTML = source
+
+    const data = signal({
+      foo: {
+        id: 'bar',
+        className: 'foobar',
+        options: [
+          'foo', 'bar'
+        ]
+      }
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+
+    const rendered = `<select data-bind-field="foo" id="bar" class="foobar"><option>foo</option><option>bar</option></select>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
+
 })
 
