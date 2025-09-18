@@ -20,10 +20,16 @@
   if (!Symbol.xRay) {
     Symbol.xRay = Symbol("xRay");
   }
+  if (!Symbol.Signal) {
+    Symbol.Signal = Symbol("Signal");
+  }
   var signalHandler = {
     get: (target, property, receiver) => {
       if (property === Symbol.xRay) {
         return target;
+      }
+      if (property === Symbol.Signal) {
+        return true;
       }
       const value = target?.[property];
       notifyGet(receiver, property);
@@ -103,7 +109,13 @@
   };
   var signals = /* @__PURE__ */ new WeakMap();
   function signal(v) {
-    if (!signals.has(v)) {
+    if (v[Symbol.Signal]) {
+      let target = v[Symbol.xRay];
+      if (!signals.has(target)) {
+        signals.set(target, v);
+      }
+      v = target;
+    } else if (!signals.has(v)) {
       signals.set(v, new Proxy(v, signalHandler));
     }
     return signals.get(v);
@@ -392,12 +404,20 @@
 
   // src/bind.mjs
   var SimplyBind = class {
+    /**
+     * @param Object options - a set of options for this instance, options may include:
+     *  - root (signal) (required) - the root data object that contains al signals that can be bound
+     *  - container (HTMLElement) - the dom element to use as the root for all bindings
+     *  - attribute (string) - the prefix for the field, list and map attributes, e.g. 'data-bind'
+     *  - transformers (object name:function) - a map of transformer names and functions
+     *  - defaultTransformers (object with field, list and map properties)
+     */
     constructor(options) {
       this.bindings = /* @__PURE__ */ new Map();
       const defaultOptions = {
         container: document.body,
         attribute: "data-bind",
-        transformers: [],
+        transformers: {},
         defaultTransformers: {
           field: [defaultFieldTransformer],
           list: [defaultListTransformer],
@@ -411,15 +431,20 @@
       const attribute = this.options.attribute;
       const bindAttributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
       const bindSelector = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`;
+      const transformAttribute = attribute + "-transform";
       const getBindingAttribute = (el) => {
-        const foundAttribute = bindAttributes.find((attr) => el.hasAttribute(attr));
+        const foundAttribute = bindAttributes.find((attr2) => el.hasAttribute(attr2));
         if (!foundAttribute) {
-          console.error("No matching attribute found", el);
+          console.error("No matching attribute found", el, attr);
         }
         return foundAttribute;
       };
       const render = (el) => {
         this.bindings.set(el, throttledEffect(() => {
+          if (!el.isConnected) {
+            destroy(this.bindings.get(el));
+            return;
+          }
           const context = {
             templates: el.querySelectorAll(":scope > template"),
             attribute: getBindingAttribute(el)
@@ -428,7 +453,7 @@
           context.value = getValueByPath(this.options.root, context.path);
           context.element = el;
           runTransformers(context);
-        }, 100));
+        }, 50));
       };
       const runTransformers = (context) => {
         let transformers;
@@ -443,14 +468,16 @@
             transformers = this.options.defaultTransformers.map || [];
             break;
         }
-        if (context.element.dataset.transform) {
-          context.element.dataset.transform.split(" ").filter(Boolean).forEach((t) => {
+        if (context.element.hasAttribute(transformAttribute)) {
+          context.element.getAttribute(transformAttribute).split(" ").filter(Boolean).forEach((t) => {
             if (this.options.transformers[t]) {
               transformers.push(this.options.transformers[t]);
             } else {
               console.warn("No transformer with name " + t + " configured", { cause: context.element });
             }
           });
+        } else {
+          console.log(context.element.outerHTML);
         }
         let next;
         for (let transformer of transformers) {
@@ -464,7 +491,9 @@
       };
       const applyBindings = (bindings2) => {
         for (let bindingEl of bindings2) {
-          render(bindingEl);
+          if (!this.bindings.get(bindingEl)) {
+            render(bindingEl);
+          }
         }
       };
       const updateBindings = (changes) => {
@@ -488,7 +517,7 @@
       this.observer = new MutationObserver((changes) => {
         updateBindings(changes);
       });
-      this.observer.observe(options.container, {
+      this.observer.observe(this.options.container, {
         subtree: true,
         childList: true
       });
@@ -502,6 +531,8 @@
     /**
      * Finds the first matching template and creates a new DocumentFragment
      * with the correct data bind attributes in it (prepends the current path)
+     * @param Context context
+     * @return DocumentFragment
      */
     applyTemplate(context) {
       const path = context.path;
@@ -527,33 +558,47 @@
       const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
       const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`);
       for (let binding of bindings) {
-        const attr = attributes.find((attr2) => binding.hasAttribute(attr2));
-        const bind2 = binding.getAttribute(attr);
+        const attr2 = attributes.find((attr3) => binding.hasAttribute(attr3));
+        const bind2 = binding.getAttribute(attr2);
         if (bind2.substring(0, ":root.".length) == ":root.") {
-          binding.setAttribute(attr, bind2.substring(":root.".length));
+          binding.setAttribute(attr2, bind2.substring(":root.".length));
         } else if (bind2 == ":value" && index != null) {
-          binding.setAttribute(attr, path + "." + index);
+          binding.setAttribute(attr2, path + "." + index);
         } else if (index != null) {
-          binding.setAttribute(attr, path + "." + index + "." + bind2);
+          binding.setAttribute(attr2, path + "." + index + "." + bind2);
         } else {
-          binding.setAttribute(attr, parent + "." + bind2);
+          binding.setAttribute(attr2, parent + "." + bind2);
         }
       }
       if (typeof index !== "undefined") {
         clone.children[0].setAttribute(attribute + "-key", index);
       }
-      clone.children[0].$bindTemplate = template;
+      Object.defineProperty(
+        clone.children[0],
+        "$bindTemplate",
+        {
+          value: template,
+          enumerable: false,
+          writable: true,
+          configurable: true
+        }
+      );
       return clone;
     }
+    /**
+     * Returns the path referenced in either the field, list or map attribute
+     * @param HTMLElement el
+     * @return string The path referenced, or void
+     */
     getBindingPath(el) {
       const attributes = [
         this.options.attribute + "-field",
         this.options.attribute + "-list",
         this.options.attribute + "-map"
       ];
-      for (let attr of attributes) {
-        if (el.hasAttribute(attr)) {
-          return el.getAttribute(attr);
+      for (let attr2 of attributes) {
+        if (el.hasAttribute(attr2)) {
+          return el.getAttribute(attr2);
         }
       }
     }
@@ -667,6 +712,15 @@
         case "A":
           transformAnchor.call(this, context);
           break;
+        case "IMG":
+          transformImage.call(this, contet);
+          break;
+        case "IFRAME":
+          transformIframe.call(this, context);
+          break;
+        case "META":
+          transformMeta.call(this, context);
+          break;
         case "TEMPLATE":
           break;
         default:
@@ -684,7 +738,7 @@
     const value = context.value;
     const attribute = this.options.attribute;
     if (!Array.isArray(value)) {
-      console.error("Value is not an array.", el, value);
+      console.error("Value is not an array.", el, path, value);
     } else if (!templates?.length) {
       console.error("No templates found in", el);
     } else {
@@ -700,7 +754,7 @@
     const value = context.value;
     const attribute = this.options.attribute;
     if (typeof value != "object") {
-      console.error("Value is not an object.", el, value);
+      console.error("Value is not an object.", el, path, value);
     } else if (!templates?.length) {
       console.error("No templates found in", el);
     } else {
@@ -847,7 +901,11 @@
   }
   function transformInput(context) {
     const el = context.element;
-    const value = context.value;
+    let value = context.value;
+    transformElement(context);
+    if (typeof value == "undefined") {
+      value = "";
+    }
     if (el.type == "checkbox" || el.type == "radio") {
       if (matchValue(el.value, value)) {
         el.checked = true;
@@ -861,48 +919,116 @@
   function transformButton(context) {
     const el = context.element;
     const value = context.value;
-    if (!matchValue(el.value, value)) {
-      el.value = "" + value;
-    }
+    transformElement(context);
+    setProperties(el, value, "value");
   }
   function transformSelect(context) {
     const el = context.element;
-    const value = context.value;
-    if (el.multiple) {
-      if (Array.isArray(value)) {
-        for (let option of el.options) {
-          if (value.indexOf(option.value) === false) {
-            option.selected = false;
-          } else {
-            option.selected = true;
+    let value = context.value;
+    if (value === null) {
+      value = "";
+    }
+    if (typeof value != "object") {
+      if (el.multiple) {
+        if (Array.isArray(value)) {
+          for (let option of el.options) {
+            if (value.indexOf(option.value) === false) {
+              option.selected = false;
+            } else {
+              option.selected = true;
+            }
           }
+        }
+      } else {
+        let option = el.options.find((o) => matchValue(o.value, value));
+        if (option) {
+          option.selected = true;
+          option.setAttribute("selected", true);
         }
       }
     } else {
-      let option = el.options.find((o) => matchValue(o.value, value));
-      if (option) {
-        option.selected = true;
+      if (value.options) {
+        setSelectOptions(el, value.options);
+      }
+      if (value.selected) {
+        transformSelect(Object.asssign({}, context, { value: value.selected }));
+      }
+      setProperties(el, value, "name", "id", "selectedIndex", "className");
+    }
+  }
+  function addOption(select, option) {
+    if (!option) {
+      return;
+    }
+    if (typeof option !== "object") {
+      select.options.add(new Option("" + option));
+    } else if (option.text) {
+      select.options.add(new Option(option.text, option.value, option.defaultSelected, option.selected));
+    } else if (typeof option.value != "undefined") {
+      select.options.add(new Option("" + option.value, option.value, option.defaultSelected, option.selected));
+    }
+  }
+  function setSelectOptions(select, options) {
+    select.innerHTML = "";
+    if (Array.isArray(options)) {
+      for (const option of options) {
+        addOption(select, option);
+      }
+    } else if (options && typeof options == "object") {
+      for (const option in options) {
+        addOption(select, { text: options[option], value: option });
       }
     }
   }
   function transformAnchor(context) {
     const el = context.element;
     const value = context.value;
-    if (value?.innerHTML && !matchValue(el.innerHTML, value.innerHTML)) {
-      el.innerHTML = "" + value.innerHTML;
-    }
-    if (value?.href && !matchValue(el.href, value.href)) {
-      el.href = "" + value.href;
-    }
+    transformElement(context);
+    setProperties(el, value, "title", "target", "href", "name", "newwindow", "nofollow");
+  }
+  function transformImage(context) {
+    const el = context.element;
+    const value = context.value;
+    transformElement(context);
+    setProperties(el, value, "title", "alt", "src");
+  }
+  function transformIframe(context) {
+    const el = context.element;
+    const value = context.value;
+    transformElement(context);
+    setProperties(el, value, "title", "src");
+  }
+  function transformMeta(context) {
+    const el = context.element;
+    const value = context.value;
+    transformElement(context);
+    setProperties(el, value, "content");
   }
   function transformElement(context) {
     const el = context.element;
-    const value = context.value;
-    if (!matchValue(el.innerHTML, value)) {
-      if (typeof value == "undefined" || value == null) {
-        el.innerHTML = "";
-      } else {
-        el.innerHTML = "" + value;
+    let value = context.value;
+    if (typeof value == "undefined" || value == null) {
+      value = "";
+    }
+    if (typeof value == "string") {
+      el.innerHTML = "" + value;
+      return;
+    }
+    setProperties(el, value, "innerHTML", "title", "id", "className");
+  }
+  function setProperties(el, data, ...properties) {
+    if (!data || typeof data !== "object") {
+      return;
+    }
+    for (const property of properties) {
+      if (typeof data[property] !== "undefined") {
+        if (!matchValue(el[property], data[property])) {
+          if (data[property] === null) {
+            el[property] = "";
+          } else {
+            el[property] = "" + data[property];
+          }
+        }
       }
     }
   }
@@ -980,13 +1106,13 @@
           }
         }
       }, options);
-      return effect(() => {
+      return throttledEffect(() => {
         const sort2 = this.state.options.sort;
         if (sort2?.sortBy && sort2?.direction) {
           return data.current.toSorted(sort2?.sortFn);
         }
         return data.current;
-      });
+      }, 50);
     };
   }
   function paging(options = {}) {
@@ -996,7 +1122,7 @@
         pageSize: 20,
         max: 1
       }, options);
-      return effect(() => {
+      return throttledEffect(() => {
         return batch(() => {
           const paging2 = this.state.options.paging;
           if (!paging2.pageSize) {
@@ -1008,26 +1134,27 @@
           const end = start + paging2.pageSize;
           return data.current.slice(start, end);
         });
-      });
+      }, 50);
     };
   }
   function filter(options) {
     if (!options?.name || typeof options.name !== "string") {
       throw new Error("filter requires options.name to be a string");
     }
-    if (this.state.options[options.name]) {
-      throw new Error("a filter with this name already exists on this model");
-    }
     if (!options.matches || typeof options.matches !== "function") {
       throw new Error("filter requires options.matches to be a function");
     }
     return function(data) {
+      if (this.state.options[options.name]) {
+        throw new Error("a filter with this name already exists on this model");
+      }
       this.state.options[options.name] = options;
-      return effect(() => {
+      return throttledEffect(() => {
         if (this.state.options[options.name].enabled) {
-          return data.filter(this.state.options[options.name].matches);
+          return data.current.filter(this.state.options[options.name].matches.bind(this));
         }
-      });
+        return data.current;
+      }, 50);
     };
   }
   function columns(options = {}) {
@@ -1036,7 +1163,7 @@
     }
     return function(data) {
       this.state.options.columns = options;
-      return effect(() => {
+      return throttledEffect(() => {
         return data.current.map((input) => {
           let result = {};
           for (let key of Object.keys(this.state.options.columns)) {
@@ -1046,7 +1173,7 @@
           }
           return result;
         });
-      });
+      }, 50);
     };
   }
   function scroll(options) {
@@ -1068,12 +1195,12 @@
             );
           });
         }
-        effect(() => {
+        throttledEffect(() => {
           scrollOptions.size = data.current.length * scrollOptions.rowHeight;
           scrollbar.style.height = scrollOptions.size + "px";
-        });
+        }, 50);
       }
-      return effect(() => {
+      return throttledEffect(() => {
         if (scrollOptions.container) {
           scrollOptions.rowCount = Math.ceil(
             scrollOptions.container.getBoundingClientRect().height / scrollOptions.rowHeight
@@ -1087,7 +1214,7 @@
           start = end - scrollOptions.rowCount;
         }
         return data.current.slice(start, end);
-      });
+      }, 50);
     };
   }
 
