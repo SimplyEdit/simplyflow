@@ -1,12 +1,36 @@
 import { throttledEffect, destroy } from './state.mjs'
 
-class SimplyBind {
-    constructor(options) {
+/**
+ * Implements one way databinding, updating dom elements with matching attributes
+ * to changes in signals (see state.mjs)
+ * 
+ * @class
+ */
+class SimplyBind
+{
+    
+    /**
+     * @param Object options - a set of options for this instance, options may include:
+     *  - root (signal) (required) - the root data object that contains al signals that can be bound
+     *  - container (HTMLElement) - the dom element to use as the root for all bindings
+     *  - attribute (string) - the prefix for the field, list and map attributes, e.g. 'data-bind'
+     *  - transformers (object name:function) - a map of transformer names and functions
+     *  - defaultTransformers (object with field, list and map properties)
+     */
+    constructor(options)
+    {
+        /**
+         * A map of HTMLElements and the data bindings on each, in the form of 
+         * the connectedSignal returned by the (throttled)Effect.
+         * @type {Map}
+         * @public
+         */
         this.bindings = new Map()
+
         const defaultOptions = {
             container: document.body,
             attribute: 'data-bind',
-            transformers: [],
+            transformers: {},
             defaultTransformers: {
                 field: [defaultFieldTransformer],
                 list: [defaultListTransformer],
@@ -32,7 +56,6 @@ class SimplyBind {
 
         // sets up the effect that updates the element if its
         // data binding value changes
-
         const render = (el) => {
             this.bindings.set(el, throttledEffect(() => {
                 if (!el.isConnected) {
@@ -151,8 +174,11 @@ class SimplyBind {
     /**
      * Finds the first matching template and creates a new DocumentFragment
      * with the correct data bind attributes in it (prepends the current path)
+     * @param Context context
+     * @return DocumentFragment
      */
-    applyTemplate(context) {
+    applyTemplate(context)
+    {
         const path      = context.path
         const templates = context.templates
         const list      = context.list
@@ -192,13 +218,28 @@ class SimplyBind {
         if (typeof index !== 'undefined') {
             clone.children[0].setAttribute(attribute+'-key',index)
         }
-        // keep track of the used template, so if that changes, the 
-        // item can be updated
-        clone.children[0].$bindTemplate = template
+        // keep track of the used template, so if that changes, the item can be updated
+        Object.defineProperty(
+            clone.children[0],
+            '$bindTemplate',
+            {
+                value: template,
+                enumerable: false,
+                writable: true,
+                configurable: true
+            }
+        )
+        // return clone, not the firstChild, so that all whitespace is cloned as well
         return clone
     }
 
-    getBindingPath(el) {
+    /**
+     * Returns the path referenced in either the field, list or map attribute
+     * @param HTMLElement el
+     * @return string The path referenced, or void
+     */
+    getBindingPath(el)
+    {
         const attributes = [
             this.options.attribute+'-field', 
             this.options.attribute+'-list',
@@ -215,7 +256,8 @@ class SimplyBind {
      * Finds the first template from an array of templates that
      * matches the given value. 
      */
-    findTemplate(templates, value) {
+    findTemplate(templates, value)
+    {
         const templateMatches = t => {
             // find the value to match against (e.g. data-bind="foo")
             let path = this.getBindingPath(t)
@@ -263,7 +305,8 @@ class SimplyBind {
         return template
     }
 
-    destroy() {
+    destroy()
+    {
         this.bindings.forEach(binding => {
             destroy(binding)
         })
@@ -286,7 +329,8 @@ export function bind(options)
  * Returns true if a matches b, either by having the
  * same string value, or matching string :empty against a falsy value
  */
-export function matchValue(a,b) {
+export function matchValue(a,b)
+{
     if (a==':empty' && !b) {
         return true
     }
@@ -300,10 +344,12 @@ export function matchValue(a,b) {
 }
 
 /**
- * Returns the value by walking the given path
- * as a json pointer, starting at root
- * if you have a property with a '.' in its name
- * urlencode the '.', e.g: %46
+ * Returns the value by walking the given path as a json pointer, starting at root
+ * if you have a property with a '.' in its name urlencode the '.', e.g: %46
+ * 
+ * @param HTMLElement root
+ * @param string path e.g. 'foo.bar'
+ * @return mixed the value found by walking the path from the root object or undefined
  */
 export function getValueByPath(root, path)
 {
@@ -331,7 +377,8 @@ export function getValueByPath(root, path)
  * Default transformer for data binding
  * Will be used unless overriden in the SimplyBind options parameter
  */
-export function defaultFieldTransformer(context) {
+export function defaultFieldTransformer(context)
+{
     const el             = context.element
     const templates      = context.templates
     const templatesCount = templates.length 
@@ -355,6 +402,15 @@ export function defaultFieldTransformer(context) {
             case 'A':
                 transformAnchor.call(this, context)
                 break
+            case 'IMG':
+                transformImage.call(this, contet)
+                break
+            case 'IFRAME':
+                transformIframe.call(this, context)
+                break
+            case 'META':
+                transformMeta.call(this, context)
+                break
             case 'TEMPLATE': // never touch templates!
                 break
             default:
@@ -365,7 +421,8 @@ export function defaultFieldTransformer(context) {
     return context
 }
 
-export function defaultListTransformer(context) {
+export function defaultListTransformer(context)
+{
     const el             = context.element
     const templates      = context.templates
     const templatesCount = templates.length 
@@ -383,7 +440,8 @@ export function defaultListTransformer(context) {
     return context
 }
 
-export function defaultMapTransformer(context) {
+export function defaultMapTransformer(context)
+{
     const el             = context.element
     const templates      = context.templates
     const templatesCount = templates.length 
@@ -409,7 +467,8 @@ export function defaultMapTransformer(context) {
  * FIXME: this doesn't handle situations where there is no matching template
  * this messes up self healing. check transformObjectByTemplates for a better implementation
  */
-export function transformArrayByTemplates(context) {
+export function transformArrayByTemplates(context)
+{
     const el             = context.element
     const templates      = context.templates
     const templatesCount = templates.length 
@@ -486,7 +545,8 @@ export function transformArrayByTemplates(context) {
  * Replaces,moves or removes existing DOM children if needed
  * Reuses (doesn't touch) DOM children if template doesn't change
  */
-export function transformObjectByTemplates(context) {
+export function transformObjectByTemplates(context)
+{
     const el             = context.element
     const templates      = context.templates
     const templatesCount = templates.length 
@@ -531,7 +591,8 @@ export function transformObjectByTemplates(context) {
     }
 }
 
-function getParentPath(el, attribute) {
+function getParentPath(el, attribute)
+{
     const parentEl  = el.parentElement?.closest(`[${attribute}-list],[${attribute}-map]`)
     if (!parentEl) {
         return ':root'
@@ -548,7 +609,8 @@ function getParentPath(el, attribute) {
  * data-bind attributes inside the template use the same
  * parent path as this html element uses
  */
-export function transformLiteralByTemplates(context) {
+export function transformLiteralByTemplates(context)
+{
     const el             = context.element
     const templates      = context.templates
     const value          = context.value
@@ -578,12 +640,16 @@ export function transformLiteralByTemplates(context) {
  * for radio/checkbox inputs it only sets the checked attribute to true/false
  * if the value attribute matches the current value
  * for other inputs the value attribute is updated
- * FIXME: handle radio/checkboxes in separate transformer
  */
-export function transformInput(context) {
+export function transformInput(context)
+{
     const el    = context.element
     const value = context.value
 
+    transformElement(context)
+    if (typeof value == 'undefined') {
+        value = ''
+    }
     if (el.type=='checkbox' || el.type=='radio') {
         if (matchValue(el.value, value)) {
             el.checked = true
@@ -598,37 +664,75 @@ export function transformInput(context) {
 /**
  * Sets the value of the button, doesn't touch the innerHTML
  */
-export function transformButton(context) {
+export function transformButton(context)
+{
     const el    = context.element
     const value = context.value
 
-    if (!matchValue(el.value,value)) {
-        el.value = ''+value
-    }
+    transformElement(context)
+    setProperties(el, value, 'value')
 }
 
 /**
  * Sets the selected attribute of select options
  */
-export function transformSelect(context) {
+export function transformSelect(context)
+{
     const el    = context.element
     const value = context.value
 
-    if (el.multiple) {
-        if (Array.isArray(value)) {
-            for (let option of el.options) {
-                if (value.indexOf(option.value)===false) {
-                    option.selected = false
-                } else {
-                    option.selected = true
+    if (value === null) {
+        value = ''
+    }
+    if (typeof value!='object') {
+        if (el.multiple) {
+            if (Array.isArray(value)) {
+                for (let option of el.options) {
+                    if (value.indexOf(option.value)===false) {
+                        option.selected = false
+                    } else {
+                        option.selected = true
+                    }
                 }
             }
+        } else {
+            let option = el.options.find(o => matchValue(o.value,value))
+            if (option) {
+                option.selected = true
+                option.setAttribute('selected', true)
+            }
         }
-    } else {
-        let option = el.options.find(o => matchValue(o.value,value))
-        if (option) {
-            option.selected = true
+    } else { // value is a non-null object
+        if (Array.isArray(value.options)) {
+            setSelectOptions(el, value.options)
         }
+        if (value.selected) {
+            transformSelect(Object.asssign({}, context, {value:value.selected}))
+        }
+        setProperties(el, value, 'name', 'id', 'selectedIndex') // allow innerHTML? if so call transformElement instead
+    }
+}
+
+export function addOption(option)
+{
+    if (!option) {
+        return
+    }
+    if (typeof option !== 'object') {
+        select.options.add(new Option(''+option))
+    } else if (option.text) {
+        select.options.add(new Option(option.text, option.value, option.defaultSelected, option.selected))
+    } else if (typeof option.value != 'undefined') {
+        select.options.add(new Option(''+option.value, option.value, option.defaultSelected, option.selected))
+    }
+}
+
+export function setSelectOptions(select,options)
+{
+    //@TODO: only update in case of changes?
+    select.innerHTML = ''
+    for (const option of options) {
+        addOption(select, option)
     }
 }
 
@@ -636,30 +740,77 @@ export function transformSelect(context) {
  * Sets the innerHTML and href attribute of an anchor
  * TODO: support target, title, etc. attributes
  */
-export function transformAnchor(context) {
+export function transformAnchor(context)
+{
     const el    = context.element
     const value = context.value
 
-    if (value?.innerHTML && !matchValue(el.innerHTML, value.innerHTML)) {
-        el.innerHTML = ''+value.innerHTML
+    transformElement(context)
+    setProperties(el, value, 'title', 'target', 'href', 'name', 'newwindow', 'nofollow')
+}
+
+export function transformImage(context)
+{
+    const el    = context.element
+    const value = context.value
+
+    transformElement(context)
+    setProperties(el, value, 'title', 'alt', 'src')
+}
+
+export function transformIframe(context)
+{
+    const el    = context.element
+    const value = context.value
+
+    transformElement(context)
+    setProperties(el, value, 'title', 'src')
+}
+
+export function transformMeta(context)
+{
+    const el    = context.element
+    const value = context.value
+
+    transformElement(context)
+    setProperties(el, value, 'content')    
+}
+/**
+ * sets the innerHTML and title and id properties of any HTML element
+ */
+export function transformElement(context)
+{
+    const el    = context.element
+    const value = context.value
+
+    if (typeof value=='undefined' || value==null) {
+        value = ''
     }
-    if (value?.href && !matchValue(el.href,value.href)) {
-        el.href = ''+value.href
-    }    
+    if (typeof value == 'string') {
+        el.innerHTML = ''+value
+        return
+    }
+    setProperties(el, value, 'innerHTML', 'title', 'id', 'className')
 }
 
 /**
- * sets the innerHTML of any HTML element
+ * Sets a list of properties on a dom element, equal to 
+ * the string value of a data object
+ * only updates the dom element if the property doesn't match
  */
-export function transformElement(context) {
-    const el    = context.element
-    const value = context.value
-
-    if (!matchValue(el.innerHTML, value)) {
-        if (typeof value=='undefined' || value==null) {
-            el.innerHTML = ''
-        } else {
-            el.innerHTML = ''+value
+export function setProperties(el, data, ...properties) {
+    if (!data || typeof data!=='object') {
+        return
+    }
+    for (const property of properties) {
+        if (typeof data[property] !== 'undefined') {
+            if (!matchValue(el[property], data[property])) {
+                if (data[property] === null) {
+                    el[property] = ''
+                } else {
+                    el[property] = ''+data[property]
+                }
+            }
         }
     }
 }

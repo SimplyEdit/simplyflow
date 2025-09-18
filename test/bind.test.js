@@ -78,5 +78,58 @@ describe('bind can', () => {
       }
     }, 100)
   })
+  it('render string to generic div', (done) => {
+    const source = `<div data-bind-field="foo"></div`
+    document.body.innerHTML = source
+
+    const data = signal({
+      foo: "string"
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+
+    const rendered = `<div data-bind-field="foo">string</div>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
+  it('render object to generic div', (done) => {
+    const source = `<div data-bind-field="foo"></div`
+    document.body.innerHTML = source
+
+    const data = signal({
+      foo: {
+        innerHTML: 'innerHTML',
+        id: 'bar',
+        className: 'foobar',
+        title: 'title'
+      }
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+
+    const rendered = `<div data-bind-field="foo" title="title" id="bar" class="foobar">innerHTML</div>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
 })
 
