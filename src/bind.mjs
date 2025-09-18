@@ -41,10 +41,10 @@ class SimplyBind
             throw new Error('bind needs at least options.root set')
         }
         this.options = Object.assign({}, defaultOptions, options)
-
         const attribute      = this.options.attribute
         const bindAttributes = [attribute+'-field',attribute+'-list',attribute+'-map']
         const bindSelector   = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`
+        const transformAttribute = attribute+'-transform'
 
         const getBindingAttribute = (el) => {
             const foundAttribute = bindAttributes.find(attr => el.hasAttribute(attr))
@@ -94,14 +94,18 @@ class SimplyBind
                     transformers = this.options.defaultTransformers.map || []
                     break
             }
-            if (context.element.dataset.transform) {
-                context.element.dataset.transform.split(' ').filter(Boolean).forEach(t => {
-                    if (this.options.transformers[t]) {
-                        transformers.push(this.options.transformers[t])
-                    } else {
-                        console.warn('No transformer with name '+t+' configured', {cause:context.element})
-                    }
-                })
+            if (context.element.hasAttribute(transformAttribute)) {
+                context.element.getAttribute(transformAttribute)
+                    .split(' ').filter(Boolean)
+                    .forEach(t => {
+                        if (this.options.transformers[t]) {
+                            transformers.push(this.options.transformers[t])
+                        } else {
+                            console.warn('No transformer with name '+t+' configured', {cause:context.element})
+                        }
+                    })
+            } else {
+                console.log(context.element.outerHTML)
             }
             let next
             for (let transformer of transformers) {
@@ -703,7 +707,7 @@ export function transformSelect(context)
             }
         }
     } else { // value is a non-null object
-        if (Array.isArray(value.options)) {
+        if (value.options) {
             setSelectOptions(el, value.options)
         }
         if (value.selected) {
@@ -731,8 +735,14 @@ export function setSelectOptions(select,options)
 {
     //@TODO: only update in case of changes?
     select.innerHTML = ''
-    for (const option of options) {
-        addOption(select, option)
+    if (Array.isArray(options)) {
+        for (const option of options) {
+            addOption(select, option)
+        }
+    } else if (options && typeof options == 'object') {
+        for (const option in options) {
+            addOption(select, { text: options[option], value: option })
+        }
     }
 }
 
