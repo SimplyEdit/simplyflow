@@ -104,8 +104,6 @@ class SimplyBind
                             console.warn('No transformer with name '+t+' configured', {cause:context.element})
                         }
                     })
-            } else {
-                console.log(context.element.outerHTML)
             }
             let next
             for (let transformer of transformers) {
@@ -796,8 +794,9 @@ export function transformElement(context)
     if (typeof value=='undefined' || value==null) {
         value = ''
     }
-    if (typeof value == 'string') {
-        el.innerHTML = ''+value
+    let strValue = ''+value
+    if (typeof value!='object' || strValue.substring(0,8)!='[object ') {
+        el.innerHTML = strValue
         return
     }
     setProperties(el, value, 'innerHTML', 'title', 'id', 'className')
