@@ -60,6 +60,7 @@ class SimplyBind
             this.bindings.set(el, throttledEffect(() => {
                 if (!el.isConnected) {
                     // el is no longer part of this document
+                    untrack(el, this.getBindingPath(el))
                     destroy(this.bindings.get(el))
                     // doing this here instead of in a mutationobserver
                     // allows an element to be temporary removed and then inserted
@@ -73,6 +74,7 @@ class SimplyBind
                 context.path = this.getBindingPath(el)
                 context.value = getValueByPath(this.options.root, context.path)
                 context.element = el
+                track(el, context)
                 runTransformers(context)
             }, 50))
         }
@@ -325,6 +327,27 @@ class SimplyBind
 export function bind(options)
 {
     return new SimplyBind(options)
+}
+
+const tracking = new Map()
+
+export function trace(path)
+{
+    return tracking.get(path)
+}
+
+function track(el, context) {
+    if (!tracking.has(context.path)) {
+        tracking.set(context.path, [context])
+    } else {
+        tracking.get(context.path).push(context)
+    }
+}
+
+function untrack(el, path) {
+    let list = tracking.get(path)
+    list = list.filter(context => context.element == el)
+    tracking.set(path, list)
 }
 
 /**
@@ -688,7 +711,7 @@ export function transformSelect(context)
     }
     if (typeof value!='object') {
         if (el.multiple) {
-            if (Array.isArray(value)) {
+            if (Array.isArray(value)) { //FIXME: cannot be true, since typeof != 'object'
                 for (let option of el.options) {
                     if (value.indexOf(option.value)===false) {
                         option.selected = false
@@ -812,14 +835,16 @@ export function setProperties(el, data, ...properties) {
         return
     }
     for (const property of properties) {
-        if (typeof data[property] !== 'undefined') {
-            if (!matchValue(el[property], data[property])) {
-                if (data[property] === null) {
-                    el[property] = ''
-                } else {
-                    el[property] = ''+data[property]
-                }
-            }
+        if (typeof data[property] === 'undefined') {
+            continue
+        }
+        if (matchValue(el[property], data[property])) {
+            continue
+        }
+        if (data[property] === null) {
+            el[property] = ''
+        } else {
+            el[property] = ''+data[property]
         }
     }
 }

@@ -134,6 +134,28 @@ export function signal(v) {
     return signals.get(v)
 }
 
+/**
+ * Lists all effects that are currently listening to changes in
+ * the given signal and property
+ * returns a list with 
+ * - effect: the effect function (effect, throttledEffect, clockEffect)
+ * - fn: the user provided function to this effect function
+ * - signal: the connectedSignal to this user provided function
+ * @param Signal signal
+ * @param string prop 
+ * @return array of { effect, fn, signal }
+ */
+export function trace(signal, prop) {
+    const listeners = getListeners(signal, prop)
+    return listeners.map(listener => {
+        return {
+            effect: listener.effectType,
+            fn: listener.effectFunction,
+            signal: signals.get(listener.effectFunction)
+        }
+    })
+}
+
 let batchedListeners = new Set()
 let batchMode = 0
 /**
@@ -320,6 +342,8 @@ export function effect(fn) {
         }
         // remove all dependencies (signals) from previous runs 
         clearListeners(computeEffect)
+        computeEffect.effectFunction = fn
+        computeEffect.effectType = effect
         // record new dependencies on this run
         computeStack.push(computeEffect)
         // prevent recursion
@@ -449,6 +473,8 @@ export function throttledEffect(fn, throttleTime) {
         // remove all dependencies (signals) from previous runs 
         clearListeners(computeEffect)
         // record new dependencies on this run
+        computeEffect.effectFunction = fn
+        computeEffect.effectType = throttledEffect
         computeStack.push(computeEffect)
         // prevent recursion
         signalStack.push(connectedSignal)
@@ -505,6 +531,8 @@ export function clockEffect(fn, clock) {
             if (hasChanged) {
                 // remove all dependencies (signals) from previous runs 
                 clearListeners(computeEffect)
+                computeEffect.effectFunction = fn
+                computeEffect.effectType = clockEffect
                 // record new dependencies on this run
                 computeStack.push(computeEffect)
                 // make sure the clock.time signal is a dependency
