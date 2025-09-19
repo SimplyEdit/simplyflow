@@ -14,6 +14,7 @@
     effect: () => effect,
     signal: () => signal,
     throttledEffect: () => throttledEffect,
+    trace: () => trace,
     untracked: () => untracked
   });
   var iterate = Symbol("iterate");
@@ -119,6 +120,16 @@
       signals.set(v, new Proxy(v, signalHandler));
     }
     return signals.get(v);
+  }
+  function trace(signal2, prop) {
+    const listeners = getListeners(signal2, prop);
+    return listeners.map((listener) => {
+      return {
+        effect: listener.effectType,
+        fn: listener.effectFunction,
+        signal: signals.get(listener.effectFunction)
+      };
+    });
   }
   var batchedListeners = /* @__PURE__ */ new Set();
   var batchMode = 0;
@@ -237,6 +248,8 @@
         throw new Error("Cyclical dependency in update() call", { cause: fn });
       }
       clearListeners(computeEffect2);
+      computeEffect2.effectFunction = fn;
+      computeEffect2.effectType = effect;
       computeStack.push(computeEffect2);
       signalStack.push(connectedSignal);
       let result;
@@ -325,6 +338,8 @@
         return;
       }
       clearListeners(computeEffect2);
+      computeEffect2.effectFunction = fn;
+      computeEffect2.effectType = throttledEffect;
       computeStack.push(computeEffect2);
       signalStack.push(connectedSignal);
       let result;
@@ -366,6 +381,8 @@
       if (lastTick < clock.time) {
         if (hasChanged) {
           clearListeners(computeEffect2);
+          computeEffect2.effectFunction = fn;
+          computeEffect2.effectType = clockEffect;
           computeStack.push(computeEffect2);
           lastTick = clock.time;
           let result;
@@ -442,6 +459,7 @@
       const render = (el) => {
         this.bindings.set(el, throttledEffect(() => {
           if (!el.isConnected) {
+            untrack(el, this.getBindingPath(el));
             destroy(this.bindings.get(el));
             return;
           }
@@ -452,6 +470,7 @@
           context.path = this.getBindingPath(el);
           context.value = getValueByPath(this.options.root, context.path);
           context.element = el;
+          track(el, context);
           runTransformers(context);
         }, 50));
       };
@@ -476,8 +495,6 @@
               console.warn("No transformer with name " + t + " configured", { cause: context.element });
             }
           });
-        } else {
-          console.log(context.element.outerHTML);
         }
         let next;
         for (let transformer of transformers) {
@@ -656,6 +673,19 @@
   };
   function bind(options) {
     return new SimplyBind(options);
+  }
+  var tracking = /* @__PURE__ */ new Map();
+  function track(el, context) {
+    if (!tracking.has(context.path)) {
+      tracking.set(context.path, [context]);
+    } else {
+      tracking.get(context.path).push(context);
+    }
+  }
+  function untrack(el, path) {
+    let list = tracking.get(path);
+    list = list.filter((context) => context.element == el);
+    tracking.set(path, list);
   }
   function matchValue(a, b) {
     if (a == ":empty" && !b) {
@@ -1010,8 +1040,9 @@
     if (typeof value == "undefined" || value == null) {
       value = "";
     }
-    if (typeof value == "string") {
-      el.innerHTML = "" + value;
+    let strValue = "" + value;
+    if (typeof value != "object" || strValue.substring(0, 8) != "[object ") {
+      el.innerHTML = strValue;
       return;
     }
     setProperties(el, value, "innerHTML", "title", "id", "className");
@@ -1021,14 +1052,16 @@
       return;
     }
     for (const property of properties) {
-      if (typeof data[property] !== "undefined") {
-        if (!matchValue(el[property], data[property])) {
-          if (data[property] === null) {
-            el[property] = "";
-          } else {
-            el[property] = "" + data[property];
-          }
-        }
+      if (typeof data[property] === "undefined") {
+        continue;
+      }
+      if (matchValue(el[property], data[property])) {
+        continue;
+      }
+      if (data[property] === null) {
+        el[property] = "";
+      } else {
+        el[property] = "" + data[property];
       }
     }
   }
