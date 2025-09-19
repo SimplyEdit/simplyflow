@@ -1,6 +1,6 @@
 {
   "name": "simplyflow",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Flow based programming in javascript, with signals and effects",
   "main": "src/flow.mjs",
   "type": "module",
