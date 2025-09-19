@@ -2,7 +2,6 @@ import {signal} from '../src/state.mjs'
 import {bind} from '../src/bind.mjs'
 
 describe('bind can', () => {
-/*
   it('render simple list', (done) => {
     const source = `
   <ul data-bind-list="menu">
@@ -21,7 +20,12 @@ describe('bind can', () => {
             innerHTML: 'item 2',
             href:"#item2"
           }
-        }
+        },
+        { item: "foo" },
+        { item: 1 },
+        { item: true },
+        { item: false },
+        { item: 0 }
       ]
     })
     document.body.innerHTML = source
@@ -34,7 +38,12 @@ describe('bind can', () => {
     <template>
 <li><a data-bind-field="item"></a></li></template>
 <li data-bind-key="0"><a data-bind-field="menu.0.item" href="#item1">item 1</a></li>
-<li data-bind-key="1"><a data-bind-field="menu.1.item" href="#item2">item 2</a></li></ul>`
+<li data-bind-key="1"><a data-bind-field="menu.1.item" href="#item2">item 2</a></li>
+<li data-bind-key="2"><a data-bind-field="menu.2.item">foo</a></li>
+<li data-bind-key="3"><a data-bind-field="menu.3.item">1</a></li>
+<li data-bind-key="4"><a data-bind-field="menu.4.item">true</a></li>
+<li data-bind-key="5"><a data-bind-field="menu.5.item">false</a></li>
+<li data-bind-key="6"><a data-bind-field="menu.6.item">0</a></li></ul>`
       setTimeout(() => {
         try {
           expect(document.body.innerHTML).toBe(rendered)
@@ -225,7 +234,7 @@ describe('bind can', () => {
       }
     }, 10)
   })
-*/
+
   it('transform data', (done) => {
     const source = `<div data-bind-field="foo" data-bind-transform="setDataFoo"></div>`
     document.body.innerHTML = source
