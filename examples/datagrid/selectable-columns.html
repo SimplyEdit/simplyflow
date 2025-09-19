@@ -50,9 +50,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
 <script class="source" type="module">
-	import {signal, effect, batch} from '../../src/state.mjs'
-	import {bind} from '../../src/bind.mjs'
+	import {signal, effect, batch, trace} from '../../src/state.mjs'
+	import {bind, trace as tracePath} from '../../src/bind.mjs'
 	import {model, paging, sort, filter, columns, scroll} from '../../src/model.mjs'
+
+	window.trace = trace
+	window.tracePath = tracePath
 
 	async function main() {
 		let response = await fetch('users.json')
