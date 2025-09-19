@@ -6,7 +6,7 @@ This implements one-way databinding between your data and the browser DOM using 
 <!doctype html>
 <h1 data-flow-field="title">A title</h1>
 <script type="module">
-  import {signal} from 'simplyedit/src/state.mjs'
+  import {signal} from 'simplyflow/src/state.mjs'
   import {bind} from 'simplyflow/src/bind.mjs'
   let myData = signal({ title: "The real title"})
   bind({
