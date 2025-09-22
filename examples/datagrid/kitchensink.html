@@ -1,0 +1,245 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>datatable with all features</title>
+<link rel="stylesheet" href="../css/ds.css">
+<link rel="stylesheet" href="../css/source.css">
+<link rel="stylesheet" href="datatable.css">
+<script type="module">
+  if (!("anchorName" in document.documentElement.style)) {
+    import("https://unpkg.com/@oddbird/css-anchor-positioning");
+  }
+</script>
+
+<link href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/base16/solarized-dark.min.css" media="(prefers-color-scheme: dark)" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/base16/solarized-light.min.css" media="(prefers-color-scheme: light), (prefers-color-scheme: no-preference)" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/languages/javascript.min.js"></script>
+
+
+<main>
+
+<h1>Datatable with all features</h1>
+<button class="ds-dropdown ds-dropdown ds-datatable-column-select" popovertarget="menu" popovertargetaction="toggle">
+	<svg class="ds-icon ds-icon-feather">
+		<use xlink:href="../css/feather-sprite.svg#plus"></use>
+	</svg>
+</button>
+<nav class="ds-datatable-column-toggle ds-dropdown-nav ds-dropdown-right ds-align-left" popover id="menu">
+	<ul class="ds-dropdown-list" data-flow-map="options.columns">
+		<template>
+			<li class="ds-dropdown-item" data-simply-command="dsToggleColumn">
+				<label>
+					<input type="checkbox" value=":empty" data-flow-field="hidden">
+					<span data-flow-field="name"></span>
+				</label>
+			</li>
+		</template>
+	</ul>
+</nav>
+<div class="ds-scrollbox" style="border: 1px solid blue; --ds-scrollbox-height: 500px; height: var(--ds-scrollbox-height)">
+	<div class="ds-datatable-scrollbar"></div>
+	<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers ds-datatable-virtual-scroll">
+	<thead>
+		<tr data-flow-map="options.columns">
+			<template data-flow-field="hidden" data-flow-match=":empty">
+				<th>
+					<span data-simply-command="toggleSort" data-flow-field="name"></span>
+					<button class="ds-button ds-button-naked ds-dropdown" data-simply-command="toggleFilter">
+						<svg class="ds-icon ds-icon-feather">
+							<use xlink:href="../css/feather-sprite.svg#filter"></use>
+						</svg>
+					</button>
+					<div class="ds-datatable-filter">
+						<input type="text" placeholder="filter" data-simply-command="filter" data-simply-immediate=1>
+					</div>
+				</th>
+			</template>
+		</tr>
+	</thead>
+	<tbody data-flow-list="users.current">
+		<template>
+			<tr data-flow-map=":value">
+				<template>
+					<td data-flow-field=":value"></td>
+				</template>
+			</tr>
+		</template>
+	</tbody>
+	</table>
+</div>
+</main>
+<ouput class="source" data-js="show-highlight-here"></output>
+
+<script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
+<script class="xsource" type="module" data-js="highlight">
+	import {signal, effect, batch} from '../../src/state.mjs'
+	import {bind} from '../../src/bind.mjs'
+	import {model, paging, sort, filter, columns, scroll} from '../../src/model.mjs'
+
+	async function main() {
+		let response = await fetch('users.json')
+		let users = await response.json()
+
+		const usersModel = model({
+			data: users,
+			options: {
+
+			}
+		})
+
+		usersModel.addEffect(filter({
+			name: 'propertyFilter',
+			filters: {
+			},
+			enabled: false,
+			matches: function(row) {
+				for (let property in this.filters) {
+					let filterBy = this.filters[property]
+					if (filterBy && !row[property].match(filterBy[Symbol.xRay])) {
+						return false
+					}
+				}
+				return true
+			}
+		}))
+
+		// adds a sort effect, this must come before
+		// the paging effect, since the content of each
+		// page depends on the sort order of the entire list
+		usersModel.addEffect(sort({ sortBy: 'last_name'}))
+
+		usersModel.addEffect(scroll({
+			name: 'scroll',
+			rowHeight: 26,
+			container: document.querySelector('.ds-scrollbox'),
+			scrollbar: document.querySelector('.ds-datatable-scrollbar')
+		}))
+
+		// adds the effect to render visible columns
+		usersModel.addEffect(columns({
+			first_name: {
+				name: 'First Name'
+			},
+			last_name: {
+				name: 'Last Name'
+			},
+			email: {
+				name: 'E-mail'
+			},
+			city: {
+				name: 'City',
+				hidden: true
+			},
+			street: {
+				name: 'Address',
+				hidden: true
+			},
+			gender_abbr: {
+				name: 'Gender',
+				hidden: true
+			},
+			username: {
+				name: 'Username',
+				hidden: true
+			}
+		}))
+
+		const usersApp = simply.app({
+			commands: {
+				toggleSort: function(el, value) {
+					batch(() => {
+						this.state.options.sort.sortBy = el.parentElement.dataset.flowKey
+						const dir = this.state.options.sort.direction
+						if (dir=='asc') {
+							this.state.options.sort.direction = 'desc'
+						} else {
+							this.state.options.sort.direction = 'asc'
+						}
+					})
+				},
+				dsToggleColumnSelect: function(el, value) {
+					el.querySelector('.ds-datatable-column-toggle').classList.toggle('ds-selected')
+				},
+				dsToggleColumn: function(el, value) {
+					const key = el.dataset.flowKey
+					const columns = this.state.options.columns
+					columns[key].hidden = columns[key].hidden ? 0 : 1
+				},
+				filter: function(el,value) {
+					// find property name
+					const property = el.closest('[data-flow-key').dataset.flowKey
+					// set column filter
+					this.state.options.propertyFilter.filters[property] = new RegExp(value, 'i')
+				},
+				toggleFilter: function(el, value) {
+					const filter = el.parentElement.querySelector('.ds-datatable-filter')
+					if (filter.style.display=='block') {
+						filter.style.display = 'none'
+					} else {
+						filter.style.display = 'block'
+						filter.querySelector('input').focus()
+					}
+				}
+			},
+			state: signal({
+				users: usersModel.view,
+				options: usersModel.state.options
+			})
+		})
+
+		// set up databinding to render the users list
+		bind({
+			attribute: 'data-flow',
+			root: usersApp.state
+		})
+
+		// update the sort indicators in the column on changes
+		let lastSortColumn = null
+		effect(() => {
+			const sortBy = usersApp.state.options.sort.sortBy
+			const sortDirection = usersApp.state.options.sort.direction
+			if (lastSortColumn) {
+				lastSortColumn.classList.remove('ds-datatable-sorted-ascending')
+				lastSortColumn.classList.remove('ds-datatable-sorted-descending')
+			}
+			lastSortColumn = usersApp.container.querySelector(`th[data-flow-key="${sortBy}"]`)
+			if (lastSortColumn) {
+				lastSortColumn.classList.add(`ds-datatable-sorted-${sortDirection}ending`)
+			}
+		})
+
+		// make the numbersModel available in the console
+		window.usersModel = usersModel
+		window.usersApp = usersApp
+	}
+
+	main()
+</script>
+<script>
+    const outputElement = document.querySelector('[data-js="show-highlight-here"]')
+
+    document.querySelectorAll('[data-js="highlight"]').forEach(element => {
+        let language
+        if (element.tagName.toLowerCase() === 'script') {
+            language = 'javascript'
+        } else if (element.tagName.toLowerCase() === 'style') {
+            language = 'css'
+        } else if (element.hasAttribute('data-language')) {
+            language = element.getAttribute('data-language').toLowerCase()
+        } else if (Array.from(element.classList).find(className => className.startsWith('language-'))) {
+            // If the element has a class="language-..." use the "..." part as language
+            const languageClass = Array.from(element.classList).find(className => className.startsWith('language-'))
+            language = languageClass.substring('language-'.length).toLowerCase()
+        } else if (element.hasAttribute('data-language')) {
+            language = element.getAttribute('data-language')
+        } else {
+            language = 'plaintext'
+        }
+
+        const highlightedCode = hljs.highlight(element.textContent, {language: language}).value
+
+        outputElement.insertAdjacentHTML('beforeend', `<pre><code class="hljs">${highlightedCode}</code></pre>`)
+
+        element.attributes.removeNamedItem('data-js')
+    })
+</script>
