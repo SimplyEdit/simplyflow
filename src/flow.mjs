@@ -2,13 +2,13 @@ import { bind } from './bind.mjs'
 import * as model from './model.mjs'
 import * as state from './state.mjs'
 
-if (!window.simply) {
-	window.simply = {}
+if (!globalThis.simply) {
+	globalThis.simply = {}
 }
-Object.assign(window.simply, {
+Object.assign(globalThis.simply, {
 	bind,
 	flow: model,
 	state
 })
 
-export default window.simply
+export default globalThis.simply
