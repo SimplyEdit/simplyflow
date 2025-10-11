@@ -49,7 +49,7 @@ body {
                 <a target="_blank" rel="noopener" 
                    data-flow-field="id" 
                    data-flow-transform="comments_link"
-                ><h2 data-flow-field="title">title</h2></a>
+                ><h2 data-flow-field="title" data-flow-transform="escape_html">title</h2></a>
                 <br>
                 <span data-flow-field="time_ago">time-ago</span> 
                 &bull; by <span data-flow-field="user">user</span> 
@@ -69,20 +69,22 @@ body {
         </ul>
     </template>
     <template data-flow-match="item">
-        <a target="_blank" rel="noopener" 
-           data-flow-field="item.url" data-flow-transform="fixed-content"
-        ><h2 data-flow-field="item.title">Title</h2></a>
-        (<span data-flow-field="item.domain">domain</span>)
-        <div data-flow-field="item.content"></div>
-        <span data-flow-field="item.points">10</span> points 
-        &bull; by <span data-flow-field="item.user">user</span> 
-        <span data-flow-field="item.time_ago">time-ago</span>
+        <div>
+            <a target="_blank" rel="noopener" 
+               data-flow-field="item.url" data-flow-transform="fixed_content"
+            ><h2 data-flow-field="item.title" data-flow-transform="escape_html">Title</h2></a>
+            (<span data-flow-field="item.domain">domain</span>)
+            <div data-flow-field="item.content"></div>
+            <span data-flow-field="item.points">10</span> points 
+            &bull; by <span data-flow-field="item.user">user</span> 
+            <span data-flow-field="item.time_ago">time-ago</span>
+        </div>
     </template>
 </section>
 <script type="importmap">
   {
     "imports": {
-      "SimplyView":"https://cdn.jsdelivr.net/npm/simplyview@3.1.1/src/everything.mjs",
+      "SimplyView":"https://cdn.jsdelivr.net/npm/simplyview@3.1.4/src/everything.mjs",
       "SimplyFlow":"../../src/flow.mjs",
       "@muze-nl/metro": "https://cdn.jsdelivr.net/npm/@muze-nl/metro@0.6.12/src/everything.mjs"
     }
@@ -95,19 +97,23 @@ import '@muze-nl/metro'
 
 var hnpwa = simply.app({
   routes: {
-    '/#comments/:id': async function(params) {
+    '#comments/:id': async function(params) {
       this.actions.comments(params.id)
     },
-    '/': async function() {
+    '#news': async function() {
+      this.actions.news()
+    },
+    '/': function() {
       this.actions.news()
     }
   },
   actions: {
     news: async function(page=1) {
       this.state.items = await this.api.news(page)
+      this.state.page = 'items'
     },
     comments: async function(commentId) {
-      this.state.item = await this.api.items(commentId)
+      this.state.item = await this.api.item(commentId)
       this.state.page = 'item'
     }
   },
@@ -129,23 +135,18 @@ var hnpwa = simply.app({
   )
 })
 simply.bind({
-    root: hnpwa.state,
-    attribute: 'data-flow',
-    transformers: {
-      fixed_content: function(context, next) {
-        delete context.value.innerHTML
-        next(context)
-      },
-      comments_link: function(context, next) {
-        let href = ''+context.value
-        if (href.indexOf('@comments')==-1) {
-          href = '/#comments/'+href
-        }
-        context.value = { href }
-        next(context)
+  root: hnpwa.state,
+  attribute: 'data-flow',
+  transformers: {
+    comments_link: function(context, next) {
+      let href = ''+context.value
+      if (href.indexOf('#comments')==-1) {
+        href = '#comments/'+href
       }
+      context.value = { href }
+      next(context)
     }
+  }
 })
-
 window.hnpwa = hnpwa
 </script>
