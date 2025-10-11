@@ -431,10 +431,14 @@
      */
     constructor(options) {
       this.bindings = /* @__PURE__ */ new Map();
+      const standardTransformers = {
+        escape_html,
+        fixed_content
+      };
       const defaultOptions = {
         container: document.body,
         attribute: "data-bind",
-        transformers: {},
+        transformers: standardTransformers,
         defaultTransformers: {
           field: [defaultFieldTransformer],
           list: [defaultListTransformer],
@@ -445,9 +449,11 @@
         throw new Error("bind needs at least options.root set");
       }
       this.options = Object.assign({}, defaultOptions, options);
+      if (options.transformers) {
+        this.options.transformers = Object.assign({}, standardTransformers, options?.transformers);
+      }
       const attribute = this.options.attribute;
       const bindAttributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
-      const bindSelector = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`;
       const transformAttribute = attribute + "-transform";
       const getBindingAttribute = (el) => {
         const foundAttribute = bindAttributes.find((attr2) => el.hasAttribute(attr2));
@@ -684,8 +690,10 @@
   }
   function untrack(el, path) {
     let list = tracking.get(path);
-    list = list.filter((context) => context.element == el);
-    tracking.set(path, list);
+    if (list) {
+      list = list.filter((context) => context.element == el);
+      tracking.set(path, list);
+    }
   }
   function matchValue(a, b) {
     if (a == ":empty" && !b) {
@@ -722,10 +730,6 @@
   function defaultFieldTransformer(context) {
     const el = context.element;
     const templates = context.templates;
-    const templatesCount = templates.length;
-    const path = context.path;
-    const value = context.value;
-    const attribute = this.options.attribute;
     if (templates?.length) {
       transformLiteralByTemplates.call(this, context);
     } else {
@@ -743,7 +747,7 @@
           transformAnchor.call(this, context);
           break;
         case "IMG":
-          transformImage.call(this, contet);
+          transformImage.call(this, context);
           break;
         case "IFRAME":
           transformIframe.call(this, context);
@@ -763,10 +767,8 @@
   function defaultListTransformer(context) {
     const el = context.element;
     const templates = context.templates;
-    const templatesCount = templates.length;
     const path = context.path;
     const value = context.value;
-    const attribute = this.options.attribute;
     if (!Array.isArray(value)) {
       console.error("Value is not an array.", el, path, value);
     } else if (!templates?.length) {
@@ -779,10 +781,8 @@
   function defaultMapTransformer(context) {
     const el = context.element;
     const templates = context.templates;
-    const templatesCount = templates.length;
     const path = context.path;
     const value = context.value;
-    const attribute = this.options.attribute;
     if (typeof value != "object") {
       console.error("Value is not an object.", el, path, value);
     } else if (!templates?.length) {
@@ -795,7 +795,6 @@
   function transformArrayByTemplates(context) {
     const el = context.element;
     const templates = context.templates;
-    const templatesCount = templates.length;
     const path = context.path;
     const value = context.value;
     const attribute = this.options.attribute;
@@ -859,8 +858,6 @@
   function transformObjectByTemplates(context) {
     const el = context.element;
     const templates = context.templates;
-    const templatesCount = templates.length;
-    const path = context.path;
     const value = context.value;
     const attribute = this.options.attribute;
     context.list = value;
@@ -1064,6 +1061,26 @@
         el[property] = "" + data[property];
       }
     }
+  }
+  function escape_html(context, next) {
+    let content = context.value.innerHTML;
+    if (typeof context.value == "string") {
+      content = context.value;
+      context.value = { innerHTML: content };
+    }
+    if (content) {
+      content = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      context.value.innerHTML = content;
+    }
+    next(context);
+  }
+  function fixed_content(context, next) {
+    if (typeof context.value == "string") {
+      context.value = {};
+    } else {
+      delete context.value.innerHTML;
+    }
+    next(context);
   }
 
   // src/model.mjs
