@@ -1,0 +1,151 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HNPWA step 2</title>
+<style>
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+body {
+    font-family: sans-serif;
+    font-size: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+}
+/* news */
+.items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.item {
+    list-style: none;
+    margin: 0;
+    padding: 16px;
+    border-top: 1px solid #DDD;
+    background-color: white;
+}
+.item:first-child {
+    border-top: 0;
+}
+/* item */
+.item h2 {
+    display: inline-block;
+    font-size: 1rem;
+    font-weight: normal;
+    margin: 8px 0;
+}
+.item a.comments-link {
+    display: inline-block;
+    margin-top: 8px;
+}
+</style>
+<h1>HNPWA Step 2</h1>
+<section data-flow-field="page">
+    <template data-flow-match="items">
+        <ul class="items root" data-flow-list="items">
+        <template>
+            <li class="item">
+                <a target="_blank" rel="noopener" 
+                   data-flow-field="id" 
+                   data-flow-transform="comments_link"
+                ><h2 data-flow-field="title">title</h2></a>
+                <br>
+                <span data-flow-field="time_ago">time-ago</span> 
+                &bull; by <span data-flow-field="user">user</span> 
+                &bull; <span class="site">(<span 
+                    data-flow-field="domain">domain</span>)</span>
+                <br>                        
+                <a data-flow-field="id" 
+                   data-flow-transform="comments_link" 
+                   class="comments-link"
+                >
+                    <input type="hidden" data-flow-field="id">
+                    <span data-flow-field="comments_count">0</span> comments
+                </a>
+                &bull; <span data-flow-field="points">0</span> points
+            </li>
+        </template>
+        </ul>
+    </template>
+    <template data-flow-match="item">
+        <a target="_blank" rel="noopener" 
+           data-flow-field="item.url" data-flow-transform="fixed-content"
+        ><h2 data-flow-field="item.title">Title</h2></a>
+        (<span data-flow-field="item.domain">domain</span>)
+        <div data-flow-field="item.content"></div>
+        <span data-flow-field="item.points">10</span> points 
+        &bull; by <span data-flow-field="item.user">user</span> 
+        <span data-flow-field="item.time_ago">time-ago</span>
+    </template>
+</section>
+<script type="importmap">
+  {
+    "imports": {
+      "SimplyView":"https://cdn.jsdelivr.net/npm/simplyview@3.1.1/src/everything.mjs",
+      "SimplyFlow":"../../src/flow.mjs",
+      "@muze-nl/metro": "https://cdn.jsdelivr.net/npm/@muze-nl/metro@0.6.12/src/everything.mjs"
+    }
+  }
+</script>
+<script type="module">
+import 'SimplyView'
+import 'SimplyFlow'
+import '@muze-nl/metro'
+
+var hnpwa = simply.app({
+  routes: {
+    '/#comments/:id': async function(params) {
+      this.actions.comments(params.id)
+    },
+    '/': async function() {
+      this.actions.news()
+    }
+  },
+  actions: {
+    news: async function(page=1) {
+      this.state.items = await this.api.news(page)
+    },
+    comments: async function(commentId) {
+      this.state.item = await this.api.items(commentId)
+      this.state.page = 'item'
+    }
+  },
+  state: simply.state.signal({
+    page: 'items',
+    items: [],
+    item: null
+  }),
+  api: metro.api(
+    'https://api.hackerwebapp.com/',
+    {
+      news: function(page=1) {
+        return this.get('news', new URLSearchParams({ page }))
+      },
+      item: function(id) {
+        return this.get('item/'+id)
+      }
+    }
+  )
+})
+simply.bind({
+    root: hnpwa.state,
+    attribute: 'data-flow',
+    transformers: {
+      fixed_content: function(context, next) {
+        delete context.value.innerHTML
+        next(context)
+      },
+      comments_link: function(context, next) {
+        let href = ''+context.value
+        if (href.indexOf('@comments')==-1) {
+          href = '/#comments/'+href
+        }
+        context.value = { href }
+        next(context)
+      }
+    }
+})
+
+window.hnpwa = hnpwa
+</script>
