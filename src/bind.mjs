@@ -50,7 +50,6 @@ class SimplyBind
         }
         const attribute      = this.options.attribute
         const bindAttributes = [attribute+'-field',attribute+'-list',attribute+'-map']
-        const bindSelector   = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`
         const transformAttribute = attribute+'-transform'
 
         const getBindingAttribute = (el) => {
@@ -415,10 +414,6 @@ export function defaultFieldTransformer(context)
 {
     const el             = context.element
     const templates      = context.templates
-    const templatesCount = templates.length 
-    const path           = context.path
-    const value          = context.value
-    const attribute      = this.options.attribute
 
     if (templates?.length) {
         transformLiteralByTemplates.call(this, context)
@@ -437,7 +432,7 @@ export function defaultFieldTransformer(context)
                 transformAnchor.call(this, context)
                 break
             case 'IMG':
-                transformImage.call(this, contet)
+                transformImage.call(this, context)
                 break
             case 'IFRAME':
                 transformIframe.call(this, context)
@@ -459,11 +454,9 @@ export function defaultListTransformer(context)
 {
     const el             = context.element
     const templates      = context.templates
-    const templatesCount = templates.length 
     const path           = context.path
     const value          = context.value
-    const attribute      = this.options.attribute
-
+    
     if (!Array.isArray(value)) {
         console.error('Value is not an array.', el, path, value)
     } else if (!templates?.length) {
@@ -478,10 +471,8 @@ export function defaultMapTransformer(context)
 {
     const el             = context.element
     const templates      = context.templates
-    const templatesCount = templates.length 
     const path           = context.path
     const value          = context.value
-    const attribute      = this.options.attribute
 
     if (typeof value != 'object') {
         console.error('Value is not an object.', el, path, value)
@@ -505,7 +496,6 @@ export function transformArrayByTemplates(context)
 {
     const el             = context.element
     const templates      = context.templates
-    const templatesCount = templates.length 
     const path           = context.path
     const value          = context.value
     const attribute      = this.options.attribute
@@ -583,8 +573,6 @@ export function transformObjectByTemplates(context)
 {
     const el             = context.element
     const templates      = context.templates
-    const templatesCount = templates.length 
-    const path           = context.path
     const value          = context.value
     const attribute      = this.options.attribute
     context.list = value
