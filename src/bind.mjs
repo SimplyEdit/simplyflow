@@ -87,13 +87,13 @@ class SimplyBind
             let transformers
             switch(context.attribute) {
                 case this.options.attribute+'-field':
-                    transformers = this.options.defaultTransformers.field || []
+                    transformers = Array.from(this.options.defaultTransformers.field)
                     break
                 case this.options.attribute+'-list':
-                    transformers = this.options.defaultTransformers.list || []
+                    transformers = Array.from(this.options.defaultTransformers.list)
                     break
                 case this.options.attribute+'-map':
-                    transformers = this.options.defaultTransformers.map || []
+                    transformers = Array.from(this.options.defaultTransformers.map)
                     break
             }
             if (context.element.hasAttribute(transformAttribute)) {
