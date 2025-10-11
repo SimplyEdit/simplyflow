@@ -27,10 +27,14 @@ class SimplyBind
          */
         this.bindings = new Map()
 
+        const standardTransformers = {
+                escape_html,
+                fixed_content
+        }
         const defaultOptions = {
             container: document.body,
             attribute: 'data-bind',
-            transformers: {},
+            transformers: standardTransformers,
             defaultTransformers: {
                 field: [defaultFieldTransformer],
                 list: [defaultListTransformer],
@@ -41,6 +45,9 @@ class SimplyBind
             throw new Error('bind needs at least options.root set')
         }
         this.options = Object.assign({}, defaultOptions, options)
+        if (options.transformers) {
+            this.options.transformers = Object.assign({}, standardTransformers, options?.transformers)
+        }
         const attribute      = this.options.attribute
         const bindAttributes = [attribute+'-field',attribute+'-list',attribute+'-map']
         const bindSelector   = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`
@@ -346,8 +353,10 @@ function track(el, context) {
 
 function untrack(el, path) {
     let list = tracking.get(path)
-    list = list.filter(context => context.element == el)
-    tracking.set(path, list)
+    if (list) {
+        list = list.filter(context => context.element == el)
+        tracking.set(path, list)
+    }
 }
 
 /**
@@ -847,4 +856,30 @@ export function setProperties(el, data, ...properties) {
             el[property] = ''+data[property]
         }
     }
+}
+
+export function escape_html(context, next) {
+    let content = context.value.innerHTML
+    if (typeof context.value == 'string') {
+        content = context.value
+        context.value = { innerHTML: content }
+    }
+    if (content) {
+        content = content.replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+        context.value.innerHTML = content
+    }
+    next(context)
+}
+
+export function fixed_content(context, next) {
+    if (typeof context.value == 'string') {
+        context.value = {}
+    } else {
+        delete context.value.innerHTML
+    }
+    next(context)
 }
