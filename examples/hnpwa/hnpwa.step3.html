@@ -1,8 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>HNPWA step 2</title>
+<title>HNPWA step 3</title>
 <link rel="stylesheet" href="hnpwa.css">
-<h1>HNPWA Step 2</h1>
+<h1>HNPWA Step 3</h1>
 <section data-flow-field="page">
     <template data-flow-match="items">
         <ul class="items root" data-flow-list="items">
@@ -36,9 +36,24 @@
             <span data-flow-field="item.points">10</span> points 
             &bull; by <span data-flow-field="item.user">user</span> 
             <span data-flow-field="item.time_ago">time-ago</span>
+            <div class="comments root" data-flow-list="item.comments">
+              <template rel="comment"></template>
+            </div>
         </div>
     </template>
 </section>
+<template id="comment">
+    <details class="comment" open>
+        <summary>
+            <span data-flow-field="user">user</span>
+            <span data-flow-field="time_ago">10</span> minutes ago
+            <div class="content" data-flow-field="content">Content</div>
+        </summary>
+        <div class="comments" data-flow-list="comments">
+            <template rel="comment"></template>
+        </div>
+    </details>
+</template>
 <script type="importmap">
   {
     "imports": {

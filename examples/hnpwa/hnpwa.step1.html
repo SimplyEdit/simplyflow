@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HNPWA step 1</title>
+<link rel="stylesheet" href="hnpwa.css">
+<h1>HNPWA - simply, step 1</h1>
+<ul data-flow-list="items">
+<template>
+    <li>
+        <span data-flow-field="title">title</span>
+    </li>
+</template>
+</ul>
+<script type="importmap">
+  {
+    "imports": {
+      "SimplyView":"https://cdn.jsdelivr.net/npm/simplyview@3.1.1/src/everything.mjs",
+      "SimplyFlow":"https://cdn.jsdelivr.net/npm/simplyflow@0.3.3/src/flow.mjs",
+        "@muze-nl/metro": "https://cdn.jsdelivr.net/npm/@muze-nl/metro@0.6.12/src/everything.mjs"
+    }
+  }
+</script>
+<script type="module">
+import 'SimplyView'
+import 'SimplyFlow'
+import '@muze-nl/metro'
+
+var hnpwa = simply.app({
+  routes: {
+    '/': async function() {
+      this.actions.news()
+    }
+  },
+  actions: {
+    news: async function(page=1) {
+      this.state.items = await this.api.news(page)
+    }
+  },
+  state: simply.state.signal({
+    items: []
+  }),
+  api: metro.api(
+    'https://api.hackerwebapp.com/',
+    {
+      news: function(page=1) {
+        return this.get('news', new URLSearchParams({ page }))
+      }
+    }
+  )
+})
+
+simply.bind({
+    root: hnpwa.state,
+    attribute: 'data-flow'
+})
+</script>

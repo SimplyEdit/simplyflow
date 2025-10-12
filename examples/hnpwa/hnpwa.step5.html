@@ -1,0 +1,205 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HNPWA step 5</title>
+<link rel="stylesheet" href="hnpwa.css">
+<header>
+    <nav class="navbar">
+        <ul class="toolbar">
+            <li><a data-simply-field="menu.news"
+                href="#news" 
+                class="active toolbar-button">top</a></li>
+            <li><a data-simply-field="menu.newest"
+                href="#newest" 
+                class="toolbar-button">new</a></li>
+            <li><a data-simply-field="menu.show"
+                href="#show" 
+                class="toolbar-button">show</a></li>
+            <li><a data-simply-field="menu.ask"
+                href="#ask" 
+                class="toolbar-button">ask</a></li>
+            <li><a data-simply-field="menu.jobs"
+                href="#jobs" 
+                class="toolbar-button">jobs</a></li>
+        </ul>
+    </nav>
+</header>
+
+<main>
+<section data-flow-field="page">
+    <template data-flow-match="items">
+        <ul class="items root" data-flow-list="items">
+        <template>
+            <li class="item">
+                <a data-flow-field="id" data-flow-transform="comments_link">
+                    <h2 data-flow-field="title" data-flow-transform="escape_html">title</h2>
+                </a>
+                <br>
+                <span data-flow-field="time_ago">time-ago</span> 
+                &bull; by <span data-flow-field="user">user</span> 
+                &bull; <span class="site">(<span 
+                    data-flow-field="domain">domain</span>)</span>
+                <br>
+                <a data-flow-field="id" data-flow-transform="comments_link" class="comments-link">
+                    <input type="hidden" data-flow-field="id">
+                    <span data-flow-field="comments_count">0</span> comments
+                </a>
+                &bull; <span data-flow-field="points">0</span> points
+            </li>
+        </template>
+        </ul>
+    </template>
+    <template data-flow-match="item">
+        <div>
+            <div class="item-view">
+                <a data-flow-field="item.url" data-flow-transform="fixed_content">
+                    <h2 data-flow-field="item.title" data-flow-transform="escape_html">Title</h2>
+                </a>
+                (<span data-flow-field="item.domain">domain</span>)
+                <div data-flow-field="item.content"></div>
+                <span data-flow-field="item.points">10</span> points 
+                &bull; by <span data-flow-field="item.user">user</span> 
+                <span data-flow-field="item.time_ago">time-ago</span>
+            </div>
+            <div class="comments root" data-flow-list="item.comments">
+              <template rel="comment"></template>
+            </div>
+        </div>
+    </template>
+</section>
+<template id="comment">
+    <details class="comment" open>
+        <summary>
+            <span data-flow-field="user">user</span>
+            <span data-flow-field="time_ago">10</span> minutes ago
+            <div class="content" data-flow-field="content">Content</div>
+        </summary>
+        <div class="comments" data-flow-list="comments">
+            <template rel="comment"></template>
+        </div>
+    </details>
+</template>
+</main>
+<footer>
+    <nav class="paging">
+        <ul class="toolbar">
+            <li class="paging-prev">
+              <a data-flow-field="page_nr" class="toolbar-button"
+                 data-flow-transform="paging_prev"
+                 >previous</a>
+            </li>
+            <li class="paging-current" data-flow-field="page_nr">1</li>
+            <li class="paging-next">
+              <a data-flow-field="page_nr" class="toolbar-button"
+                 data-flow-transform="paging_next"
+                 >next</a>
+            </li>
+        </ul>
+    </nav>
+</footer>
+<script type="importmap">
+  {
+    "imports": {
+      "SimplyView":"https://cdn.jsdelivr.net/npm/simplyview@3.1.4/src/everything.mjs",
+      "SimplyFlow":"../../src/flow.mjs",
+      "@muze-nl/metro": "https://cdn.jsdelivr.net/npm/@muze-nl/metro@0.6.12/src/everything.mjs"
+    }
+  }
+</script>
+<script type="module">
+import 'SimplyView'
+import 'SimplyFlow'
+import '@muze-nl/metro'
+
+var hnpwa = simply.app({
+  routes: {
+    '#comments/:id': async function(params) {
+      this.actions.comments(params.id)
+    },
+    '#:section/:page': async function(params) {
+      this.actions.list(params.section, params.page)
+    },
+    '#:section': async function(params) {
+      this.actions.list(params.section)
+    },
+    '/': function() {
+      this.actions.list('news')
+    }
+  },
+  actions: {
+    catch: function(err) {
+      alert(err.message)
+    },
+    list: async function(section, page=1) {
+      this.state.items = await this.api.list(section, page)
+      this.state.page = 'items'
+      this.state.section = section
+      this.state.page_nr = page
+    },
+    comments: async function(commentId) {
+      this.state.item = await this.api.item(commentId)
+      this.state.page = 'item'
+    }
+  },
+  state: simply.state.signal({
+    page: 'items',
+    items: [],
+    item: null,
+    section: 'news',
+    page_nr: 1
+  }),
+  api: metro.api(
+    'https://api.hackerwebapp.com/',
+    {
+      list: function(section, page=1) {
+        return this.get(section, new URLSearchParams({ page }))
+      },
+      item: function(id) {
+        return this.get('item/'+id)
+      }
+    }
+  )
+})
+
+simply.bind({
+  root: hnpwa.state,
+  attribute: 'data-flow',
+  transformers: {
+    comments_link: function(context, next) {
+      let href = ''+context.value
+      if (href.indexOf('#comments')==-1) {
+        href = '#comments/'+href
+      }
+      context.value = { href }
+      next(context)
+    },
+    paging_next: function(context, next) {
+      const page = (parseInt(context.value)+1)
+      const section = hnpwa.state.section
+      context.value = {
+        href: `#${section}/${page}`
+      }
+      next(context)
+    },
+    paging_prev: function(context, next) {
+      let page = (parseInt(context.value)-1)
+      if (page<=1) {
+        page=1
+      }
+      const section = hnpwa.state.section
+      context.value = {
+        href: `#${section}/${page}`
+      }
+      next(context)
+    }
+  }
+})
+
+simply.state.effect(() => {
+  let section = hnpwa.state.section
+  let toolbar = document.querySelector('.toolbar')
+  toolbar.querySelector('.active')?.classList.remove('active')
+  toolbar.querySelector('[href="#'+section+'"')?.classList.add('active')
+})
+
+window.hnpwa = hnpwa
+</script>
