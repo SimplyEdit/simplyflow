@@ -1,0 +1,200 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>datatable with virtual scrolling</title>
+<link rel="stylesheet" href="../css/ds.css">
+<link rel="stylesheet" href="../css/source.css">
+<link rel="stylesheet" href="datatable.css">
+<main>
+	<h1>Multiple datatables</h1>
+	<template id="datatable">
+		<div data-flow-mark="model">
+			<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers ds-datatable-virtual-scroll">
+			<thead>
+				<tr data-flow-map="state.options.columns">
+					<template data-flow-field="hidden" data-flow-match=":empty">
+						<th data-simply-command="toggleSort" data-flow-field="name"></th>
+					</template>
+				</tr>
+			</thead>
+			<tbody data-flow-list="view.current">
+				<template>
+					<tr data-flow-map=":value">
+						<template>
+							<td data-flow-field=":value"></td>
+						</template>
+					</tr>
+				</template>
+			</tbody>
+			</table>
+		</div>
+	</template>
+	<div data-flow-field="users">
+		<template rel="datatable"></template>
+	</div>
+	<div data-flow-field="groups">
+		<template rel="datatable"></template>
+	</div>
+</main>
+<ouput class="source" data-js="show-highlight-here"></output>
+
+<script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
+<script class="xsource" type="module" data-js="highlight">
+	import {signal, effect, batch} from '../../src/state.mjs'
+	import {bind} from '../../src/bind.mjs'
+	import {model, paging, sort, filter, columns, scroll} from '../../src/model.mjs'
+
+	async function main() {
+		const usersModel = await getUsersModel()
+		const groupsModel = await getGroupsModel()
+
+		// set up databinding to render the users list
+
+		const app = simply.app({
+			commands: {
+				toggleSort: function(el, value) {
+					batch(() => {
+						const sortBy = el.innerText.trim()
+						this.state.options.sort.sortBy = Object.keys(this.state.options.columns)
+							.find(key => this.state.options.columns[key].name==sortBy)
+						const dir = this.state.options.sort.direction
+						if (dir=='asc') {
+							this.state.options.sort.direction = 'desc'
+						} else {
+							this.state.options.sort.direction = 'asc'
+						}
+					})
+				},
+				dsToggleColumnSelect: function(el, value) {
+					el.querySelector('.ds-datatable-column-toggle').classList.toggle('ds-selected')
+				},
+				dsToggleColumn: function(el, value) {
+					const key = el.dataset.flowKey
+					const columns = this.state.options.columns
+					columns[key].hidden = columns[key].hidden ? 0 : 1
+				}
+			},
+			state: signal({
+				users: usersModel,
+				groups: groupsModel
+			})
+		})
+		window.app = app
+
+		bind({
+			container: document.body,
+			attribute: 'data-flow',
+			root: app.state
+		})
+
+		// update the sort indicators in the column on changes
+		let lastSortColumn = null
+		effect(() => {
+			const sortBy = app.state.users.state.options.sort.sortBy
+			const sortDirection = app.state.users.state.options.sort.direction
+			if (lastSortColumn) {
+				lastSortColumn.classList.remove('ds-datatable-sorted-ascending')
+				lastSortColumn.classList.remove('ds-datatable-sorted-descending')
+			}
+			lastSortColumn = app.container.querySelector(`th[data-flow-key="${sortBy}"]`)
+			if (lastSortColumn) {
+				lastSortColumn.classList.add(`ds-datatable-sorted-${sortDirection}ending`)
+			}
+		})
+
+	}
+
+	main()
+
+	async function getGroupsModel() {
+		const groups = [
+			{
+				name: "admin",
+				label: "Administrators"
+			},
+			{
+				name: "public",
+				label: "Public Access"
+			},
+			{
+				name: "students",
+				label: "Students"
+			}
+		]
+		const groupsModel = model({
+			data: groups,
+			options: {
+
+			}
+		})
+		groupsModel.addEffect(sort({ sortBy: 'name'}))
+		groupsModel.addEffect(columns({
+			name: {
+				name: 'Name'		
+			},
+			label: {
+				name: 'Label'
+			}
+		}))
+
+		window.groupsModel = groupsModel
+		return groupsModel
+	}
+
+	async function getUsersModel() {
+		let response = await fetch('users.json')
+		let users = await response.json()
+
+		const usersModel = model({
+			data: users,
+			options: {
+
+			}
+		})
+
+		// adds a sort effect, this must come before
+		// the paging effect, since the content of each
+		// page depends on the sort order of the entire list
+		usersModel.addEffect(sort({ sortBy: 'last_name'}))
+
+		usersModel.addEffect(scroll({
+			name: 'scroll',
+			rowHeight: 26,
+			container: document.querySelector('.ds-scrollbox'),
+			scrollbar: document.querySelector('.ds-datatable-scrollbar')
+		}))
+
+		// adds the effect to render visible columns
+		usersModel.addEffect(columns({
+			first_name: {
+				name: 'First Name'
+			},
+			last_name: {
+				name: 'Last Name'
+			},
+			email: {
+				name: 'E-mail'
+			},
+			city: {
+				name: 'City',
+				hidden: true
+			},
+			street: {
+				name: 'Address',
+				hidden: true
+			},
+			gender_abbr: {
+				name: 'Gender',
+				hidden: true
+			},
+			username: {
+				name: 'Username',
+				hidden: true
+			}
+		}))
+
+		usersModel.container = document.body
+		// make the usersModel available in the console
+		window.usersModel = usersModel
+		return usersModel
+	}
+</script>

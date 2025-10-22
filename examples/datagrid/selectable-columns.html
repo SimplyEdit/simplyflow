@@ -5,29 +5,30 @@
 <link rel="stylesheet" href="../css/source.css">
 <link rel="stylesheet" href="datatable.css">
 <script type="module">
-  if (!("anchorName" in document.documentElement.style)) {
-    import("https://unpkg.com/@oddbird/css-anchor-positioning");
-  }
+  // if (!("anchorName" in document.documentElement.style)) {
+  //   import("https://unpkg.com/@oddbird/css-anchor-positioning");
+  // }
 </script>
 <main>
 	<h1>Datatable with selectable columns</h1>
-	<button class="ds-dropdown ds-dropdown ds-datatable-column-select" popovertarget="menu" popovertargetaction="toggle">
-		<svg class="ds-icon ds-icon-feather">
+	<label class="ds-align-right ds-dropdown xds-datatable-column-select">
+		<svg class="ds-dropdown-icon ds-icon ds-icon-feather">
 			<use xlink:href="../css/feather-sprite.svg#plus"></use>
 		</svg>
-	</button>
-	<nav class="ds-datatable-column-toggle ds-dropdown-nav ds-dropdown-right ds-align-left" popover id="menu">
-		<ul class="ds-dropdown-list" data-flow-map="users.state.options.columns">
-			<template>
-				<li class="ds-dropdown-item" data-simply-command="dsToggleColumn">
-					<label>
-						<input type="checkbox" value=":empty" data-flow-field="hidden">
-						<span data-flow-field="name"></span>
-					</label>
-				</li>
-			</template>
-		</ul>
-	</nav>
+		<input class="ds-dropdown-state" type="checkbox">
+		<nav class="xds-datatable-column-toggle ds-dropdown-nav ds-dropdown-right ds-align-left" id="menu">
+			<ul class="ds-dropdown-list" data-flow-map="users.state.options.columns">
+				<template>
+					<li class="ds-dropdown-item" data-simply-command="dsToggleColumn">
+						<label>
+							<input type="checkbox" value=":empty" data-flow-field="hidden">
+							<span data-flow-field="name"></span>
+						</label>
+					</li>
+				</template>
+			</ul>
+		</nav>
+	</label>
 	<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers">
 	<thead>
 		<tr data-flow-map="users.state.options.columns">

@@ -5,20 +5,15 @@
 <header>
     <nav class="navbar">
         <ul class="toolbar">
-            <li><a data-simply-field="menu.news"
-                href="#news" 
+            <li><a href="#news" 
                 class="active toolbar-button">top</a></li>
-            <li><a data-simply-field="menu.newest"
-                href="#newest" 
+            <li><a href="#newest" 
                 class="toolbar-button">new</a></li>
-            <li><a data-simply-field="menu.show"
-                href="#show" 
+            <li><a href="#show" 
                 class="toolbar-button">show</a></li>
-            <li><a data-simply-field="menu.ask"
-                href="#ask" 
+            <li><a href="#ask" 
                 class="toolbar-button">ask</a></li>
-            <li><a data-simply-field="menu.jobs"
-                href="#jobs" 
+            <li><a href="#jobs" 
                 class="toolbar-button">jobs</a></li>
         </ul>
     </nav>
@@ -27,7 +22,7 @@
 <main>
 <section data-flow-field="page">
     <template data-flow-match="items">
-        <ul class="items root" data-flow-list="items">
+        <ul class="items root" data-flow-list=":root.items">
         <template>
             <li class="item">
                 <a data-flow-field="id" data-flow-transform="comments_link">
@@ -51,16 +46,16 @@
     <template data-flow-match="item">
         <div>
             <div class="item-view">
-                <a data-flow-field="item.url" data-flow-transform="fixed_content">
-                    <h2 data-flow-field="item.title" data-flow-transform="escape_html">Title</h2>
+                <a data-flow-field=":root.item.url" data-flow-transform="fixed_content">
+                    <h2 data-flow-field=":root.item.title" data-flow-transform="escape_html">Title</h2>
                 </a>
-                (<span data-flow-field="item.domain">domain</span>)
-                <div data-flow-field="item.content"></div>
-                <span data-flow-field="item.points">10</span> points 
-                &bull; by <span data-flow-field="item.user">user</span> 
-                <span data-flow-field="item.time_ago">time-ago</span>
+                (<span data-flow-field=":root.item.domain">domain</span>)
+                <div data-flow-field=":root.item.content"></div>
+                <span data-flow-field=":root.item.points">10</span> points 
+                &bull; by <span data-flow-field=":root.item.user">user</span> 
+                <span data-flow-field=":root.item.time_ago">time-ago</span>
             </div>
-            <div class="comments root" data-flow-list="item.comments">
+            <div class="comments root" data-flow-list=":root.item.comments">
               <template rel="comment"></template>
             </div>
         </div>
@@ -159,6 +154,11 @@ var hnpwa = simply.app({
     }
   )
 })
+
+// TODO:
+// clean metro.api(client, methods)
+// factory method metro.jsonApi(url, methods) => metro.api(client, methods).with(jsonmw())
+
 
 simply.bind({
   root: hnpwa.state,
