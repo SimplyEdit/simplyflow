@@ -282,12 +282,12 @@ class SimplyBind
             const bind = binding.getAttribute(attr)
             if (bind[0]===':') {
                 const mark = bind.split('.').shift().substring(1)
-                binding.setAttribute(attr, context.marks[mark]+bind.substring(mark.length+1))
-            // } else 
-            // if (bind.substring(0, ':root.'.length)==':root.') {
-            //     binding.setAttribute(attr, bind.substring(':root.'.length))
-            // } else if (bind==':value' && index!=null) {
-            //     binding.setAttribute(attr, path+'.'+index)
+                const markPath = context.marks[mark]
+                if (markPath) {
+                    binding.setAttribute(attr, context.marks[mark]+bind.substring(mark.length+1)) // :mark
+                } else {
+                    binding.setAttribute(attr, bind.substring(mark.length+2)) // :mark.
+                }
             } else if (index!=null) {
                 binding.setAttribute(attr, path+'.'+index+'.'+bind)
             } else {
@@ -461,26 +461,9 @@ export function getValueByPath(context, path)
         path = context.path
     }
     let parts = path.split('.')
-    // FIXME: always start at the root
-    // depending on a :mark, add the path of the mark in front
-    // the :root path is always ''
-    // if there is no mark, the path is :value
     let curr = context.root
     let part, prevPart
     part = parts.shift()
-    // if (part[0]==':') {
-    //     const mark = part.substring(1)
-    //     if (context.marks[mark]) { // only allow a mark at the start
-    //         parts = context.marks[mark].split('.').concat(parts)
-    //     }
-    // }
-    // if (part[0]==':') {
-    //     const mark = part.substring(1)
-    //     if (context.marks[mark]) { // only allow a mark at the start
-    //         curr = context.marks[mark]
-    //         part = parts.shift()
-    //     }
-    // }
     while (part && curr) {
         part = decodeURIComponent(part)
         curr = curr[part]
