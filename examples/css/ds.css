@@ -1028,11 +1028,15 @@ dialog[open] ~ .ds-dialog-overlay {
     box-shadow: var(--ds-shadow-medium);
     border-radius: var(--ds-box-radius);
     margin: 0;
-    position-anchor: --ds-dropdown-anchor;
-    top: anchor(--ds-dropdown-anchor bottom);
-    left: anchor(--ds-dropdown-anchor left);
+    position: absolute;
+    left: 0;
+    z-index: 101;
     overflow: visible;
     margin-top: 0.5rem;
+    display: none;
+}
+.ds-dropdown-state:checked ~ .ds-dropdown-nav {
+    display: block;
 }
 .ds-dropdown-up {
     top: auto;
@@ -1042,7 +1046,7 @@ dialog[open] ~ .ds-dialog-overlay {
 }
 .ds-dropdown-right {
     left: auto;
-    right: anchor(--ds-dropdown-anchor right);
+    right: 0;
 }
 .ds-dropdown-nav::before {
     content: "";
