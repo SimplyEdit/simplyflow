@@ -62,7 +62,7 @@ describe('bind can', () => {
     })
     const source = `<div data-bind-field="foo">
         <template data-bind-match="1">
-          <div data-bind-field="bar"></div>
+          <div data-bind-field=":root.bar"></div>
         </template>
       </div>`
     document.body.innerHTML = source
@@ -72,10 +72,10 @@ describe('bind can', () => {
     })
     const rendered = `<div data-bind-field=\"foo\">
         <template data-bind-match=\"1\">
-          <div data-bind-field=\"bar\"></div>
+          <div data-bind-field=\":root.bar\"></div>
         </template>
       
-          <div data-bind-field=\":root.bar\">bar</div>
+          <div data-bind-field=\"bar\">bar</div>
         </div>`
     setTimeout(() => {
       try {

@@ -1,5 +1,7 @@
 import { throttledEffect, destroy } from './state.mjs'
 
+const Marks = Symbol('marks')
+
 /**
  * Implements one way databinding, updating dom elements with matching attributes
  * to changes in signals (see state.mjs)
@@ -51,6 +53,7 @@ class SimplyBind
         const attribute      = this.options.attribute
         const bindAttributes = [attribute+'-field',attribute+'-list',attribute+'-map']
         const transformAttribute = attribute+'-transform'
+        const markAttribute  = attribute+'-mark'
 
         const getBindingAttribute = (el) => {
             const foundAttribute = bindAttributes.find(attr => el.hasAttribute(attr))
@@ -73,13 +76,39 @@ class SimplyBind
                     // without the binding having to be reset
                     return
                 }
+                //TODO: create a context class / factory function
                 const context = {
                     templates: el.querySelectorAll(':scope > template'),
-                    attribute: getBindingAttribute(el)
+                    attribute: getBindingAttribute(el),
+                    marks: {
+                        root: ''
+                    }
                 }
+                //TODO: create a context.with() which returns a clone of context
+                context.root = this.options.root
                 context.path = this.getBindingPath(el)
-                context.value = getValueByPath(this.options.root, context.path)
+                context.marks.value = context.path
+                context.value = getValueByPath(context)
                 context.element = el
+                context.element[Marks] = context.marks
+
+                //context.marks must be a stack that follows the render / applyTemplate stack
+                //but render is called by mutation observer, so we need a way to find that
+                const selector = '['+[
+                    this.options.attribute+'-list',
+                    this.options.attribute+'-map',
+                    this.options.attribute+'-field'
+                ].join('],[')+']'
+                const parent = context.element.closest(selector); 
+                //FIXME: handle transform="fixed_content" -> ignore this field, continue parent search
+                if (parent && parent[Marks]) {
+                    for (const mark in parent[Marks]) {
+                        if (!context.marks[mark]) {
+                            context.marks[mark] = parent[Marks][mark]
+                        }
+                    }
+                }
+
                 track(el, context)
                 runTransformers(context)
             }, 50))
@@ -134,21 +163,54 @@ class SimplyBind
             }
         }
 
+        const getBindingElement = (node) => {
+            try {
+                const attribute = getBindingAttribute(node)
+                return node
+            } catch(err) {
+                if (node.parentElement) {
+                    return getBindingElement(node.parentElement)
+                }
+            }
+        }
+
+        const applyMarks = (marks) => {
+            for (let markEl of marks) {
+                let bindEl = getBindingElement(markEl)
+                if (!bindEl) {
+                    // TODO: root context
+                    throw new Error('not yet implemented')
+                } else {
+                    const path = this.getBindingPath(bindEl)
+                    const mark = markEl.getAttribute(markAttribute)
+                    bindEl[Marks][mark] = path
+                }
+            }
+        }
+
         // this handles the mutation observer changes
         // if any element is added, and has a data bind attribute
         // it applies that data binding
         const updateBindings = (changes) => {
-            const selector = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`
+            const bindSelector = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`
+            const markSelector = `[${attribute}-mark]`
             for (const change of changes) {
                 if (change.type=="childList" && change.addedNodes) {
                     for (let node of change.addedNodes) {
                         if (node instanceof HTMLElement) {
-                            let bindings = Array.from(node.querySelectorAll(selector))
-                            if (node.matches(selector)) {
+                            let bindings = Array.from(node.querySelectorAll(bindSelector))
+                            if (node.matches(bindSelector)) {
                                 bindings.unshift(node)
                             }
                             if (bindings.length) {
                                 applyBindings(bindings)
+                            }
+                            let marks = Array.from(node.querySelectorAll(markSelector))
+                            if (node.matches(markSelector)) {
+                                marks.unshift(node)
+                            }
+                            if (marks.length) {
+                                applyMarks(marks)
                             }
                         }
                     }
@@ -196,7 +258,7 @@ class SimplyBind
         const parent    = context.parent
         const value     = list ? list[index] : context.value
 
-        let template = this.findTemplate(templates, value)
+        let template = this.findTemplate(templates, value, context)
         if (!template) {
             let result = new DocumentFragment()
             result.innerHTML = '<!-- no matching template -->'
@@ -213,16 +275,23 @@ class SimplyBind
         const attributes = [attribute+'-field',attribute+'-list',attribute+'-map']
         const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`)
         for (let binding of bindings) {
+            if (binding.tagName=='TEMPLATE') {
+                continue
+            }
             const attr = attributes.find(attr => binding.hasAttribute(attr))
             const bind = binding.getAttribute(attr)
-            if (bind.substring(0, ':root.'.length)==':root.') {
-                binding.setAttribute(attr, bind.substring(':root.'.length))
-            } else if (bind==':value' && index!=null) {
-                binding.setAttribute(attr, path+'.'+index)
+            if (bind[0]===':') {
+                const mark = bind.split('.').shift().substring(1)
+                binding.setAttribute(attr, context.marks[mark]+bind.substring(mark.length+1))
+            // } else 
+            // if (bind.substring(0, ':root.'.length)==':root.') {
+            //     binding.setAttribute(attr, bind.substring(':root.'.length))
+            // } else if (bind==':value' && index!=null) {
+            //     binding.setAttribute(attr, path+'.'+index)
             } else if (index!=null) {
                 binding.setAttribute(attr, path+'.'+index+'.'+bind)
             } else {
-                binding.setAttribute(attr, parent+'.'+bind)
+                binding.setAttribute(attr, path+'.'+bind)
             }
         }
         if (typeof index !== 'undefined') {
@@ -266,18 +335,18 @@ class SimplyBind
      * Finds the first template from an array of templates that
      * matches the given value. 
      */
-    findTemplate(templates, value)
+    findTemplate(templates, value, context)
     {
         const templateMatches = t => {
             // find the value to match against (e.g. data-bind="foo")
             let path = this.getBindingPath(t)
             let currentItem
             if (path) {
-                if (path.substr(0,6)==':root.') {
-                    currentItem = getValueByPath(this.options.root, path)
-                } else {
-                    currentItem = getValueByPath(value, path)
-                }
+                let mark = context.marks.value
+                if (path[0]==':') {
+                    mark = path.split('.').shift().substring(1)
+                }    
+                currentItem = getValueByPath(context, mark ? mark + '.' + path : path)
             } else {
                 currentItem = value
             }
@@ -335,6 +404,8 @@ export function bind(options)
     return new SimplyBind(options)
 }
 
+
+// debugging functions
 const tracking = new Map()
 
 export function trace(path)
@@ -384,24 +455,37 @@ export function matchValue(a,b)
  * @param string path e.g. 'foo.bar'
  * @return mixed the value found by walking the path from the root object or undefined
  */
-export function getValueByPath(root, path)
+export function getValueByPath(context, path) 
 {
-    let parts = path.split('.');
-    let curr = root;
-    let part, prevPart;
-    while (parts.length && curr) {
+    if (!path) {
+        path = context.path
+    }
+    let parts = path.split('.')
+    // FIXME: always start at the root
+    // depending on a :mark, add the path of the mark in front
+    // the :root path is always ''
+    // if there is no mark, the path is :value
+    let curr = context.root
+    let part, prevPart
+    part = parts.shift()
+    // if (part[0]==':') {
+    //     const mark = part.substring(1)
+    //     if (context.marks[mark]) { // only allow a mark at the start
+    //         parts = context.marks[mark].split('.').concat(parts)
+    //     }
+    // }
+    // if (part[0]==':') {
+    //     const mark = part.substring(1)
+    //     if (context.marks[mark]) { // only allow a mark at the start
+    //         curr = context.marks[mark]
+    //         part = parts.shift()
+    //     }
+    // }
+    while (part && curr) {
+        part = decodeURIComponent(part)
+        curr = curr[part]
+        prevPart = part
         part = parts.shift()
-        if (part==':key') {
-            return prevPart
-        } else if (part==':value') {
-            return curr
-        } else if (part==':root') {
-            curr = root
-        } else {
-            part = decodeURIComponent(part)
-            curr = curr[part];
-            prevPart = part
-        }
     }
     return curr
 }
@@ -505,13 +589,19 @@ export function transformArrayByTemplates(context)
     // now just do a delete if a key <= last key, insert if a key >= last key
     let lastKey = 0
     let skipped = 0
-    context.list  = value
+    let clonedContext = {...context}
+    clonedContext.list  = value
+    clonedContext.marks = Object.create(context.marks)
+    clonedContext.marks.list = path
     for (let item of items) {
         let currentKey = parseInt(item.getAttribute(attribute+'-key'))
         if (currentKey>lastKey) {
             // insert before
-            context.index = lastKey
-            el.insertBefore(this.applyTemplate(context), item)
+            clonedContext.index = lastKey
+            clonedContext.value = clonedContext.list[clonedContext.index]
+            clonedContext.marks.value = path+'.'+clonedContext.index
+            clonedContext.marks.item = clonedContext.marks.value
+            el.insertBefore(this.applyTemplate(clonedContext), item)
         } else if (currentKey<lastKey) {
             // remove this
             item.remove()
@@ -528,7 +618,7 @@ export function transformArrayByTemplates(context)
             })
             if (!needsReplacement) {
                 if (item.$bindTemplate) {
-                    let newTemplate = this.findTemplate(templates, value[lastKey])
+                    let newTemplate = this.findTemplate(templates, value[lastKey], clonedContext)
                     if (newTemplate != item.$bindTemplate){
                         needsReplacement = true
                         if (!newTemplate) {
@@ -538,8 +628,11 @@ export function transformArrayByTemplates(context)
                 }
             }
             if (needsReplacement) {
-                context.index = lastKey
-                el.replaceChild(this.applyTemplate(context), item)
+                clonedContext.index = lastKey
+                clonedContext.value = clonedContext.list[clonedContext.index]
+                clonedContext.marks.value = path + '.' + clonedContext.index
+                clonedContext.marks.item = clonedContext.marks.value
+                el.replaceChild(this.applyTemplate(clonedContext), item)
             }
         }
         lastKey++
@@ -557,8 +650,11 @@ export function transformArrayByTemplates(context)
         }
     } else if (length < value.length ) {
         while (length < value.length) {
-            context.index = length
-            el.appendChild(this.applyTemplate(context))
+            clonedContext.index = length
+            clonedContext.value = clonedContext.list[clonedContext.index]
+            clonedContext.marks.value = path + '.' + clonedContext.index
+            clonedContext.marks.item = clonedContext.marks.value
+            el.appendChild(this.applyTemplate(clonedContext))
             length++
         }
     }
@@ -574,15 +670,22 @@ export function transformObjectByTemplates(context)
     const el             = context.element
     const templates      = context.templates
     const value          = context.value
+    const path           = context.path
     const attribute      = this.options.attribute
     context.list = value
 
     let items = Array.from(el.querySelectorAll(':scope > ['+attribute+'-key]'))
-    for (let key in context.list) {
-        context.index = key
+    let clonedContext = {...context}
+    clonedContext.marks = Object.create(context.marks)
+    clonedContext.marks.list = path
+    for (let key in clonedContext.list) {
+        clonedContext.index = key
         let item = items.shift()
+        clonedContext.value = clonedContext.list[clonedContext.index]
+        clonedContext.marks.value = path + '.' + clonedContext.index
+        clonedContext.marks.item = clonedContext.marks.value
         if (!item) { // more properties than rendered items
-            let clone = this.applyTemplate(context)
+            let clone = this.applyTemplate(clonedContext)
             el.appendChild(clone)
             continue
         }
@@ -591,7 +694,7 @@ export function transformObjectByTemplates(context)
             items.unshift(item) // put item back for next cycle
             let outOfOrderItem = el.querySelector(':scope > ['+attribute+'-key="'+key+'"]') //FIXME: escape key
             if (!outOfOrderItem) {
-                let clone = this.applyTemplate(context)
+                let clone = this.applyTemplate(clonedContext)
                 el.insertBefore(clone, item)
                 continue // new template doesn't need replacement, so continue 
             } else {
@@ -600,9 +703,9 @@ export function transformObjectByTemplates(context)
                 items = items.filter(i => i!=outOfOrderItem)
             }
         }
-        let newTemplate = this.findTemplate(templates, value[key])
+        let newTemplate = this.findTemplate(templates, value[key], clonedContext)
         if (newTemplate != item.$bindTemplate){
-            let clone = this.applyTemplate(context)
+            let clone = this.applyTemplate(clonedContext)
             el.replaceChild(clone, item)
         }
     }
@@ -639,7 +742,7 @@ export function transformLiteralByTemplates(context)
     const attribute      = this.options.attribute
 
     const rendered = el.querySelector(':scope > :not(template)')
-    const template = this.findTemplate(templates, value)
+    const template = this.findTemplate(templates, value, context)
 
     context.parent = getParentPath(el, attribute)
     if (rendered) {
