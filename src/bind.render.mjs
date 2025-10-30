@@ -4,15 +4,12 @@
  */
 export function field(context)
 {
-    const el             = context.element
-    const templates      = context.templates
-
-    if (templates?.length) {
+    if (context.templates?.length) {
         fieldByTemplates.call(this, context)
         context = context.withoutHTML()
     }
-    if (Object.hasOwnProperty.call(this.renderers, el.tagName)) {
-        const renderer = this.renderers[el.tagName]
+    if (Object.hasOwnProperty.call(this.renderers, context.element.tagName)) {
+        const renderer = this.renderers[context.element.tagName]
         if (renderer) {
             renderer.call(this, context)
         }
@@ -24,15 +21,10 @@ export function field(context)
 
 export function list(context)
 {
-    const el             = context.element
-    const templates      = context.templates
-    const path           = context.path
-    const value          = context.value
-    
-    if (!Array.isArray(value)) {
-        console.error('Value is not an array.', el, path, value)
-    } else if (!templates?.length) {
-        console.error('No templates found in', el)
+    if (!Array.isArray(context.value)) {
+        console.error('Value is not an array.', context.element, context.path, context.value)
+    } else if (!context.templates?.length) {
+        console.error('No templates found in', context.element)
     } else {
         arrayByTemplates.call(this, context)
     }
@@ -41,15 +33,10 @@ export function list(context)
 
 export function map(context)
 {
-    const el             = context.element
-    const templates      = context.templates
-    const path           = context.path
-    const value          = context.value
-
-    if (typeof value != 'object') {
-        console.error('Value is not an object.', el, path, value)
-    } else if (!templates?.length) {
-        console.error('No templates found in', el)
+    if (typeof context.value != 'object') {
+        console.error('Value is not an object.', context.element, context.path, context.value)
+    } else if (!context.templates?.length) {
+        console.error('No templates found in', context.element)
     } else {
         objectByTemplates.call(this, context)
     }
@@ -65,24 +52,19 @@ export function map(context)
  */
 export function arrayByTemplates(context)
 {
-    const el             = context.element
-    const templates      = context.templates
-    const path           = context.path
-    const value          = context.value
     const attribute      = this.options.attribute
 
-    let items = el.querySelectorAll(':scope > ['+attribute+'-key]')
+    let items = context.element.querySelectorAll(':scope > ['+attribute+'-key]')
     // do single merge strategy for now, in future calculate optimal merge strategy from a number
     // now just do a delete if a key <= last key, insert if a key >= last key
     let lastKey = 0
     let skipped = 0
-    context = context.with({list: value})
+    context = context.with({list: context.value})
     for (let item of items) {
         let currentKey = parseInt(item.getAttribute(attribute+'-key'))
         if (currentKey>lastKey) {
             // insert before
-            context = context.with({index: lastKey})
-            el.insertBefore(this.applyTemplate(context), item)
+            context.element.insertBefore(this.applyTemplate(context.with({index: lastKey})), item)
         } else if (currentKey<lastKey) {
             // remove this
             item.remove()
@@ -95,11 +77,11 @@ export function arrayByTemplates(context)
             let needsReplacement = bindings.find(b => {
                 let databind = b.getAttribute(attribute)
                 return (databind.substr(0,5)!==':root' 
-                    && databind.substr(0, path.length)!==path)
+                    && databind.substr(0, context.path.length)!==context.path)
             })
             if (!needsReplacement) {
                 if (item.$bindTemplate) {
-                    let newTemplate = this.findTemplate(templates, value[lastKey])
+                    let newTemplate = this.findTemplate(context.templates, context.list[lastKey])
                     if (newTemplate != item.$bindTemplate){
                         needsReplacement = true
                         if (!newTemplate) {
@@ -109,27 +91,26 @@ export function arrayByTemplates(context)
                 }
             }
             if (needsReplacement) {
-                context = context.with({index: lastKey})
-                el.replaceChild(this.applyTemplate(context), item)
+                context.element.replaceChild(this.applyTemplate(context.with({index: lastKey})), item)
             }
         }
         lastKey++
-        if (lastKey>=value.length) {
+        if (lastKey>=context.value.length) {
             break
         }
     }
-    items = el.querySelectorAll(':scope > ['+attribute+'-key]')
+    items = context.element.querySelectorAll(':scope > ['+attribute+'-key]')
     let length = items.length + skipped
-    if (length > value.length) {
-        while (length > value.length) {
-            let child = el.querySelectorAll(':scope > :not(template)')?.[length-1]
+    if (length > context.value.length) {
+        while (length > context.value.length) {
+            let child = context.element.querySelectorAll(':scope > :not(template)')?.[length-1]
             child?.remove()
             length--
         }
-    } else if (length < value.length ) {
-        while (length < value.length) {
+    } else if (length < context.value.length ) {
+        while (length < context.value.length) {
             context = context.with({index: length})
-            el.appendChild(this.applyTemplate(context))
+            context.element.appendChild(this.applyTemplate(context))
             length++
         }
     }
@@ -142,39 +123,36 @@ export function arrayByTemplates(context)
  */
 export function objectByTemplates(context)
 {
-    const el             = context.element
-    const templates      = context.templates
-    const value          = context.value
     const attribute      = this.options.attribute
-    context = context.with({list: value})
+    context = context.with({list: context.value})
 
-    let items = Array.from(el.querySelectorAll(':scope > ['+attribute+'-key]'))
+    let items = Array.from(context.element.querySelectorAll(':scope > ['+attribute+'-key]'))
     for (let key in context.list) {
         context = context.with({index: key})
         let item = items.shift()
         if (!item) { // more properties than rendered items
             let clone = this.applyTemplate(context)
-            el.appendChild(clone)
+            context.element.appendChild(clone)
             continue
         }
         if (item.getAttribute[attribute+'-key']!=key) { 
             // next item doesn't match key
             items.unshift(item) // put item back for next cycle
-            let outOfOrderItem = el.querySelector(':scope > ['+attribute+'-key="'+key+'"]') //FIXME: escape key
+            let outOfOrderItem = context.element.querySelector(':scope > ['+attribute+'-key="'+key+'"]') //FIXME: escape key
             if (!outOfOrderItem) {
                 let clone = this.applyTemplate(context)
-                el.insertBefore(clone, item)
+                context.element.insertBefore(clone, item)
                 continue // new template doesn't need replacement, so continue 
             } else {
-                el.insertBefore(outOfOrderItem, item)
+                context.element.insertBefore(outOfOrderItem, item)
                 item = outOfOrderItem // check needsreplacement next
                 items = items.filter(i => i!=outOfOrderItem)
             }
         }
-        let newTemplate = this.findTemplate(templates, value[key])
+        let newTemplate = this.findTemplate(context.templates, context.list[context.index])
         if (newTemplate != item.$bindTemplate){
             let clone = this.applyTemplate(context)
-            el.replaceChild(clone, item)
+            context.element.replaceChild(clone, item)
         }
     }
     // clean up remaining items
@@ -190,25 +168,21 @@ export function objectByTemplates(context)
  */
 export function fieldByTemplates(context)
 {
-    const el             = context.element
-    const templates      = context.templates
-    const value          = context.value
-
-    const rendered = el.querySelector(':scope > :not(template)')
-    const template = this.findTemplate(templates, value)
+    const rendered = context.element.querySelector(':scope > :not(template)')
+    const template = this.findTemplate(context.templates, context.value)
 
     if (rendered) {
         if (template) {
             if (rendered?.$bindTemplate != template) {
                 const clone = this.applyTemplate(context)
-                el.replaceChild(clone, rendered)
+                context.element.replaceChild(clone, rendered)
             }
         } else {
-            el.removeChild(rendered)
+            context.element.removeChild(rendered)
         }
     } else if (template) {
         const clone = this.applyTemplate(context)
-        el.appendChild(clone)
+        context.element.appendChild(clone)
     }
 }
 
@@ -243,11 +217,8 @@ export function input(context)
  */
 export function button(context)
 {
-    const el    = context.element
-    const value = context.value
-
     element(context)
-    setProperties(el, value, 'value')
+    setProperties(context.element, context.value, 'value')
 }
 
 /**
@@ -325,38 +296,26 @@ export function setSelectOptions(select,options)
  */
 export function anchor(context)
 {
-    const el    = context.element
-    const value = context.value
-
     element(context)
-    setProperties(el, value, 'title', 'target', 'href', 'name', 'newwindow', 'nofollow')
+    setProperties(context.element, context.value, 'title', 'target', 'href', 'name', 'newwindow', 'nofollow')
 }
 
 export function image(context)
 {
-    const el    = context.element
-    const value = context.value
-
     element(context)
-    setProperties(el, value, 'title', 'alt', 'src')
+    setProperties(context.element, context.value, 'title', 'alt', 'src')
 }
 
 export function iframe(context)
 {
-    const el    = context.element
-    const value = context.value
-
     element(context)
-    setProperties(el, value, 'title', 'src')
+    setProperties(context.element, context.value, 'title', 'src')
 }
 
 export function meta(context)
 {
-    const el    = context.element
-    const value = context.value
-
     element(context)
-    setProperties(el, value, 'content')    
+    setProperties(context.element, context.value, 'content')    
 }
 /**
  * sets the innerHTML and title and id properties of any HTML element
