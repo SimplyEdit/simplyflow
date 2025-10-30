@@ -11,7 +11,7 @@ export function field(context)
         fieldByTemplates.call(this, context)
         context = context.withoutHTML()
     }
-    if (this.renderers.hasOwnProperty(el.tagName)) {
+    if (Object.hasOwnProperty.call(this.renderers, el.tagName)) {
         const renderer = this.renderers[el.tagName]
         if (renderer) {
             renderer.call(this, context)
@@ -34,7 +34,7 @@ export function list(context)
     } else if (!templates?.length) {
         console.error('No templates found in', el)
     } else {
-        renderArrayByTemplates.call(this, context)
+        arrayByTemplates.call(this, context)
     }
     return context
 }
@@ -51,7 +51,7 @@ export function map(context)
     } else if (!templates?.length) {
         console.error('No templates found in', el)
     } else {
-        renderObjectByTemplates.call(this, context)
+        objectByTemplates.call(this, context)
     }
     return context
 }
@@ -109,7 +109,7 @@ export function arrayByTemplates(context)
                 }
             }
             if (needsReplacement) {
-                context = context.with({indexL lastKey})
+                context = context.with({index: lastKey})
                 el.replaceChild(this.applyTemplate(context), item)
             }
         }
@@ -239,7 +239,7 @@ export function input(context)
     const el  = context.element
     let value = context.value
 
-    renderElement(context)
+    element(context)
     if (typeof value == 'undefined') {
         value = ''
     }
@@ -262,7 +262,7 @@ export function button(context)
     const el    = context.element
     const value = context.value
 
-    renderElement(context)
+    element(context)
     setProperties(el, value, 'value')
 }
 
@@ -302,7 +302,7 @@ export function select(context)
         if (value.selected) {
             select(Object.asssign({}, context, {value:value.selected}))
         }
-        setProperties(el, value, 'name', 'id', 'selectedIndex', 'className') // allow innerHTML? if so call renderElement instead
+        setProperties(el, value, 'name', 'id', 'selectedIndex', 'className') // allow innerHTML? if so call element instead
     }
 }
 
@@ -344,7 +344,7 @@ export function anchor(context)
     const el    = context.element
     const value = context.value
 
-    renderElement(context)
+    element(context)
     setProperties(el, value, 'title', 'target', 'href', 'name', 'newwindow', 'nofollow')
 }
 
@@ -353,7 +353,7 @@ export function image(context)
     const el    = context.element
     const value = context.value
 
-    renderElement(context)
+    element(context)
     setProperties(el, value, 'title', 'alt', 'src')
 }
 
@@ -362,7 +362,7 @@ export function iframe(context)
     const el    = context.element
     const value = context.value
 
-    renderElement(context)
+    element(context)
     setProperties(el, value, 'title', 'src')
 }
 
@@ -371,7 +371,7 @@ export function meta(context)
     const el    = context.element
     const value = context.value
 
-    renderElement(context)
+    element(context)
     setProperties(el, value, 'content')    
 }
 /**

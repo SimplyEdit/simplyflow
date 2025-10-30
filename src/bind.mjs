@@ -1,6 +1,6 @@
 import { throttledEffect, destroy } from './state.mjs'
 import { escape_html, fixed_content } from './bind.transformers.mjs'
-import { * as render } from './bind.render.mjs'
+import * as render from './bind.render.mjs'
 import bindContext from './bind.context.mjs'
 
 /**
@@ -69,7 +69,7 @@ class SimplyBind
         const getBindingAttribute = (el) => {
             const foundAttribute = bindAttributes.find(attr => el.hasAttribute(attr))
             if (!foundAttribute) {
-                console.error('No matching attribute found',el,attr)
+                console.error('No matching attribute found',el,bindAttributes)
             }
             return foundAttribute
         }
@@ -87,7 +87,7 @@ class SimplyBind
                     // without the binding having to be reset
                     return
                 }
-                const context = {
+                let context = {
                     templates: el.querySelectorAll(':scope > template'),
                     attribute: getBindingAttribute(el)
                 }
@@ -384,17 +384,13 @@ function untrack(el, path) {
  */
 export function getValueByPath(root, path)
 {
-    if (!path) {
-        path = context.path
-    }
     let parts = path.split('.')
     let curr = root
-    let part, prevPart
+    let part
     part = parts.shift()
     while (part && curr) {
         part = decodeURIComponent(part)
         curr = curr[part]
-        prevPart = part
         part = parts.shift()
     }
     return curr
