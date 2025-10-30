@@ -120,6 +120,9 @@ var hnpwa = simply.app({
       this.actions.list('news')
     }
   },
+  errorHandlers: {
+    actions: function(err) {}
+  }
   actions: {
     catch: function(err) {
       alert(err.message)

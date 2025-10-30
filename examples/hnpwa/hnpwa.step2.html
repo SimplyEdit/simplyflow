@@ -27,15 +27,19 @@
         </ul>
     </template>
     <template data-flow-match="item">
-        <div>
-            <a data-flow-field="item.url" data-flow-transform="fixed_content">
-                <h2 data-flow-field="item.title" data-flow-transform="escape_html">Title</h2>
-            </a>
-            (<span data-flow-field="item.domain">domain</span>)
-            <div data-flow-field="item.content"></div>
-            <span data-flow-field="item.points">10</span> points 
-            &bull; by <span data-flow-field="item.user">user</span> 
-            <span data-flow-field="item.time_ago">time-ago</span>
+        <div data-flow-field=":root.item">
+            <template>
+                <div>
+                    <a data-flow-field="url" data-flow-transform="fixed_content">
+                        <h2 data-flow-field="title" data-flow-transform="escape_html">Title</h2>
+                    </a>
+                    (<span data-flow-field="domain">domain</span>)
+                    <div data-flow-field="content"></div>
+                    <span data-flow-field="points">10</span> points 
+                    &bull; by <span data-flow-field="user">user</span> 
+                    <span data-flow-field="time_ago">time-ago</span>
+                </div>
+            </template>
         </div>
     </template>
 </section>
@@ -61,7 +65,7 @@ var hnpwa = simply.app({
     '#news': async function() {
       this.actions.news()
     },
-    '/': function() {
+    ':*': function() {
       this.actions.news()
     }
   },
