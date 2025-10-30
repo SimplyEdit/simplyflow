@@ -208,7 +208,6 @@ class SimplyBind
         const templates = context.templates
         const list      = context.list
         const index     = context.index
-        const parent    = context.parent
         const value     = list ? list[index] : context.value
 
         let template = this.findTemplate(templates, value)
@@ -237,7 +236,7 @@ class SimplyBind
             } else if (index!=null) {
                 binding.setAttribute(attr, path+'.'+index+'.'+bind)
             } else {
-                binding.setAttribute(attr, parent+'.'+bind)
+                binding.setAttribute(attr, path+'.'+bind)
             }
         }
         if (typeof index !== 'undefined') {

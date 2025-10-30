@@ -187,20 +187,16 @@ export function objectByTemplates(context)
 /**
  * renders the contents of an html element by rendering
  * a matching template, once.
- * data-bind attributes inside the template use the same
- * parent path as this html element uses
  */
 export function fieldByTemplates(context)
 {
     const el             = context.element
     const templates      = context.templates
     const value          = context.value
-    const attribute      = this.options.attribute
 
     const rendered = el.querySelector(':scope > :not(template)')
     const template = this.findTemplate(templates, value)
 
-    context = context.with({parent: getParentPath(el, attribute)})
     if (rendered) {
         if (template) {
             if (rendered?.$bindTemplate != template) {
@@ -214,18 +210,6 @@ export function fieldByTemplates(context)
         const clone = this.applyTemplate(context)
         el.appendChild(clone)
     }
-}
-
-function getParentPath(el, attribute)
-{
-    const parentEl  = el.parentElement?.closest(`[${attribute}-list],[${attribute}-map]`)
-    if (!parentEl) {
-        return ':root'
-    }
-    if (parentEl.hasAttribute(`${attribute}-list`)) {
-        return parentEl.getAttribute(`${attribute}-list`)
-    }
-    return parentEl.getAttribute(`${attribute}-map`)
 }
 
 /**

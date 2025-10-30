@@ -1,6 +1,6 @@
 export default class bindContext {
 	constructor(options) {
-		for (const option of ['element','value','templates','path','list','index','parent']) {
+		for (const option of ['element','value','templates','path','list','index']) {
 			this[option] = options[option]
 		}
 		Object.freeze(this)
