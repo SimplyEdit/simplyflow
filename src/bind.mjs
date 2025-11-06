@@ -1,7 +1,10 @@
 import { throttledEffect, destroy } from './state.mjs'
 import { escape_html, fixed_content } from './bind.transformers.mjs'
 import * as render from './bind.render.mjs'
-import bindContext from './bind.context.mjs'
+
+if (!Symbol.bindTemplate) {
+    Symbol.bindTemplate = Symbol('bindTemplate')
+}
 
 /**
  * Implements one way databinding, updating dom elements with matching attributes
@@ -94,7 +97,6 @@ class SimplyBind
                 context.path = this.getBindingPath(el)
                 context.value = getValueByPath(this.options.root, context.path)
                 context.element = el
-                context = new bindContext(context)
                 track(el, context)
                 runTransformers(context)
             }, 50))
@@ -246,16 +248,8 @@ class SimplyBind
             clone.children[0].setAttribute(attribute+'-key',index)
         }
         // keep track of the used template, so if that changes, the item can be updated
-        Object.defineProperty(
-            clone.children[0],
-            '$bindTemplate',
-            {
-                value: template,
-                enumerable: false,
-                writable: true,
-                configurable: true
-            }
-        )
+        clone.children[0][Symbol.bindTemplate] = template
+
         // return clone, not the firstChild, so that all whitespace is cloned as well
         return clone
     }

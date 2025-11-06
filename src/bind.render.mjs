@@ -6,15 +6,15 @@ export function field(context)
 {
     if (context.templates?.length) {
         fieldByTemplates.call(this, context)
-        context = context.withoutHTML()
-    }
-    if (Object.hasOwnProperty.call(this.renderers, context.element.tagName)) {
-        const renderer = this.renderers[context.element.tagName]
+        // TODO: check if existence of one or more templates must mean that
+        // only the template rendering is applied, instead of also rendering attributes
+    } else if (Object.hasOwnProperty.call(this.options.renderers, context.element.tagName)) {
+        const renderer = this.options.renderers[context.element.tagName]
         if (renderer) {
             renderer.call(this, context)
         }
-    } else if (this.renderers['*']) {
-        this.renderers['*'].call(this, context)
+    } else if (this.options.renderers['*']) {
+        this.options.renderers['*'].call(this, context)
     }
     return context
 }
@@ -59,12 +59,13 @@ export function arrayByTemplates(context)
     // now just do a delete if a key <= last key, insert if a key >= last key
     let lastKey = 0
     let skipped = 0
-    context = context.with({list: context.value})
+    context.list = context.value
     for (let item of items) {
         let currentKey = parseInt(item.getAttribute(attribute+'-key'))
         if (currentKey>lastKey) {
             // insert before
-            context.element.insertBefore(this.applyTemplate(context.with({index: lastKey})), item)
+            context.index = lastKey
+            context.element.insertBefore(this.applyTemplate(context), item)
         } else if (currentKey<lastKey) {
             // remove this
             item.remove()
@@ -80,9 +81,9 @@ export function arrayByTemplates(context)
                     && databind.substr(0, context.path.length)!==context.path)
             })
             if (!needsReplacement) {
-                if (item.$bindTemplate) {
+                if (item[Symbol.bindTemplate]) {
                     let newTemplate = this.findTemplate(context.templates, context.list[lastKey])
-                    if (newTemplate != item.$bindTemplate){
+                    if (newTemplate != item[Symbol.bindTemplate]){
                         needsReplacement = true
                         if (!newTemplate) {
                             skipped++
@@ -91,7 +92,8 @@ export function arrayByTemplates(context)
                 }
             }
             if (needsReplacement) {
-                context.element.replaceChild(this.applyTemplate(context.with({index: lastKey})), item)
+                context.index = lastKey
+                context.element.replaceChild(this.applyTemplate(context), item)
             }
         }
         lastKey++
@@ -109,7 +111,7 @@ export function arrayByTemplates(context)
         }
     } else if (length < context.value.length ) {
         while (length < context.value.length) {
-            context = context.with({index: length})
+            context.index = length
             context.element.appendChild(this.applyTemplate(context))
             length++
         }
@@ -123,12 +125,12 @@ export function arrayByTemplates(context)
  */
 export function objectByTemplates(context)
 {
-    const attribute      = this.options.attribute
-    context = context.with({list: context.value})
+    const attribute = this.options.attribute
+    context.list = context.value
 
     let items = Array.from(context.element.querySelectorAll(':scope > ['+attribute+'-key]'))
     for (let key in context.list) {
-        context = context.with({index: key})
+        context.index = key
         let item = items.shift()
         if (!item) { // more properties than rendered items
             let clone = this.applyTemplate(context)
@@ -150,7 +152,7 @@ export function objectByTemplates(context)
             }
         }
         let newTemplate = this.findTemplate(context.templates, context.list[context.index])
-        if (newTemplate != item.$bindTemplate){
+        if (newTemplate != item[Symbol.bindTemplate]){
             let clone = this.applyTemplate(context)
             context.element.replaceChild(clone, item)
         }
@@ -173,7 +175,7 @@ export function fieldByTemplates(context)
 
     if (rendered) {
         if (template) {
-            if (rendered?.$bindTemplate != template) {
+            if (rendered?.[Symbol.bindTemplate] != template) {
                 const clone = this.applyTemplate(context)
                 context.element.replaceChild(clone, rendered)
             }
