@@ -1,6 +1,13 @@
-/**
+/*
  * Default renderers for data binding
  * Will be used unless overriden in the SimplyBind options parameter
+ */
+
+/**
+ * This function is used by default to render dom elements with the `data-flow-field` attribute.
+ * It will switch to only switching in template content if the context has any templates.
+ * Otherwise it will call the matching render function depending on the tagName of the
+ * context.element
  */
 export function field(context)
 {
@@ -19,6 +26,10 @@ export function field(context)
     return context
 }
 
+/**
+ * This function is used by default to render DOM elements with the `data-flow-list` attribute.
+ * The context.value must be an array. And context.templates must not be empty.
+ */
 export function list(context)
 {
     if (!Array.isArray(context.value)) {
@@ -31,9 +42,13 @@ export function list(context)
     return context
 }
 
+/**
+ * This function is used by default to render DOM elements with the `data-flow-map` attribute.
+ * The context.value must be a non-null object. And context.templates must not be empty.
+ */
 export function map(context)
 {
-    if (typeof context.value != 'object') {
+    if (typeof context.value != 'object' || !context.value) {
         console.error('Value is not an object.', context.element, context.path, context.value)
     } else if (!context.templates?.length) {
         console.error('No templates found in', context.element)
@@ -263,6 +278,11 @@ export function select(context)
     }
 }
 
+/**
+ * adds a single option to a select element. The option.text property is optional, if not set option.value is used.
+ * @param select The select element
+ * @param option An option descriptor, either a string, object with {text,value,defaultSelected,selected} properties or an Option object
+ */
 export function addOption(select, option)
 {
     if (!option) {
@@ -277,6 +297,9 @@ export function addOption(select, option)
     }
 }
 
+/**
+ * This function clears all existing options of a select element, and adds the specified options.
+ */
 export function setSelectOptions(select,options)
 {
     //@TODO: only update in case of changes?
@@ -293,32 +316,38 @@ export function setSelectOptions(select,options)
 }
 
 /**
- * Sets the innerHTML and href attribute of an anchor
- * TODO: support target, title, etc. attributes
+ * Sets the innerHTML and href, id, title, target, name, newwindow, nofollow attributes of an anchor
  */
 export function anchor(context)
 {
     element(context)
-    setProperties(context.element, context.value, 'title', 'target', 'href', 'name', 'newwindow', 'nofollow')
+    setProperties(context.element, context.value, 'target', 'href', 'name', 'newwindow', 'nofollow')
 }
 
+/**
+ * Sets the title, id, alt and src attributes of an image.
+ */
 export function image(context)
 {
-    element(context)
-    setProperties(context.element, context.value, 'title', 'alt', 'src')
+    setProperties(context.element, context.value, 'title', 'alt', 'src', 'id')
 }
 
+/**
+ * Sets the title, id and src attribute of an iframe
+ */
 export function iframe(context)
 {
-    element(context)
-    setProperties(context.element, context.value, 'title', 'src')
+    setProperties(context.element, context.value, 'title', 'src', 'id')
 }
 
+/**
+ * Sets the content and id attribute of a meta element
+ */
 export function meta(context)
 {
-    element(context)
-    setProperties(context.element, context.value, 'content')    
+    setProperties(context.element, context.value, 'content', 'id')    
 }
+
 /**
  * sets the innerHTML and title and id properties of any HTML element
  */
