@@ -116,6 +116,9 @@ class SimplyBind
                 case this.options.attribute+'-map':
                     transformers = Array.from(this.options.render.map)
                     break
+                default:
+                    throw new Error('no valid context attribute specified',context)
+                    break
             }
             if (context.element.hasAttribute(transformAttribute)) {
                 context.element.getAttribute(transformAttribute)

@@ -1,5 +1,5 @@
 /**
- * Default renderer for data binding
+ * Default renderers for data binding
  * Will be used unless overriden in the SimplyBind options parameter
  */
 export function field(context)
