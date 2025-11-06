@@ -39,7 +39,7 @@ class SimplyBind
         }
         const defaultOptions = {
             container: document.body,
-            attribute: 'data-bind',
+            attribute: 'data-flow',
             transformers: defaultTransformers,
             render: {
                 field: [render.field],

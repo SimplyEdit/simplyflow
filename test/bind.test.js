@@ -4,9 +4,9 @@ import {bind} from '../src/bind.mjs'
 describe('bind can', () => {
   it('render simple list', (done) => {
     const source = `
-  <ul data-bind-list="menu">
+  <ul data-flow-list="menu">
     <template>
-<li><a data-bind-field="item"></a></li></template></ul>`
+<li><a data-flow-field="item"></a></li></template></ul>`
     const data = signal({
       menu: [
         {
@@ -34,16 +34,16 @@ describe('bind can', () => {
         root: data
       })
       const rendered = `
-  <ul data-bind-list="menu">
+  <ul data-flow-list="menu">
     <template>
-<li><a data-bind-field="item"></a></li></template>
-<li data-bind-key="0"><a data-bind-field="menu.0.item" href="#item1">item 1</a></li>
-<li data-bind-key="1"><a data-bind-field="menu.1.item" href="#item2">item 2</a></li>
-<li data-bind-key="2"><a data-bind-field="menu.2.item">foo</a></li>
-<li data-bind-key="3"><a data-bind-field="menu.3.item">1</a></li>
-<li data-bind-key="4"><a data-bind-field="menu.4.item">true</a></li>
-<li data-bind-key="5"><a data-bind-field="menu.5.item">false</a></li>
-<li data-bind-key="6"><a data-bind-field="menu.6.item">0</a></li></ul>`
+<li><a data-flow-field="item"></a></li></template>
+<li data-flow-key="0"><a data-flow-field="menu.0.item" href="#item1">item 1</a></li>
+<li data-flow-key="1"><a data-flow-field="menu.1.item" href="#item2">item 2</a></li>
+<li data-flow-key="2"><a data-flow-field="menu.2.item">foo</a></li>
+<li data-flow-key="3"><a data-flow-field="menu.3.item">1</a></li>
+<li data-flow-key="4"><a data-flow-field="menu.4.item">true</a></li>
+<li data-flow-key="5"><a data-flow-field="menu.5.item">false</a></li>
+<li data-flow-key="6"><a data-flow-field="menu.6.item">0</a></li></ul>`
       setTimeout(() => {
         try {
           expect(document.body.innerHTML).toBe(rendered)
@@ -60,9 +60,9 @@ describe('bind can', () => {
       foo: 1,
       bar: 'bar'
     })
-    const source = `<div data-bind-field="foo">
-        <template data-bind-match="1">
-          <div data-bind-field=":root.bar"></div>
+    const source = `<div data-flow-field="foo">
+        <template data-flow-match="1">
+          <div data-flow-field=":root.bar"></div>
         </template>
       </div>`
     document.body.innerHTML = source
@@ -70,12 +70,12 @@ describe('bind can', () => {
       container: document.body,
       root: data
     })
-    const rendered = `<div data-bind-field=\"foo\">
-        <template data-bind-match=\"1\">
-          <div data-bind-field=\":root.bar\"></div>
+    const rendered = `<div data-flow-field=\"foo\">
+        <template data-flow-match=\"1\">
+          <div data-flow-field=\":root.bar\"></div>
         </template>
       
-          <div data-bind-field=\"bar\">bar</div>
+          <div data-flow-field=\"bar\">bar</div>
         </div>`
     setTimeout(() => {
       try {
@@ -89,7 +89,7 @@ describe('bind can', () => {
     }, 100)
   })
   it('render string to generic div', (done) => {
-    const source = `<div data-bind-field="foo"></div`
+    const source = `<div data-flow-field="foo"></div`
     document.body.innerHTML = source
 
     const data = signal({
@@ -100,7 +100,7 @@ describe('bind can', () => {
       root: data
     })
 
-    const rendered = `<div data-bind-field="foo">string</div>`
+    const rendered = `<div data-flow-field="foo">string</div>`
     setTimeout(() => {
       try {
         expect(document.body.innerHTML).toBe(rendered)
@@ -113,7 +113,7 @@ describe('bind can', () => {
     }, 10)
   })
   it('render object to generic div', (done) => {
-    const source = `<div data-bind-field="foo"></div>`
+    const source = `<div data-flow-field="foo"></div>`
     document.body.innerHTML = source
 
     const data = signal({
@@ -129,7 +129,7 @@ describe('bind can', () => {
       root: data
     })
 
-    const rendered = `<div data-bind-field="foo" title="title" id="bar" class="foobar">innerHTML</div>`
+    const rendered = `<div data-flow-field="foo" title="title" id="bar" class="foobar">innerHTML</div>`
     setTimeout(() => {
       try {
         expect(document.body.innerHTML).toBe(rendered)
@@ -142,7 +142,7 @@ describe('bind can', () => {
     }, 10)
   })
   it('render object to anchor', (done) => {
-    const source = `<a data-bind-field="foo"></a>`
+    const source = `<a data-flow-field="foo"></a>`
     document.body.innerHTML = source
 
     const data = signal({
@@ -161,7 +161,7 @@ describe('bind can', () => {
       root: data
     })
 
-    const rendered = `<a data-bind-field="foo" title="title" id="bar" class="foobar" target="_blank" href="#somewhere" name="baz">innerHTML</a>`
+    const rendered = `<a data-flow-field="foo" title="title" id="bar" class="foobar" target="_blank" href="#somewhere" name="baz">innerHTML</a>`
     setTimeout(() => {
       try {
         expect(document.body.innerHTML).toBe(rendered)
@@ -174,7 +174,7 @@ describe('bind can', () => {
     }, 10)
   })
   it('render object to select', (done) => {
-    const source = `<select data-bind-field="foo"></select>`
+    const source = `<select data-flow-field="foo"></select>`
     document.body.innerHTML = source
 
     const data = signal({
@@ -191,7 +191,7 @@ describe('bind can', () => {
       root: data
     })
 
-    const rendered = `<select data-bind-field="foo" id="bar" class="foobar"><option>foo</option><option>bar</option></select>`
+    const rendered = `<select data-flow-field="foo" id="bar" class="foobar"><option>foo</option><option>bar</option></select>`
     setTimeout(() => {
       try {
         expect(document.body.innerHTML).toBe(rendered)
@@ -204,7 +204,7 @@ describe('bind can', () => {
     }, 10)
   })
   it('render object to select with key-value options', (done) => {
-    const source = `<select data-bind-field="foo"></select>`
+    const source = `<select data-flow-field="foo"></select>`
     document.body.innerHTML = source
 
     const data = signal({
@@ -222,7 +222,7 @@ describe('bind can', () => {
       root: data
     })
 
-    const rendered = `<select data-bind-field="foo" id="bar" class="foobar"><option value="foo">Foo Foo</option><option value="bar">Bar Bar</option></select>`
+    const rendered = `<select data-flow-field="foo" id="bar" class="foobar"><option value="foo">Foo Foo</option><option value="bar">Bar Bar</option></select>`
     setTimeout(() => {
       try {
         expect(document.body.innerHTML).toBe(rendered)
@@ -236,7 +236,7 @@ describe('bind can', () => {
   })
 
   it('transform data', (done) => {
-    const source = `<div data-bind-field="foo" data-bind-transform="setDataFoo"></div>`
+    const source = `<div data-flow-field="foo" data-flow-transform="setDataFoo"></div>`
     document.body.innerHTML = source
 
     const data = signal({
@@ -255,7 +255,7 @@ describe('bind can', () => {
       }
     })
 
-    const rendered = `<div data-bind-field="foo" data-bind-transform="setDataFoo" data-foo="foobar">foobar</div>`
+    const rendered = `<div data-flow-field="foo" data-flow-transform="setDataFoo" data-foo="foobar">foobar</div>`
     setTimeout(() => {
       try {
         expect(document.body.innerHTML).toBe(rendered)
