@@ -1,4 +1,10 @@
 import { throttledEffect, destroy } from './state.mjs'
+import { escape_html, fixed_content } from './bind.transformers.mjs'
+import * as render from './bind.render.mjs'
+
+if (!Symbol.bindTemplate) {
+    Symbol.bindTemplate = Symbol('bindTemplate')
+}
 
 /**
  * Implements one way databinding, updating dom elements with matching attributes
@@ -15,7 +21,7 @@ class SimplyBind
      *  - container (HTMLElement) - the dom element to use as the root for all bindings
      *  - attribute (string) - the prefix for the field, list and map attributes, e.g. 'data-bind'
      *  - transformers (object name:function) - a map of transformer names and functions
-     *  - defaultTransformers (object with field, list and map properties)
+     *  - render (object with field, list and map properties)
      */
     constructor(options)
     {
@@ -27,18 +33,29 @@ class SimplyBind
          */
         this.bindings = new Map()
 
-        const standardTransformers = {
+        const defaultTransformers = {
                 escape_html,
                 fixed_content
         }
         const defaultOptions = {
             container: document.body,
-            attribute: 'data-bind',
-            transformers: standardTransformers,
-            defaultTransformers: {
-                field: [defaultFieldTransformer],
-                list: [defaultListTransformer],
-                map: [defaultMapTransformer]
+            attribute: 'data-flow',
+            transformers: defaultTransformers,
+            render: {
+                field: [render.field],
+                list: [render.list],
+                map: [render.map]
+            },
+            renderers: {
+                'INPUT':render.input,
+                'BUTTON':render.button,
+                'SELECT':render.select,
+                'A':render.anchor,
+                'IMG':render.image,
+                'IFRAME':render.iframe,
+                'META':render.meta,
+                'TEMPLATE':null,
+                '*':render.element
             }
         }
         if (!options?.root) {
@@ -46,7 +63,7 @@ class SimplyBind
         }
         this.options = Object.assign({}, defaultOptions, options)
         if (options.transformers) {
-            this.options.transformers = Object.assign({}, standardTransformers, options?.transformers)
+            this.options.transformers = Object.assign({}, defaultTransformers, options?.transformers)
         }
         const attribute      = this.options.attribute
         const bindAttributes = [attribute+'-field',attribute+'-list',attribute+'-map']
@@ -55,14 +72,14 @@ class SimplyBind
         const getBindingAttribute = (el) => {
             const foundAttribute = bindAttributes.find(attr => el.hasAttribute(attr))
             if (!foundAttribute) {
-                console.error('No matching attribute found',el,attr)
+                console.error('No matching attribute found',el,bindAttributes)
             }
             return foundAttribute
         }
 
         // sets up the effect that updates the element if its
         // data binding value changes
-        const render = (el) => {
+        const renderElement = (el) => {
             this.bindings.set(el, throttledEffect(() => {
                 if (!el.isConnected) {
                     // el is no longer part of this document
@@ -73,7 +90,7 @@ class SimplyBind
                     // without the binding having to be reset
                     return
                 }
-                const context = {
+                let context = {
                     templates: el.querySelectorAll(':scope > template'),
                     attribute: getBindingAttribute(el)
                 }
@@ -93,13 +110,16 @@ class SimplyBind
             let transformers
             switch(context.attribute) {
                 case this.options.attribute+'-field':
-                    transformers = Array.from(this.options.defaultTransformers.field)
+                    transformers = Array.from(this.options.render.field)
                     break
                 case this.options.attribute+'-list':
-                    transformers = Array.from(this.options.defaultTransformers.list)
+                    transformers = Array.from(this.options.render.list)
                     break
                 case this.options.attribute+'-map':
-                    transformers = Array.from(this.options.defaultTransformers.map)
+                    transformers = Array.from(this.options.render.map)
+                    break
+                default:
+                    throw new Error('no valid context attribute specified',context)
                     break
             }
             if (context.element.hasAttribute(transformAttribute)) {
@@ -129,7 +149,7 @@ class SimplyBind
         const applyBindings = (bindings) => {
             for (let bindingEl of bindings) {
                 if (!this.bindings.get(bindingEl)) { // bindingEl may have moved from somewhere else in this document
-                    render(bindingEl)
+                    renderElement(bindingEl)
                 }
             }
         }
@@ -193,7 +213,6 @@ class SimplyBind
         const templates = context.templates
         const list      = context.list
         const index     = context.index
-        const parent    = context.parent
         const value     = list ? list[index] : context.value
 
         let template = this.findTemplate(templates, value)
@@ -222,23 +241,15 @@ class SimplyBind
             } else if (index!=null) {
                 binding.setAttribute(attr, path+'.'+index+'.'+bind)
             } else {
-                binding.setAttribute(attr, parent+'.'+bind)
+                binding.setAttribute(attr, path+'.'+bind)
             }
         }
         if (typeof index !== 'undefined') {
             clone.children[0].setAttribute(attribute+'-key',index)
         }
         // keep track of the used template, so if that changes, the item can be updated
-        Object.defineProperty(
-            clone.children[0],
-            '$bindTemplate',
-            {
-                value: template,
-                enumerable: false,
-                writable: true,
-                configurable: true
-            }
-        )
+        clone.children[0][Symbol.bindTemplate] = template
+
         // return clone, not the firstChild, so that all whitespace is cloned as well
         return clone
     }
@@ -358,23 +369,6 @@ function untrack(el, path) {
     }
 }
 
-/**
- * Returns true if a matches b, either by having the
- * same string value, or matching string :empty against a falsy value
- */
-export function matchValue(a,b)
-{
-    if (a==':empty' && !b) {
-        return true
-    }
-    if (b==':empty' && !a) {
-        return true
-    }
-    if (''+a == ''+b) {
-        return true
-    }
-    return false
-}
 
 /**
  * Returns the value by walking the given path as a json pointer, starting at root
@@ -386,488 +380,14 @@ export function matchValue(a,b)
  */
 export function getValueByPath(root, path)
 {
-    let parts = path.split('.');
-    let curr = root;
-    let part, prevPart;
-    while (parts.length && curr) {
+    let parts = path.split('.')
+    let curr = root
+    let part
+    part = parts.shift()
+    while (part && curr) {
+        part = decodeURIComponent(part)
+        curr = curr[part]
         part = parts.shift()
-        if (part==':key') {
-            return prevPart
-        } else if (part==':value') {
-            return curr
-        } else if (part==':root') {
-            curr = root
-        } else {
-            part = decodeURIComponent(part)
-            curr = curr[part];
-            prevPart = part
-        }
     }
     return curr
-}
-
-/**
- * Default transformer for data binding
- * Will be used unless overriden in the SimplyBind options parameter
- */
-export function defaultFieldTransformer(context)
-{
-    const el             = context.element
-    const templates      = context.templates
-
-    if (templates?.length) {
-        transformLiteralByTemplates.call(this, context)
-    } else {
-        switch(el.tagName) {
-            case 'INPUT':
-                transformInput.call(this, context)
-                break
-            case 'BUTTON':
-                transformButton.call(this, context)
-                break
-            case 'SELECT':
-                transformSelect.call(this, context)
-                break
-            case 'A':
-                transformAnchor.call(this, context)
-                break
-            case 'IMG':
-                transformImage.call(this, context)
-                break
-            case 'IFRAME':
-                transformIframe.call(this, context)
-                break
-            case 'META':
-                transformMeta.call(this, context)
-                break
-            case 'TEMPLATE': // never touch templates!
-                break
-            default:
-                transformElement.call(this, context)
-                break
-        }
-    }
-    return context
-}
-
-export function defaultListTransformer(context)
-{
-    const el             = context.element
-    const templates      = context.templates
-    const path           = context.path
-    const value          = context.value
-    
-    if (!Array.isArray(value)) {
-        console.error('Value is not an array.', el, path, value)
-    } else if (!templates?.length) {
-        console.error('No templates found in', el)
-    } else {
-        transformArrayByTemplates.call(this, context)
-    }
-    return context
-}
-
-export function defaultMapTransformer(context)
-{
-    const el             = context.element
-    const templates      = context.templates
-    const path           = context.path
-    const value          = context.value
-
-    if (typeof value != 'object') {
-        console.error('Value is not an object.', el, path, value)
-    } else if (!templates?.length) {
-        console.error('No templates found in', el)
-    } else {
-        transformObjectByTemplates.call(this, context)
-    }
-    return context
-}
-
-
-/**
- * Renders an array value by applying templates for each entry
- * Replaces or removes existing DOM children if needed
- * Reuses (doesn't touch) DOM children if template doesn't change
- * FIXME: this doesn't handle situations where there is no matching template
- * this messes up self healing. check transformObjectByTemplates for a better implementation
- */
-export function transformArrayByTemplates(context)
-{
-    const el             = context.element
-    const templates      = context.templates
-    const path           = context.path
-    const value          = context.value
-    const attribute      = this.options.attribute
-
-    let items = el.querySelectorAll(':scope > ['+attribute+'-key]')
-    // do single merge strategy for now, in future calculate optimal merge strategy from a number
-    // now just do a delete if a key <= last key, insert if a key >= last key
-    let lastKey = 0
-    let skipped = 0
-    context.list  = value
-    for (let item of items) {
-        let currentKey = parseInt(item.getAttribute(attribute+'-key'))
-        if (currentKey>lastKey) {
-            // insert before
-            context.index = lastKey
-            el.insertBefore(this.applyTemplate(context), item)
-        } else if (currentKey<lastKey) {
-            // remove this
-            item.remove()
-        } else {
-            // check that all data-bind params start with current json path or ':root', otherwise replaceChild
-            let bindings = Array.from(item.querySelectorAll(`[${attribute}]`))
-            if (item.matches(`[${attribute}]`)) {
-                bindings.unshift(item)
-            }
-            let needsReplacement = bindings.find(b => {
-                let databind = b.getAttribute(attribute)
-                return (databind.substr(0,5)!==':root' 
-                    && databind.substr(0, path.length)!==path)
-            })
-            if (!needsReplacement) {
-                if (item.$bindTemplate) {
-                    let newTemplate = this.findTemplate(templates, value[lastKey])
-                    if (newTemplate != item.$bindTemplate){
-                        needsReplacement = true
-                        if (!newTemplate) {
-                            skipped++
-                        }
-                    }
-                }
-            }
-            if (needsReplacement) {
-                context.index = lastKey
-                el.replaceChild(this.applyTemplate(context), item)
-            }
-        }
-        lastKey++
-        if (lastKey>=value.length) {
-            break
-        }
-    }
-    items = el.querySelectorAll(':scope > ['+attribute+'-key]')
-    let length = items.length + skipped
-    if (length > value.length) {
-        while (length > value.length) {
-            let child = el.querySelectorAll(':scope > :not(template)')?.[length-1]
-            child?.remove()
-            length--
-        }
-    } else if (length < value.length ) {
-        while (length < value.length) {
-            context.index = length
-            el.appendChild(this.applyTemplate(context))
-            length++
-        }
-    }
-}
-
-/**
- * Renders an object value by applying templates for each entry (Object.entries)
- * Replaces,moves or removes existing DOM children if needed
- * Reuses (doesn't touch) DOM children if template doesn't change
- */
-export function transformObjectByTemplates(context)
-{
-    const el             = context.element
-    const templates      = context.templates
-    const value          = context.value
-    const attribute      = this.options.attribute
-    context.list = value
-
-    let items = Array.from(el.querySelectorAll(':scope > ['+attribute+'-key]'))
-    for (let key in context.list) {
-        context.index = key
-        let item = items.shift()
-        if (!item) { // more properties than rendered items
-            let clone = this.applyTemplate(context)
-            el.appendChild(clone)
-            continue
-        }
-        if (item.getAttribute[attribute+'-key']!=key) { 
-            // next item doesn't match key
-            items.unshift(item) // put item back for next cycle
-            let outOfOrderItem = el.querySelector(':scope > ['+attribute+'-key="'+key+'"]') //FIXME: escape key
-            if (!outOfOrderItem) {
-                let clone = this.applyTemplate(context)
-                el.insertBefore(clone, item)
-                continue // new template doesn't need replacement, so continue 
-            } else {
-                el.insertBefore(outOfOrderItem, item)
-                item = outOfOrderItem // check needsreplacement next
-                items = items.filter(i => i!=outOfOrderItem)
-            }
-        }
-        let newTemplate = this.findTemplate(templates, value[key])
-        if (newTemplate != item.$bindTemplate){
-            let clone = this.applyTemplate(context)
-            el.replaceChild(clone, item)
-        }
-    }
-    // clean up remaining items
-    while (items.length) {
-        let item = items.shift()
-        item.remove()
-    }
-}
-
-function getParentPath(el, attribute)
-{
-    const parentEl  = el.parentElement?.closest(`[${attribute}-list],[${attribute}-map]`)
-    if (!parentEl) {
-        return ':root'
-    }
-    if (parentEl.hasAttribute(`${attribute}-list`)) {
-        return parentEl.getAttribute(`${attribute}-list`)
-    }
-    return parentEl.getAttribute(`${attribute}-map`)
-}
-
-/**
- * transforms the contents of an html element by rendering
- * a matching template, once.
- * data-bind attributes inside the template use the same
- * parent path as this html element uses
- */
-export function transformLiteralByTemplates(context)
-{
-    const el             = context.element
-    const templates      = context.templates
-    const value          = context.value
-    const attribute      = this.options.attribute
-
-    const rendered = el.querySelector(':scope > :not(template)')
-    const template = this.findTemplate(templates, value)
-
-    context.parent = getParentPath(el, attribute)
-    if (rendered) {
-        if (template) {
-            if (rendered?.$bindTemplate != template) {
-                const clone = this.applyTemplate(context)
-                el.replaceChild(clone, rendered)
-            }
-        } else {
-            el.removeChild(rendered)
-        }
-    } else if (template) {
-        const clone = this.applyTemplate(context)
-        el.appendChild(clone)
-    }
-}
-
-/**
- * transforms a single input type
- * for radio/checkbox inputs it only sets the checked attribute to true/false
- * if the value attribute matches the current value
- * for other inputs the value attribute is updated
- */
-export function transformInput(context)
-{
-    const el  = context.element
-    let value = context.value
-
-    transformElement(context)
-    if (typeof value == 'undefined') {
-        value = ''
-    }
-    if (el.type=='checkbox' || el.type=='radio') {
-        if (matchValue(el.value, value)) {
-            el.checked = true
-        } else {
-            el.checked = false
-        }
-    } else if (!matchValue(el.value, value)) {
-        el.value = ''+value
-    }
-}
-
-/**
- * Sets the value of the button, doesn't touch the innerHTML
- */
-export function transformButton(context)
-{
-    const el    = context.element
-    const value = context.value
-
-    transformElement(context)
-    setProperties(el, value, 'value')
-}
-
-/**
- * Sets the selected attribute of select options
- */
-export function transformSelect(context)
-{
-    const el  = context.element
-    let value = context.value
-
-    if (value === null) {
-        value = ''
-    }
-    if (typeof value!='object') {
-        if (el.multiple) {
-            if (Array.isArray(value)) { //FIXME: cannot be true, since typeof != 'object'
-                for (let option of el.options) {
-                    if (value.indexOf(option.value)===false) {
-                        option.selected = false
-                    } else {
-                        option.selected = true
-                    }
-                }
-            }
-        } else {
-            let option = el.options.find(o => matchValue(o.value,value))
-            if (option) {
-                option.selected = true
-                option.setAttribute('selected', true)
-            }
-        }
-    } else { // value is a non-null object
-        if (value.options) {
-            setSelectOptions(el, value.options)
-        }
-        if (value.selected) {
-            transformSelect(Object.asssign({}, context, {value:value.selected}))
-        }
-        setProperties(el, value, 'name', 'id', 'selectedIndex', 'className') // allow innerHTML? if so call transformElement instead
-    }
-}
-
-export function addOption(select, option)
-{
-    if (!option) {
-        return
-    }
-    if (typeof option !== 'object') {
-        select.options.add(new Option(''+option))
-    } else if (option.text) {
-        select.options.add(new Option(option.text, option.value, option.defaultSelected, option.selected))
-    } else if (typeof option.value != 'undefined') {
-        select.options.add(new Option(''+option.value, option.value, option.defaultSelected, option.selected))
-    }
-}
-
-export function setSelectOptions(select,options)
-{
-    //@TODO: only update in case of changes?
-    select.innerHTML = ''
-    if (Array.isArray(options)) {
-        for (const option of options) {
-            addOption(select, option)
-        }
-    } else if (options && typeof options == 'object') {
-        for (const option in options) {
-            addOption(select, { text: options[option], value: option })
-        }
-    }
-}
-
-/**
- * Sets the innerHTML and href attribute of an anchor
- * TODO: support target, title, etc. attributes
- */
-export function transformAnchor(context)
-{
-    const el    = context.element
-    const value = context.value
-
-    transformElement(context)
-    setProperties(el, value, 'title', 'target', 'href', 'name', 'newwindow', 'nofollow')
-}
-
-export function transformImage(context)
-{
-    const el    = context.element
-    const value = context.value
-
-    transformElement(context)
-    setProperties(el, value, 'title', 'alt', 'src')
-}
-
-export function transformIframe(context)
-{
-    const el    = context.element
-    const value = context.value
-
-    transformElement(context)
-    setProperties(el, value, 'title', 'src')
-}
-
-export function transformMeta(context)
-{
-    const el    = context.element
-    const value = context.value
-
-    transformElement(context)
-    setProperties(el, value, 'content')    
-}
-/**
- * sets the innerHTML and title and id properties of any HTML element
- */
-export function transformElement(context)
-{
-    const el  = context.element
-    let value = context.value
-
-    if (typeof value=='undefined' || value==null) {
-        value = ''
-    }
-    let strValue = ''+value
-    if (typeof value!='object' || strValue.substring(0,8)!='[object ') {
-        el.innerHTML = strValue
-        return
-    }
-    setProperties(el, value, 'innerHTML', 'title', 'id', 'className')
-}
-
-/**
- * Sets a list of properties on a dom element, equal to 
- * the string value of a data object
- * only updates the dom element if the property doesn't match
- */
-export function setProperties(el, data, ...properties) {
-    if (!data || typeof data!=='object') {
-        return
-    }
-    for (const property of properties) {
-        if (typeof data[property] === 'undefined') {
-            continue
-        }
-        if (matchValue(el[property], data[property])) {
-            continue
-        }
-        if (data[property] === null) {
-            el[property] = ''
-        } else {
-            el[property] = ''+data[property]
-        }
-    }
-}
-
-export function escape_html(context, next) {
-    let content = context.value.innerHTML
-    if (typeof context.value == 'string') {
-        content = context.value
-        context.value = { innerHTML: content }
-    }
-    if (content) {
-        content = content.replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&#39;');
-        context.value.innerHTML = content
-    }
-    next(context)
-}
-
-export function fixed_content(context, next) {
-    if (typeof context.value == 'string') {
-        context.value = {}
-    } else {
-        delete context.value.innerHTML
-    }
-    next(context)
 }
