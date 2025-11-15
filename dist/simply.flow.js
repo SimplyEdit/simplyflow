@@ -419,7 +419,314 @@
     }
   }
 
+  // src/bind.transformers.mjs
+  function escape_html(context, next) {
+    let content = context.value.innerHTML;
+    if (typeof context.value == "string") {
+      content = context.value;
+      context.value = { innerHTML: content };
+    }
+    if (content) {
+      content = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+      context.value.innerHTML = content;
+    }
+    next(context);
+  }
+  function fixed_content(context, next) {
+    if (typeof context.value == "string") {
+      context.value = {};
+    } else {
+      delete context.value.innerHTML;
+    }
+    next(context);
+  }
+
+  // src/bind.render.mjs
+  function field(context) {
+    if (context.templates?.length) {
+      fieldByTemplates.call(this, context);
+    } else if (Object.hasOwnProperty.call(this.options.renderers, context.element.tagName)) {
+      const renderer = this.options.renderers[context.element.tagName];
+      if (renderer) {
+        renderer.call(this, context);
+      }
+    } else if (this.options.renderers["*"]) {
+      this.options.renderers["*"].call(this, context);
+    }
+    return context;
+  }
+  function list(context) {
+    if (!Array.isArray(context.value)) {
+      console.error("Value is not an array.", context.element, context.path, context.value);
+    } else if (!context.templates?.length) {
+      console.error("No templates found in", context.element);
+    } else {
+      arrayByTemplates.call(this, context);
+    }
+    return context;
+  }
+  function map(context) {
+    if (typeof context.value != "object" || !context.value) {
+      console.error("Value is not an object.", context.element, context.path, context.value);
+    } else if (!context.templates?.length) {
+      console.error("No templates found in", context.element);
+    } else {
+      objectByTemplates.call(this, context);
+    }
+    return context;
+  }
+  function arrayByTemplates(context) {
+    const attribute = this.options.attribute;
+    let items = context.element.querySelectorAll(":scope > [" + attribute + "-key]");
+    let lastKey = 0;
+    let skipped = 0;
+    context.list = context.value;
+    for (let item of items) {
+      let currentKey = parseInt(item.getAttribute(attribute + "-key"));
+      if (currentKey > lastKey) {
+        context.index = lastKey;
+        context.element.insertBefore(this.applyTemplate(context), item);
+      } else if (currentKey < lastKey) {
+        item.remove();
+      } else {
+        let bindings = Array.from(item.querySelectorAll(`[${attribute}]`));
+        if (item.matches(`[${attribute}]`)) {
+          bindings.unshift(item);
+        }
+        let needsReplacement = bindings.find((b) => {
+          let databind = b.getAttribute(attribute);
+          return databind.substr(0, 5) !== ":root" && databind.substr(0, context.path.length) !== context.path;
+        });
+        if (!needsReplacement) {
+          if (item[Symbol.bindTemplate]) {
+            let newTemplate = this.findTemplate(context.templates, context.list[lastKey]);
+            if (newTemplate != item[Symbol.bindTemplate]) {
+              needsReplacement = true;
+              if (!newTemplate) {
+                skipped++;
+              }
+            }
+          }
+        }
+        if (needsReplacement) {
+          context.index = lastKey;
+          context.element.replaceChild(this.applyTemplate(context), item);
+        }
+      }
+      lastKey++;
+      if (lastKey >= context.value.length) {
+        break;
+      }
+    }
+    items = context.element.querySelectorAll(":scope > [" + attribute + "-key]");
+    let length = items.length + skipped;
+    if (length > context.value.length) {
+      while (length > context.value.length) {
+        let child = context.element.querySelectorAll(":scope > :not(template)")?.[length - 1];
+        child?.remove();
+        length--;
+      }
+    } else if (length < context.value.length) {
+      while (length < context.value.length) {
+        context.index = length;
+        context.element.appendChild(this.applyTemplate(context));
+        length++;
+      }
+    }
+  }
+  function objectByTemplates(context) {
+    const attribute = this.options.attribute;
+    context.list = context.value;
+    let items = Array.from(context.element.querySelectorAll(":scope > [" + attribute + "-key]"));
+    for (let key in context.list) {
+      context.index = key;
+      let item = items.shift();
+      if (!item) {
+        let clone = this.applyTemplate(context);
+        context.element.appendChild(clone);
+        continue;
+      }
+      if (item.getAttribute[attribute + "-key"] != key) {
+        items.unshift(item);
+        let outOfOrderItem = context.element.querySelector(":scope > [" + attribute + '-key="' + key + '"]');
+        if (!outOfOrderItem) {
+          let clone = this.applyTemplate(context);
+          context.element.insertBefore(clone, item);
+          continue;
+        } else {
+          context.element.insertBefore(outOfOrderItem, item);
+          item = outOfOrderItem;
+          items = items.filter((i) => i != outOfOrderItem);
+        }
+      }
+      let newTemplate = this.findTemplate(context.templates, context.list[context.index]);
+      if (newTemplate != item[Symbol.bindTemplate]) {
+        let clone = this.applyTemplate(context);
+        context.element.replaceChild(clone, item);
+      }
+    }
+    while (items.length) {
+      let item = items.shift();
+      item.remove();
+    }
+  }
+  function fieldByTemplates(context) {
+    const rendered = context.element.querySelector(":scope > :not(template)");
+    const template = this.findTemplate(context.templates, context.value);
+    if (rendered) {
+      if (template) {
+        if (rendered?.[Symbol.bindTemplate] != template) {
+          const clone = this.applyTemplate(context);
+          context.element.replaceChild(clone, rendered);
+        }
+      } else {
+        context.element.removeChild(rendered);
+      }
+    } else if (template) {
+      const clone = this.applyTemplate(context);
+      context.element.appendChild(clone);
+    }
+  }
+  function input(context) {
+    const el = context.element;
+    let value = context.value;
+    element(context);
+    if (typeof value == "undefined") {
+      value = "";
+    }
+    if (el.type == "checkbox" || el.type == "radio") {
+      if (matchValue(el.value, value)) {
+        el.checked = true;
+      } else {
+        el.checked = false;
+      }
+    } else if (!matchValue(el.value, value)) {
+      el.value = "" + value;
+    }
+  }
+  function button(context) {
+    element(context);
+    setProperties(context.element, context.value, "value");
+  }
+  function select(context) {
+    const el = context.element;
+    let value = context.value;
+    if (value === null) {
+      value = "";
+    }
+    if (typeof value != "object") {
+      if (el.multiple) {
+        if (Array.isArray(value)) {
+          for (let option of el.options) {
+            if (value.indexOf(option.value) === false) {
+              option.selected = false;
+            } else {
+              option.selected = true;
+            }
+          }
+        }
+      } else {
+        let option = el.options.find((o) => matchValue(o.value, value));
+        if (option) {
+          option.selected = true;
+          option.setAttribute("selected", true);
+        }
+      }
+    } else {
+      if (value.options) {
+        setSelectOptions(el, value.options);
+      }
+      if (value.selected) {
+        select(Object.asssign({}, context, { value: value.selected }));
+      }
+      setProperties(el, value, "name", "id", "selectedIndex", "className");
+    }
+  }
+  function addOption(select2, option) {
+    if (!option) {
+      return;
+    }
+    if (typeof option !== "object") {
+      select2.options.add(new Option("" + option));
+    } else if (option.text) {
+      select2.options.add(new Option(option.text, option.value, option.defaultSelected, option.selected));
+    } else if (typeof option.value != "undefined") {
+      select2.options.add(new Option("" + option.value, option.value, option.defaultSelected, option.selected));
+    }
+  }
+  function setSelectOptions(select2, options) {
+    select2.innerHTML = "";
+    if (Array.isArray(options)) {
+      for (const option of options) {
+        addOption(select2, option);
+      }
+    } else if (options && typeof options == "object") {
+      for (const option in options) {
+        addOption(select2, { text: options[option], value: option });
+      }
+    }
+  }
+  function anchor(context) {
+    element(context);
+    setProperties(context.element, context.value, "target", "href", "name", "newwindow", "nofollow");
+  }
+  function image(context) {
+    setProperties(context.element, context.value, "title", "alt", "src", "id");
+  }
+  function iframe(context) {
+    setProperties(context.element, context.value, "title", "src", "id");
+  }
+  function meta(context) {
+    setProperties(context.element, context.value, "content", "id");
+  }
+  function element(context) {
+    const el = context.element;
+    let value = context.value;
+    if (typeof value == "undefined" || value == null) {
+      value = "";
+    }
+    let strValue = "" + value;
+    if (typeof value != "object" || strValue.substring(0, 8) != "[object ") {
+      el.innerHTML = strValue;
+      return;
+    }
+    setProperties(el, value, "innerHTML", "title", "id", "className");
+  }
+  function setProperties(el, data, ...properties) {
+    if (!data || typeof data !== "object") {
+      return;
+    }
+    for (const property of properties) {
+      if (typeof data[property] === "undefined") {
+        continue;
+      }
+      if (matchValue(el[property], data[property])) {
+        continue;
+      }
+      if (data[property] === null) {
+        el[property] = "";
+      } else {
+        el[property] = "" + data[property];
+      }
+    }
+  }
+  function matchValue(a, b) {
+    if (a == ":empty" && !b) {
+      return true;
+    }
+    if (b == ":empty" && !a) {
+      return true;
+    }
+    if ("" + a == "" + b) {
+      return true;
+    }
+    return false;
+  }
+
   // src/bind.mjs
+  if (!Symbol.bindTemplate) {
+    Symbol.bindTemplate = Symbol("bindTemplate");
+  }
   var SimplyBind = class {
     /**
      * @param Object options - a set of options for this instance, options may include:
@@ -427,22 +734,33 @@
      *  - container (HTMLElement) - the dom element to use as the root for all bindings
      *  - attribute (string) - the prefix for the field, list and map attributes, e.g. 'data-bind'
      *  - transformers (object name:function) - a map of transformer names and functions
-     *  - defaultTransformers (object with field, list and map properties)
+     *  - render (object with field, list and map properties)
      */
     constructor(options) {
       this.bindings = /* @__PURE__ */ new Map();
-      const standardTransformers = {
+      const defaultTransformers = {
         escape_html,
         fixed_content
       };
       const defaultOptions = {
         container: document.body,
-        attribute: "data-bind",
-        transformers: standardTransformers,
-        defaultTransformers: {
-          field: [defaultFieldTransformer],
-          list: [defaultListTransformer],
-          map: [defaultMapTransformer]
+        attribute: "data-flow",
+        transformers: defaultTransformers,
+        render: {
+          field: [field],
+          list: [list],
+          map: [map]
+        },
+        renderers: {
+          "INPUT": input,
+          "BUTTON": button,
+          "SELECT": select,
+          "A": anchor,
+          "IMG": image,
+          "IFRAME": iframe,
+          "META": meta,
+          "TEMPLATE": null,
+          "*": element
         }
       };
       if (!options?.root) {
@@ -450,26 +768,26 @@
       }
       this.options = Object.assign({}, defaultOptions, options);
       if (options.transformers) {
-        this.options.transformers = Object.assign({}, standardTransformers, options?.transformers);
+        this.options.transformers = Object.assign({}, defaultTransformers, options?.transformers);
       }
       const attribute = this.options.attribute;
       const bindAttributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
       const transformAttribute = attribute + "-transform";
       const getBindingAttribute = (el) => {
-        const foundAttribute = bindAttributes.find((attr2) => el.hasAttribute(attr2));
+        const foundAttribute = bindAttributes.find((attr) => el.hasAttribute(attr));
         if (!foundAttribute) {
-          console.error("No matching attribute found", el, attr);
+          console.error("No matching attribute found", el, bindAttributes);
         }
         return foundAttribute;
       };
-      const render = (el) => {
+      const renderElement = (el) => {
         this.bindings.set(el, throttledEffect(() => {
           if (!el.isConnected) {
             untrack(el, this.getBindingPath(el));
             destroy(this.bindings.get(el));
             return;
           }
-          const context = {
+          let context = {
             templates: el.querySelectorAll(":scope > template"),
             attribute: getBindingAttribute(el)
           };
@@ -484,13 +802,16 @@
         let transformers;
         switch (context.attribute) {
           case this.options.attribute + "-field":
-            transformers = Array.from(this.options.defaultTransformers.field);
+            transformers = Array.from(this.options.render.field);
             break;
           case this.options.attribute + "-list":
-            transformers = Array.from(this.options.defaultTransformers.list);
+            transformers = Array.from(this.options.render.list);
             break;
           case this.options.attribute + "-map":
-            transformers = Array.from(this.options.defaultTransformers.map);
+            transformers = Array.from(this.options.render.map);
+            break;
+          default:
+            throw new Error("no valid context attribute specified", context);
             break;
         }
         if (context.element.hasAttribute(transformAttribute)) {
@@ -515,7 +836,7 @@
       const applyBindings = (bindings2) => {
         for (let bindingEl of bindings2) {
           if (!this.bindings.get(bindingEl)) {
-            render(bindingEl);
+            renderElement(bindingEl);
           }
         }
       };
@@ -560,10 +881,9 @@
     applyTemplate(context) {
       const path = context.path;
       const templates = context.templates;
-      const list = context.list;
+      const list2 = context.list;
       const index = context.index;
-      const parent = context.parent;
-      const value = list ? list[index] : context.value;
+      const value = list2 ? list2[index] : context.value;
       let template = this.findTemplate(templates, value);
       if (!template) {
         let result = new DocumentFragment();
@@ -581,31 +901,22 @@
       const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
       const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`);
       for (let binding of bindings) {
-        const attr2 = attributes.find((attr3) => binding.hasAttribute(attr3));
-        const bind2 = binding.getAttribute(attr2);
+        const attr = attributes.find((attr2) => binding.hasAttribute(attr2));
+        const bind2 = binding.getAttribute(attr);
         if (bind2.substring(0, ":root.".length) == ":root.") {
-          binding.setAttribute(attr2, bind2.substring(":root.".length));
+          binding.setAttribute(attr, bind2.substring(":root.".length));
         } else if (bind2 == ":value" && index != null) {
-          binding.setAttribute(attr2, path + "." + index);
+          binding.setAttribute(attr, path + "." + index);
         } else if (index != null) {
-          binding.setAttribute(attr2, path + "." + index + "." + bind2);
+          binding.setAttribute(attr, path + "." + index + "." + bind2);
         } else {
-          binding.setAttribute(attr2, parent + "." + bind2);
+          binding.setAttribute(attr, path + "." + bind2);
         }
       }
       if (typeof index !== "undefined") {
         clone.children[0].setAttribute(attribute + "-key", index);
       }
-      Object.defineProperty(
-        clone.children[0],
-        "$bindTemplate",
-        {
-          value: template,
-          enumerable: false,
-          writable: true,
-          configurable: true
-        }
-      );
+      clone.children[0][Symbol.bindTemplate] = template;
       return clone;
     }
     /**
@@ -619,9 +930,9 @@
         this.options.attribute + "-list",
         this.options.attribute + "-map"
       ];
-      for (let attr2 of attributes) {
-        if (el.hasAttribute(attr2)) {
-          return el.getAttribute(attr2);
+      for (let attr of attributes) {
+        if (el.hasAttribute(attr)) {
+          return el.getAttribute(attr);
         }
       }
     }
@@ -689,398 +1000,23 @@
     }
   }
   function untrack(el, path) {
-    let list = tracking.get(path);
-    if (list) {
-      list = list.filter((context) => context.element == el);
-      tracking.set(path, list);
+    let list2 = tracking.get(path);
+    if (list2) {
+      list2 = list2.filter((context) => context.element == el);
+      tracking.set(path, list2);
     }
-  }
-  function matchValue(a, b) {
-    if (a == ":empty" && !b) {
-      return true;
-    }
-    if (b == ":empty" && !a) {
-      return true;
-    }
-    if ("" + a == "" + b) {
-      return true;
-    }
-    return false;
   }
   function getValueByPath(root, path) {
     let parts = path.split(".");
     let curr = root;
-    let part, prevPart;
-    while (parts.length && curr) {
+    let part;
+    part = parts.shift();
+    while (part && curr) {
+      part = decodeURIComponent(part);
+      curr = curr[part];
       part = parts.shift();
-      if (part == ":key") {
-        return prevPart;
-      } else if (part == ":value") {
-        return curr;
-      } else if (part == ":root") {
-        curr = root;
-      } else {
-        part = decodeURIComponent(part);
-        curr = curr[part];
-        prevPart = part;
-      }
     }
     return curr;
-  }
-  function defaultFieldTransformer(context) {
-    const el = context.element;
-    const templates = context.templates;
-    if (templates?.length) {
-      transformLiteralByTemplates.call(this, context);
-    } else {
-      switch (el.tagName) {
-        case "INPUT":
-          transformInput.call(this, context);
-          break;
-        case "BUTTON":
-          transformButton.call(this, context);
-          break;
-        case "SELECT":
-          transformSelect.call(this, context);
-          break;
-        case "A":
-          transformAnchor.call(this, context);
-          break;
-        case "IMG":
-          transformImage.call(this, context);
-          break;
-        case "IFRAME":
-          transformIframe.call(this, context);
-          break;
-        case "META":
-          transformMeta.call(this, context);
-          break;
-        case "TEMPLATE":
-          break;
-        default:
-          transformElement.call(this, context);
-          break;
-      }
-    }
-    return context;
-  }
-  function defaultListTransformer(context) {
-    const el = context.element;
-    const templates = context.templates;
-    const path = context.path;
-    const value = context.value;
-    if (!Array.isArray(value)) {
-      console.error("Value is not an array.", el, path, value);
-    } else if (!templates?.length) {
-      console.error("No templates found in", el);
-    } else {
-      transformArrayByTemplates.call(this, context);
-    }
-    return context;
-  }
-  function defaultMapTransformer(context) {
-    const el = context.element;
-    const templates = context.templates;
-    const path = context.path;
-    const value = context.value;
-    if (typeof value != "object") {
-      console.error("Value is not an object.", el, path, value);
-    } else if (!templates?.length) {
-      console.error("No templates found in", el);
-    } else {
-      transformObjectByTemplates.call(this, context);
-    }
-    return context;
-  }
-  function transformArrayByTemplates(context) {
-    const el = context.element;
-    const templates = context.templates;
-    const path = context.path;
-    const value = context.value;
-    const attribute = this.options.attribute;
-    let items = el.querySelectorAll(":scope > [" + attribute + "-key]");
-    let lastKey = 0;
-    let skipped = 0;
-    context.list = value;
-    for (let item of items) {
-      let currentKey = parseInt(item.getAttribute(attribute + "-key"));
-      if (currentKey > lastKey) {
-        context.index = lastKey;
-        el.insertBefore(this.applyTemplate(context), item);
-      } else if (currentKey < lastKey) {
-        item.remove();
-      } else {
-        let bindings = Array.from(item.querySelectorAll(`[${attribute}]`));
-        if (item.matches(`[${attribute}]`)) {
-          bindings.unshift(item);
-        }
-        let needsReplacement = bindings.find((b) => {
-          let databind = b.getAttribute(attribute);
-          return databind.substr(0, 5) !== ":root" && databind.substr(0, path.length) !== path;
-        });
-        if (!needsReplacement) {
-          if (item.$bindTemplate) {
-            let newTemplate = this.findTemplate(templates, value[lastKey]);
-            if (newTemplate != item.$bindTemplate) {
-              needsReplacement = true;
-              if (!newTemplate) {
-                skipped++;
-              }
-            }
-          }
-        }
-        if (needsReplacement) {
-          context.index = lastKey;
-          el.replaceChild(this.applyTemplate(context), item);
-        }
-      }
-      lastKey++;
-      if (lastKey >= value.length) {
-        break;
-      }
-    }
-    items = el.querySelectorAll(":scope > [" + attribute + "-key]");
-    let length = items.length + skipped;
-    if (length > value.length) {
-      while (length > value.length) {
-        let child = el.querySelectorAll(":scope > :not(template)")?.[length - 1];
-        child?.remove();
-        length--;
-      }
-    } else if (length < value.length) {
-      while (length < value.length) {
-        context.index = length;
-        el.appendChild(this.applyTemplate(context));
-        length++;
-      }
-    }
-  }
-  function transformObjectByTemplates(context) {
-    const el = context.element;
-    const templates = context.templates;
-    const value = context.value;
-    const attribute = this.options.attribute;
-    context.list = value;
-    let items = Array.from(el.querySelectorAll(":scope > [" + attribute + "-key]"));
-    for (let key in context.list) {
-      context.index = key;
-      let item = items.shift();
-      if (!item) {
-        let clone = this.applyTemplate(context);
-        el.appendChild(clone);
-        continue;
-      }
-      if (item.getAttribute[attribute + "-key"] != key) {
-        items.unshift(item);
-        let outOfOrderItem = el.querySelector(":scope > [" + attribute + '-key="' + key + '"]');
-        if (!outOfOrderItem) {
-          let clone = this.applyTemplate(context);
-          el.insertBefore(clone, item);
-          continue;
-        } else {
-          el.insertBefore(outOfOrderItem, item);
-          item = outOfOrderItem;
-          items = items.filter((i) => i != outOfOrderItem);
-        }
-      }
-      let newTemplate = this.findTemplate(templates, value[key]);
-      if (newTemplate != item.$bindTemplate) {
-        let clone = this.applyTemplate(context);
-        el.replaceChild(clone, item);
-      }
-    }
-    while (items.length) {
-      let item = items.shift();
-      item.remove();
-    }
-  }
-  function getParentPath(el, attribute) {
-    const parentEl = el.parentElement?.closest(`[${attribute}-list],[${attribute}-map]`);
-    if (!parentEl) {
-      return ":root";
-    }
-    if (parentEl.hasAttribute(`${attribute}-list`)) {
-      return parentEl.getAttribute(`${attribute}-list`);
-    }
-    return parentEl.getAttribute(`${attribute}-map`);
-  }
-  function transformLiteralByTemplates(context) {
-    const el = context.element;
-    const templates = context.templates;
-    const value = context.value;
-    const attribute = this.options.attribute;
-    const rendered = el.querySelector(":scope > :not(template)");
-    const template = this.findTemplate(templates, value);
-    context.parent = getParentPath(el, attribute);
-    if (rendered) {
-      if (template) {
-        if (rendered?.$bindTemplate != template) {
-          const clone = this.applyTemplate(context);
-          el.replaceChild(clone, rendered);
-        }
-      } else {
-        el.removeChild(rendered);
-      }
-    } else if (template) {
-      const clone = this.applyTemplate(context);
-      el.appendChild(clone);
-    }
-  }
-  function transformInput(context) {
-    const el = context.element;
-    let value = context.value;
-    transformElement(context);
-    if (typeof value == "undefined") {
-      value = "";
-    }
-    if (el.type == "checkbox" || el.type == "radio") {
-      if (matchValue(el.value, value)) {
-        el.checked = true;
-      } else {
-        el.checked = false;
-      }
-    } else if (!matchValue(el.value, value)) {
-      el.value = "" + value;
-    }
-  }
-  function transformButton(context) {
-    const el = context.element;
-    const value = context.value;
-    transformElement(context);
-    setProperties(el, value, "value");
-  }
-  function transformSelect(context) {
-    const el = context.element;
-    let value = context.value;
-    if (value === null) {
-      value = "";
-    }
-    if (typeof value != "object") {
-      if (el.multiple) {
-        if (Array.isArray(value)) {
-          for (let option of el.options) {
-            if (value.indexOf(option.value) === false) {
-              option.selected = false;
-            } else {
-              option.selected = true;
-            }
-          }
-        }
-      } else {
-        let option = el.options.find((o) => matchValue(o.value, value));
-        if (option) {
-          option.selected = true;
-          option.setAttribute("selected", true);
-        }
-      }
-    } else {
-      if (value.options) {
-        setSelectOptions(el, value.options);
-      }
-      if (value.selected) {
-        transformSelect(Object.asssign({}, context, { value: value.selected }));
-      }
-      setProperties(el, value, "name", "id", "selectedIndex", "className");
-    }
-  }
-  function addOption(select, option) {
-    if (!option) {
-      return;
-    }
-    if (typeof option !== "object") {
-      select.options.add(new Option("" + option));
-    } else if (option.text) {
-      select.options.add(new Option(option.text, option.value, option.defaultSelected, option.selected));
-    } else if (typeof option.value != "undefined") {
-      select.options.add(new Option("" + option.value, option.value, option.defaultSelected, option.selected));
-    }
-  }
-  function setSelectOptions(select, options) {
-    select.innerHTML = "";
-    if (Array.isArray(options)) {
-      for (const option of options) {
-        addOption(select, option);
-      }
-    } else if (options && typeof options == "object") {
-      for (const option in options) {
-        addOption(select, { text: options[option], value: option });
-      }
-    }
-  }
-  function transformAnchor(context) {
-    const el = context.element;
-    const value = context.value;
-    transformElement(context);
-    setProperties(el, value, "title", "target", "href", "name", "newwindow", "nofollow");
-  }
-  function transformImage(context) {
-    const el = context.element;
-    const value = context.value;
-    transformElement(context);
-    setProperties(el, value, "title", "alt", "src");
-  }
-  function transformIframe(context) {
-    const el = context.element;
-    const value = context.value;
-    transformElement(context);
-    setProperties(el, value, "title", "src");
-  }
-  function transformMeta(context) {
-    const el = context.element;
-    const value = context.value;
-    transformElement(context);
-    setProperties(el, value, "content");
-  }
-  function transformElement(context) {
-    const el = context.element;
-    let value = context.value;
-    if (typeof value == "undefined" || value == null) {
-      value = "";
-    }
-    let strValue = "" + value;
-    if (typeof value != "object" || strValue.substring(0, 8) != "[object ") {
-      el.innerHTML = strValue;
-      return;
-    }
-    setProperties(el, value, "innerHTML", "title", "id", "className");
-  }
-  function setProperties(el, data, ...properties) {
-    if (!data || typeof data !== "object") {
-      return;
-    }
-    for (const property of properties) {
-      if (typeof data[property] === "undefined") {
-        continue;
-      }
-      if (matchValue(el[property], data[property])) {
-        continue;
-      }
-      if (data[property] === null) {
-        el[property] = "";
-      } else {
-        el[property] = "" + data[property];
-      }
-    }
-  }
-  function escape_html(context, next) {
-    let content = context.value.innerHTML;
-    if (typeof context.value == "string") {
-      content = context.value;
-      context.value = { innerHTML: content };
-    }
-    if (content) {
-      content = content.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-      context.value.innerHTML = content;
-    }
-    next(context);
-  }
-  function fixed_content(context, next) {
-    if (typeof context.value == "string") {
-      context.value = {};
-    } else {
-      delete context.value.innerHTML;
-    }
-    next(context);
   }
 
   // src/model.mjs
@@ -1214,11 +1150,11 @@
     return function(data) {
       this.state.options.columns = options;
       return throttledEffect(() => {
-        return data.current.map((input) => {
+        return data.current.map((input2) => {
           let result = {};
           for (let key of Object.keys(this.state.options.columns)) {
             if (!this.state.options.columns[key]?.hidden) {
-              result[key] = input[key];
+              result[key] = input2[key];
             }
           }
           return result;
