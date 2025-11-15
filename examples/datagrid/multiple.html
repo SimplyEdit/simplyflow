@@ -10,13 +10,13 @@
 		<div data-flow-mark="model">
 			<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers ds-datatable-virtual-scroll">
 			<thead>
-				<tr data-flow-map="state.options.columns">
+				<tr data-flow-map="columns">
 					<template data-flow-field="hidden" data-flow-match=":empty">
 						<th data-simply-command="toggleSort" data-flow-field="name"></th>
 					</template>
 				</tr>
 			</thead>
-			<tbody data-flow-list="view.current">
+			<tbody data-flow-list="rows">
 				<template>
 					<tr data-flow-map=":value">
 						<template>
@@ -29,10 +29,10 @@
 		</div>
 	</template>
 	<div data-flow-field="users">
-		<template rel="datatable"></template>
+		<template rel="datatable" data-flow-link="columns=state.options.columns;rows=view.current"></template>
 	</div>
 	<div data-flow-field="groups">
-		<template rel="datatable"></template>
+		<template rel="datatable" data-flow-link="columns=state.options.columns;rows=view.current"></template>
 	</div>
 </main>
 <output class="source" data-js="show-highlight-here"></output>
