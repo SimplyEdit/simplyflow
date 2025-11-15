@@ -233,6 +233,9 @@ class SimplyBind
         const attributes = [attribute+'-field',attribute+'-list',attribute+'-map']
         const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`)
         for (let binding of bindings) {
+            if (binding.tagName=='TEMPLATE') {
+                continue
+            }
             const attr = attributes.find(attr => binding.hasAttribute(attr))
             let bind = binding.getAttribute(attr)
             bind = this.applyLinks(template.links, bind)
@@ -341,7 +344,7 @@ class SimplyBind
         }
         let template = Array.from(templates).find(templateMatches)
         let links = null
-        if (template.hasAttribute(this.options.attribute+'-link')) {
+        if (template?.hasAttribute(this.options.attribute+'-link')) {
             links = this.parseLinks(template.getAttribute(this.options.attribute+'-link'))
         }
         let rel = template?.getAttribute('rel')
@@ -352,7 +355,9 @@ class SimplyBind
             }
             template = replacement
         }
-        template.links = links
+        if (template) {
+            template.links = links
+        }
         return template
     }
 
