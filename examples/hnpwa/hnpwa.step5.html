@@ -27,7 +27,7 @@
 <main>
 <section data-flow-field="page">
     <template data-flow-match="items">
-        <ul class="items root" data-flow-list=":root.items">
+        <ul class="items root" data-flow-list="items">
         <template>
             <li class="item">
                 <a data-flow-field="id" data-flow-transform="comments_link">
@@ -51,14 +51,14 @@
     <template data-flow-match="item">
         <div>
             <div class="item-view">
-                <a data-flow-field=":root.item.url" data-flow-transform="fixed_content">
-                    <h2 data-flow-field=":root.item.title" data-flow-transform="escape_html">Title</h2>
+                <a data-flow-field="item.url" data-flow-transform="fixed_content">
+                    <h2 data-flow-field="item.title" data-flow-transform="escape_html">Title</h2>
                 </a>
-                (<span data-flow-field=":root.item.domain">domain</span>)
-                <div data-flow-field=":root.item.content"></div>
-                <span data-flow-field=":root.item.points">10</span> points 
-                &bull; by <span data-flow-field=":root.item.user">user</span> 
-                <span data-flow-field=":root.item.time_ago">time-ago</span>
+                (<span data-flow-field="item.domain">domain</span>)
+                <div data-flow-field="item.content"></div>
+                <span data-flow-field="item.points">10</span> points 
+                &bull; by <span data-flow-field="item.user">user</span> 
+                <span data-flow-field="item.time_ago">time-ago</span>
             </div>
             <div class="comments root" data-flow-list=":root.item.comments">
               <template rel="comment"></template>
@@ -84,13 +84,13 @@
         <nav class="paging">
             <ul class="toolbar">
                 <li class="paging-prev">
-                  <a data-flow-field=":root.page_nr" class="toolbar-button"
+                  <a data-flow-field="page_nr" class="toolbar-button"
                      data-flow-transform="paging_prev"
                      >previous</a>
                 </li>
-                <li class="paging-current" data-flow-field=":root.page_nr">1</li>
+                <li class="paging-current" data-flow-field="page_nr">1</li>
                 <li class="paging-next">
-                  <a data-flow-field=":root.page_nr" class="toolbar-button"
+                  <a data-flow-field="page_nr" class="toolbar-button"
                      data-flow-transform="paging_next"
                      >next</a>
                 </li>
