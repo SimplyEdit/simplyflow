@@ -210,6 +210,7 @@ class SimplyBind
     applyTemplate(context)
     {
         const path      = context.path
+        const parent    = context.parent
         const templates = context.templates
         const list      = context.list
         const index     = context.index
@@ -246,7 +247,7 @@ class SimplyBind
             } else if (index!=null) {
                 binding.setAttribute(attr, path+'.'+index+'.'+bind)
             } else {
-                binding.setAttribute(attr, path+'.'+bind)
+                binding.setAttribute(attr, parent+bind)
             }
         }
         if (typeof index !== 'undefined') {
