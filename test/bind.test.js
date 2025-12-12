@@ -62,7 +62,7 @@ describe('bind can', () => {
     })
     const source = `<div data-flow-field="foo">
         <template data-flow-match="1">
-          <div data-flow-field=":root.bar"></div>
+          <div data-flow-field="bar"></div>
         </template>
       </div>`
     document.body.innerHTML = source
@@ -72,7 +72,7 @@ describe('bind can', () => {
     })
     const rendered = `<div data-flow-field=\"foo\">
         <template data-flow-match=\"1\">
-          <div data-flow-field=\":root.bar\"></div>
+          <div data-flow-field=\"bar\"></div>
         </template>
       
           <div data-flow-field=\"bar\">bar</div>
