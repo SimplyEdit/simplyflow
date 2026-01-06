@@ -267,5 +267,31 @@ describe('bind can', () => {
       }
     }, 10)
   })
-})
+  it('default to empty array when data-flow-list variable does not refer to an array', (done) => {
+    // Notes: This could be considered a silent failure that causes unexpected/undesired behaviour
+    //        I'm adding this because Author requested this explicitely.
 
+    // Given - a data-flow-list that refers to a non-array or undefined variable
+    const source = `<ul data-flow-list="unknownVariable"><template><li><span data-flow-field="name"></span></li></template</ul>`
+    document.body.innerHTML = source
+
+    // When - the data is bound
+    const databind = bind({
+      container: document.body,
+      root: [{name: 'item1'}, {name: 'item2'}]
+    })
+
+    // Then - the bind should default to an empty array and leave the rest be
+    const rendered = `<ul data-flow-list="unknownVariable"><template><li><span data-flow-field="name"></span></li></template></ul>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
+})
