@@ -19,7 +19,9 @@ class SimplyFlowModel {
 			this.state.options = {}
 		}
 		this.effects = [{current:state.data}]
-		this.view = signal(state.data)
+		this.view = {
+      current: signal(state.data)
+    }
 	}
 
 	/**
