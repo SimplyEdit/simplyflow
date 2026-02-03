@@ -1103,12 +1103,12 @@
      */
     addEffect(fn) {
       if (!fn || typeof fn !== "function") {
-        throw new Error("addEffect requires an effect function as its parameter");
+        throw new Error("addEffect requires an effect function as its parameter", { cause: fn });
       }
       const dataSignal = this.effects[this.effects.length - 1];
       const connectedSignal = fn.call(this, dataSignal);
       if (!connectedSignal || !connectedSignal[Symbol.Signal]) {
-        throw new Error("addEffect function parameter must return a Signal");
+        throw new Error("addEffect function parameter must return a Signal", { cause: fn });
       }
       this.view = connectedSignal;
       this.effects.push(this.view);
@@ -1258,6 +1258,55 @@
         return data.current.slice(start, end);
       }, 50);
     };
+  }
+
+  // src/render.mjs
+  var SimplyRender = class extends HTMLElement {
+    constructor() {
+      super();
+    }
+    connectedCallback() {
+      let templateId = this.getAttribute("rel");
+      let template = document.getElementById(templateId);
+      if (template) {
+        let content = template.content.cloneNode(true);
+        for (const node of content.childNodes) {
+          const clone = node.cloneNode(true);
+          if (clone.nodeType == document.ELEMENT_NODE) {
+            clone.querySelectorAll("template").forEach(function(t) {
+              t.setAttribute("simply-render", "");
+            });
+            if (this.attributes) {
+              for (const attr of this.attributes) {
+                if (attr.name != "rel") {
+                  clone.setAttribute(attr.name, attr.value);
+                }
+              }
+            }
+          }
+          this.parentNode.insertBefore(clone, this);
+        }
+        this.parentNode.removeChild(this);
+      } else {
+        const observe = () => {
+          const observer = new MutationObserver(() => {
+            template = document.getElementById(templateId);
+            if (template) {
+              observer.disconnect();
+              this.replaceWith(this);
+            }
+          });
+          observer.observe(globalThis.document, {
+            subtree: true,
+            childList: true
+          });
+        };
+        observe();
+      }
+    }
+  };
+  if (!customElements.get("simply-render")) {
+    customElements.define("simply-render", SimplyRender);
   }
 
   // src/flow.mjs
