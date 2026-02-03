@@ -40,12 +40,12 @@ class SimplyFlowModel {
 	 */
 	addEffect(fn) {
 		if (!fn || typeof fn !=='function') {
-			throw new Error('addEffect requires an effect function as its parameter')
+			throw new Error('addEffect requires an effect function as its parameter', { cause: fn })
 		}
 		const dataSignal = this.effects[this.effects.length-1]
 		const connectedSignal = fn.call(this, dataSignal)
 		if (!connectedSignal || !connectedSignal[Symbol.Signal]) {
-			throw new Error('addEffect function parameter must return a Signal')
+			throw new Error('addEffect function parameter must return a Signal', { cause: fn })
 		}
 		this.view = connectedSignal
 		this.effects.push(this.view)
