@@ -457,8 +457,9 @@
   }
   function list(context) {
     if (!Array.isArray(context.value)) {
-      console.error("Value is not an array.", context.element, context.path, context.value);
-    } else if (!context.templates?.length) {
+      context.value = [context.value];
+    }
+    if (!context.templates?.length) {
       console.error("No templates found in", context.element);
     } else {
       arrayByTemplates.call(this, context);
@@ -996,7 +997,7 @@
           } else if (matches === ":notempty" && currentItem) {
             return t;
           }
-          if (strItem.match(matches)) {
+          if (strItem == matches) {
             return t;
           }
         }
@@ -1055,7 +1056,12 @@
     part = parts.shift();
     while (part && curr) {
       part = decodeURIComponent(part);
-      curr = curr[part];
+      if (part == "0" && !Array.isArray(curr)) {
+      } else if (Array.isArray(curr) && typeof curr[part] == "undefined") {
+        curr = curr[0][part];
+      } else {
+        curr = curr[part];
+      }
       part = parts.shift();
     }
     return curr;
