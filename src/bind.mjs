@@ -331,7 +331,7 @@ class SimplyBind
                 } else if (matches===':notempty' && currentItem) {
                     return t
                 }
-                if (strItem.match(matches)) {
+                if (strItem == matches) {
                     return t
                 }
             }
@@ -422,7 +422,11 @@ export function getValueByPath(root, path)
     part = parts.shift()
     while (part && curr) {
         part = decodeURIComponent(part)
-        curr = curr[part]
+        if (part=='0' && !Array.isArray(curr)) {
+            // ignore so that data-flow-list="nonarray" will work
+        } else {
+            curr = curr[part]
+        }
         part = parts.shift()
     }
     return curr
