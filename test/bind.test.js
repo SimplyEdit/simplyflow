@@ -267,5 +267,67 @@ describe('bind can', () => {
       }
     }, 10)
   })
+
+  it('render value as list', (done) => {
+    const source = `<div data-flow-list="foo">
+<template>
+  <span data-flow-field="name"></span>
+</template>
+</div>`
+    document.body.innerHTML = source
+
+    const data = signal({
+      foo: {
+        name: 'foobar'
+      }
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+    const rendered = `<div data-flow-list="foo">
+<template>
+  <span data-flow-field="name"></span>
+</template>
+
+  <span data-flow-field="foo.0.name" data-flow-key="0">foobar</span>
+</div>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
+
+  it('render array as field', (done) => {
+    const source = `<div data-flow-field="foo.name"></div>`
+    document.body.innerHTML = source
+
+    const data = signal({
+      foo: [{
+        name: 'foobar'
+      }]
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+    const rendered = `<div data-flow-field="foo.name">foobar</div>`
+    setTimeout(() => {
+      try {
+        expect(document.body.innerHTML).toBe(rendered)
+        done()
+      } catch(error) {
+        done(error)
+      } finally {
+        databind.destroy()
+      }
+    }, 10)
+  })
 })
 

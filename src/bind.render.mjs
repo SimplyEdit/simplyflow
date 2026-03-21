@@ -33,8 +33,9 @@ export function field(context)
 export function list(context)
 {
     if (!Array.isArray(context.value)) {
-        console.error('Value is not an array.', context.element, context.path, context.value)
-    } else if (!context.templates?.length) {
+        context.value = [context.value]
+    }
+    if (!context.templates?.length) {
         console.error('No templates found in', context.element)
     } else {
         arrayByTemplates.call(this, context)
