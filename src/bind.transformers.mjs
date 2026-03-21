@@ -1,5 +1,5 @@
 export function escape_html(context, next) {
-    let content = context.value.innerHTML
+    let content = context.value?.innerHTML
     if (typeof context.value == 'string') {
         content = context.value
         context.value = { innerHTML: content }
@@ -19,7 +19,7 @@ export function fixed_content(context, next) {
     if (typeof context.value == 'string') {
         context.value = {}
     } else {
-        delete context.value.innerHTML
+        delete context.value?.innerHTML
     }
     next(context)
 }
