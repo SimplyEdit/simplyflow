@@ -424,6 +424,8 @@ export function getValueByPath(root, path)
         part = decodeURIComponent(part)
         if (part=='0' && !Array.isArray(curr)) {
             // ignore so that data-flow-list="nonarray" will work
+        } else if (Array.isArray(curr) && typeof curr[part]=='undefined') {
+            curr = curr[0][part] // so that data-flow-field="array.foo" works
         } else {
             curr = curr[part]
         }
