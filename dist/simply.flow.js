@@ -421,7 +421,7 @@
 
   // src/bind.transformers.mjs
   function escape_html(context, next) {
-    let content = context.value.innerHTML;
+    let content = context.value?.innerHTML;
     if (typeof context.value == "string") {
       content = context.value;
       context.value = { innerHTML: content };
@@ -436,7 +436,7 @@
     if (typeof context.value == "string") {
       context.value = {};
     } else {
-      delete context.value.innerHTML;
+      delete context.value?.innerHTML;
     }
     next(context);
   }
@@ -1096,7 +1096,9 @@
         this.state.options = {};
       }
       this.effects = [{ current: this.state.data }];
-      this.view = this.state.data;
+      this.view = {
+        current: this.state.data
+      };
     }
     /**
      * Adds an effect to run whenever a signal it depends on
