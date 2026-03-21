@@ -33,8 +33,9 @@ export function field(context)
 export function list(context)
 {
     if (!Array.isArray(context.value)) {
-        console.error('Value is not an array.', context.element, context.path, context.value)
-    } else if (!context.templates?.length) {
+        context.value = [context.value]
+    }
+    if (!context.templates?.length) {
         console.error('No templates found in', context.element)
     } else {
         arrayByTemplates.call(this, context)
@@ -187,7 +188,7 @@ export function fieldByTemplates(context)
 {
     const rendered = context.element.querySelector(':scope > :not(template)')
     const template = this.findTemplate(context.templates, context.value)
-
+    context.parent = getParentPath(context.element)
     if (rendered) {
         if (template) {
             if (rendered?.[Symbol.bindTemplate] != template) {
@@ -201,6 +202,18 @@ export function fieldByTemplates(context)
         const clone = this.applyTemplate(context)
         context.element.appendChild(clone)
     }
+}
+
+function getParentPath(el, attribute)
+{
+    const parentEl  = el.parentElement?.closest(`[${attribute}-list],[${attribute}-map]`)
+    if (!parentEl) {
+        return ''
+    }
+    if (parentEl.hasAttribute(`${attribute}-list`)) {
+        return parentEl.getAttribute(`${attribute}-list`)+'.'
+    }
+    return parentEl.getAttribute(`${attribute}-map`)+'.'
 }
 
 /**

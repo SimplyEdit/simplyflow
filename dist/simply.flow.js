@@ -457,8 +457,9 @@
   }
   function list(context) {
     if (!Array.isArray(context.value)) {
-      console.error("Value is not an array.", context.element, context.path, context.value);
-    } else if (!context.templates?.length) {
+      context.value = [context.value];
+    }
+    if (!context.templates?.length) {
       console.error("No templates found in", context.element);
     } else {
       arrayByTemplates.call(this, context);
@@ -573,6 +574,7 @@
   function fieldByTemplates(context) {
     const rendered = context.element.querySelector(":scope > :not(template)");
     const template = this.findTemplate(context.templates, context.value);
+    context.parent = getParentPath(context.element);
     if (rendered) {
       if (template) {
         if (rendered?.[Symbol.bindTemplate] != template) {
@@ -586,6 +588,16 @@
       const clone = this.applyTemplate(context);
       context.element.appendChild(clone);
     }
+  }
+  function getParentPath(el, attribute) {
+    const parentEl = el.parentElement?.closest(`[${attribute}-list],[${attribute}-map]`);
+    if (!parentEl) {
+      return "";
+    }
+    if (parentEl.hasAttribute(`${attribute}-list`)) {
+      return parentEl.getAttribute(`${attribute}-list`) + ".";
+    }
+    return parentEl.getAttribute(`${attribute}-map`) + ".";
   }
   function input(context) {
     const el = context.element;
@@ -880,6 +892,7 @@
      */
     applyTemplate(context) {
       const path = context.path;
+      const parent = context.parent;
       const templates = context.templates;
       const list2 = context.list;
       const index = context.index;
@@ -901,8 +914,12 @@
       const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
       const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`);
       for (let binding of bindings) {
+        if (binding.tagName == "TEMPLATE") {
+          continue;
+        }
         const attr = attributes.find((attr2) => binding.hasAttribute(attr2));
-        const bind2 = binding.getAttribute(attr);
+        let bind2 = binding.getAttribute(attr);
+        bind2 = this.applyLinks(template.links, bind2);
         if (bind2.substring(0, ":root.".length) == ":root.") {
           binding.setAttribute(attr, bind2.substring(":root.".length));
         } else if (bind2 == ":value" && index != null) {
@@ -910,7 +927,7 @@
         } else if (index != null) {
           binding.setAttribute(attr, path + "." + index + "." + bind2);
         } else {
-          binding.setAttribute(attr, path + "." + bind2);
+          binding.setAttribute(attr, parent + bind2);
         }
       }
       if (typeof index !== "undefined") {
@@ -918,6 +935,25 @@
       }
       clone.children[0][Symbol.bindTemplate] = template;
       return clone;
+    }
+    parseLinks(links) {
+      let result = {};
+      links = links.split(";").map((link) => link.trim());
+      for (let link of links) {
+        link = link.split("=");
+        result[link[0].trim()] = link[1].trim();
+      }
+      return result;
+    }
+    applyLinks(links, value) {
+      for (let link in links) {
+        if (value.startsWith(link + ".")) {
+          return links[link] + value.substr(link.length);
+        } else if (value == link) {
+          return links[link];
+        }
+      }
+      return value;
     }
     /**
      * Returns the path referenced in either the field, list or map attribute
@@ -961,7 +997,7 @@
           } else if (matches === ":notempty" && currentItem) {
             return t;
           }
-          if (strItem.match(matches)) {
+          if (strItem == matches) {
             return t;
           }
         }
@@ -970,6 +1006,10 @@
         }
       };
       let template = Array.from(templates).find(templateMatches);
+      let links = null;
+      if (template?.hasAttribute(this.options.attribute + "-link")) {
+        links = this.parseLinks(template.getAttribute(this.options.attribute + "-link"));
+      }
       let rel = template?.getAttribute("rel");
       if (rel) {
         let replacement = document.querySelector("template#" + rel);
@@ -977,6 +1017,9 @@
           throw new Error("Could not find template with id " + rel);
         }
         template = replacement;
+      }
+      if (template) {
+        template.links = links;
       }
       return template;
     }
@@ -1013,7 +1056,12 @@
     part = parts.shift();
     while (part && curr) {
       part = decodeURIComponent(part);
-      curr = curr[part];
+      if (part == "0" && !Array.isArray(curr)) {
+      } else if (Array.isArray(curr) && typeof curr[part] == "undefined") {
+        curr = curr[0][part];
+      } else {
+        curr = curr[part];
+      }
       part = parts.shift();
     }
     return curr;
@@ -1034,14 +1082,21 @@
      * Creates a new datamodel, with a state property that contains
      * all the data passed to this constructor
      * @param state	Object with all the data for this model
+     * @throws Error if state is not set
      */
     constructor(state) {
+      if (!state) {
+        throw new Error("no options set");
+      }
+      if (state.data == null || typeof state.data[Symbol.iterator] !== "function") {
+        console.warn("SimplyFlowModel: options.data is not iterable");
+      }
       this.state = signal(state);
       if (!this.state.options) {
         this.state.options = {};
       }
-      this.effects = [{ current: state.data }];
-      this.view = signal(state.data);
+      this.effects = [{ current: this.state.data }];
+      this.view = this.state.data;
     }
     /**
      * Adds an effect to run whenever a signal it depends on
@@ -1053,8 +1108,15 @@
      * list. And the last effect added is set as this.view
      */
     addEffect(fn) {
+      if (!fn || typeof fn !== "function") {
+        throw new Error("addEffect requires an effect function as its parameter", { cause: fn });
+      }
       const dataSignal = this.effects[this.effects.length - 1];
-      this.view = fn.call(this, dataSignal);
+      const connectedSignal = fn.call(this, dataSignal);
+      if (!connectedSignal || !connectedSignal[Symbol.Signal]) {
+        throw new Error("addEffect function parameter must return a Signal", { cause: fn });
+      }
+      this.view = connectedSignal;
       this.effects.push(this.view);
     }
   };
@@ -1202,6 +1264,55 @@
         return data.current.slice(start, end);
       }, 50);
     };
+  }
+
+  // src/render.mjs
+  var SimplyRender = class extends HTMLElement {
+    constructor() {
+      super();
+    }
+    connectedCallback() {
+      let templateId = this.getAttribute("rel");
+      let template = document.getElementById(templateId);
+      if (template) {
+        let content = template.content.cloneNode(true);
+        for (const node of content.childNodes) {
+          const clone = node.cloneNode(true);
+          if (clone.nodeType == document.ELEMENT_NODE) {
+            clone.querySelectorAll("template").forEach(function(t) {
+              t.setAttribute("simply-render", "");
+            });
+            if (this.attributes) {
+              for (const attr of this.attributes) {
+                if (attr.name != "rel") {
+                  clone.setAttribute(attr.name, attr.value);
+                }
+              }
+            }
+          }
+          this.parentNode.insertBefore(clone, this);
+        }
+        this.parentNode.removeChild(this);
+      } else {
+        const observe = () => {
+          const observer = new MutationObserver(() => {
+            template = document.getElementById(templateId);
+            if (template) {
+              observer.disconnect();
+              this.replaceWith(this);
+            }
+          });
+          observer.observe(globalThis.document, {
+            subtree: true,
+            childList: true
+          });
+        };
+        observe();
+      }
+    }
+  };
+  if (!customElements.get("simply-render")) {
+    customElements.define("simply-render", SimplyRender);
   }
 
   // src/flow.mjs

@@ -7,16 +7,16 @@
 <main>
 	<h1>Multiple datatables</h1>
 	<template id="datatable">
-		<div data-flow-mark="model">
+		<div>
 			<table class="ds-datatable ds-datatable-sticky-header ds-datatable-rulers ds-datatable-virtual-scroll">
 			<thead>
-				<tr data-flow-map="state.options.columns">
+				<tr data-flow-map="columns">
 					<template data-flow-field="hidden" data-flow-match=":empty">
 						<th data-simply-command="toggleSort" data-flow-field="name"></th>
 					</template>
 				</tr>
 			</thead>
-			<tbody data-flow-list="view.current">
+			<tbody data-flow-list="rows">
 				<template>
 					<tr data-flow-map=":value">
 						<template>
@@ -29,16 +29,16 @@
 		</div>
 	</template>
 	<div data-flow-field="users">
-		<template rel="datatable"></template>
+		<template rel="datatable" data-flow-link="columns=users.state.options.columns;rows=users.view.current"></template>
 	</div>
 	<div data-flow-field="groups">
-		<template rel="datatable"></template>
+		<template rel="datatable" data-flow-link="columns=groups.state.options.columns;rows=groups.view.current"></template>
 	</div>
 </main>
 <output class="source" data-js="show-highlight-here"></output>
 
 <script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
-<script class="xsource" type="module" data-js="highlight">
+<script class="source" type="module" data-js="highlight">
 	import {signal, effect, batch} from '../../src/state.mjs'
 	import {bind} from '../../src/bind.mjs'
 	import {model, paging, sort, filter, columns, scroll} from '../../src/model.mjs'
