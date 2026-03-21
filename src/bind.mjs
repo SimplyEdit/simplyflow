@@ -210,6 +210,7 @@ class SimplyBind
     applyTemplate(context)
     {
         const path      = context.path
+        const parent    = context.parent
         const templates = context.templates
         const list      = context.list
         const index     = context.index
@@ -229,11 +230,16 @@ class SimplyBind
             throw new Error('template must contain a single root node', { cause: template })
         }
         const attribute = this.options.attribute
+
         const attributes = [attribute+'-field',attribute+'-list',attribute+'-map']
         const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`)
         for (let binding of bindings) {
+            if (binding.tagName=='TEMPLATE') {
+                continue
+            }
             const attr = attributes.find(attr => binding.hasAttribute(attr))
-            const bind = binding.getAttribute(attr)
+            let bind = binding.getAttribute(attr)
+            bind = this.applyLinks(template.links, bind)
             if (bind.substring(0, ':root.'.length)==':root.') {
                 binding.setAttribute(attr, bind.substring(':root.'.length))
             } else if (bind==':value' && index!=null) {
@@ -241,7 +247,7 @@ class SimplyBind
             } else if (index!=null) {
                 binding.setAttribute(attr, path+'.'+index+'.'+bind)
             } else {
-                binding.setAttribute(attr, path+'.'+bind)
+                binding.setAttribute(attr, parent+bind)
             }
         }
         if (typeof index !== 'undefined') {
@@ -252,6 +258,29 @@ class SimplyBind
 
         // return clone, not the firstChild, so that all whitespace is cloned as well
         return clone
+    }
+
+    parseLinks(links)
+    {
+        let result = {}
+        links = links.split(';').map(link => link.trim())
+        for (let link of links) {
+            link = link.split('=')
+            result[link[0].trim()] = link[1].trim()
+        }
+        return result
+    }
+
+    applyLinks(links, value)
+    {
+        for (let link in links) {
+            if (value.startsWith(link+'.')) {
+                return links[link] + value.substr(link.length)
+            } else if (value==link) {
+                return links[link]
+            }
+        }
+        return value
     }
 
     /**
@@ -315,6 +344,10 @@ class SimplyBind
             }
         }
         let template = Array.from(templates).find(templateMatches)
+        let links = null
+        if (template?.hasAttribute(this.options.attribute+'-link')) {
+            links = this.parseLinks(template.getAttribute(this.options.attribute+'-link'))
+        }
         let rel = template?.getAttribute('rel')
         if (rel) {
             let replacement = document.querySelector('template#'+rel)
@@ -322,6 +355,9 @@ class SimplyBind
                 throw new Error('Could not find template with id '+rel)
             }
             template = replacement
+        }
+        if (template) {
+            template.links = links
         }
         return template
     }

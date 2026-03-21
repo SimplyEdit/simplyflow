@@ -12,14 +12,21 @@ class SimplyFlowModel {
 	 * Creates a new datamodel, with a state property that contains
 	 * all the data passed to this constructor
 	 * @param state	Object with all the data for this model
+	 * @throws Error if state is not set
 	 */
 	constructor(state) {
+		if (!state) {
+			throw new Error('no options set')
+		}
+		if (state.data==null || typeof state.data[Symbol.iterator] !== 'function') {
+			console.warn('SimplyFlowModel: options.data is not iterable')
+		}
 		this.state = signal(state)
 		if (!this.state.options) {
 			this.state.options = {}
 		}
-		this.effects = [{current:state.data}]
-		this.view = signal(state.data)
+		this.effects = [{current:this.state.data}]
+		this.view = this.state.data
 	}
 
 	/**
@@ -32,8 +39,15 @@ class SimplyFlowModel {
 	 * list. And the last effect added is set as this.view
 	 */
 	addEffect(fn) {
+		if (!fn || typeof fn !=='function') {
+			throw new Error('addEffect requires an effect function as its parameter', { cause: fn })
+		}
 		const dataSignal = this.effects[this.effects.length-1]
-		this.view = fn.call(this, dataSignal)
+		const connectedSignal = fn.call(this, dataSignal)
+		if (!connectedSignal || !connectedSignal[Symbol.Signal]) {
+			throw new Error('addEffect function parameter must return a Signal', { cause: fn })
+		}
+		this.view = connectedSignal
 		this.effects.push(this.view)
 	}
 }
@@ -136,6 +150,7 @@ export function paging(options={}) {
  * Options:
  * - name (string) (required) - the name of this filter, must be unique
  * - matches (function) (required) - the filter function to apply to the data
+ * - enabled (bool) (required) - filter is applied only when enabled is set to true
  */
 export function filter(options) {
 	if (!options?.name || typeof options.name!=='string') {

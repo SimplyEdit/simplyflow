@@ -168,8 +168,14 @@
 				filter: function(el,value) {
 					// find property name
 					const property = el.closest('[data-flow-key').dataset.flowKey
-					// set column filter
-					this.state.options.propertyFilter.filters[property] = new RegExp(value, 'i')
+					if (value) {
+						// set column filter
+						this.state.options.propertyFilter.filters[property] = new RegExp(value, 'i')
+						this.state.options.propertyFilter.enabled = true
+					} else {
+						this.state.options.propertyFilter.enabled = false
+						delete this.state.options.propertyFilter.filters[property]
+					}
 				},
 				toggleFilter: function(el, value) {
 					const filter = el.parentElement.querySelector('.ds-datatable-filter')
