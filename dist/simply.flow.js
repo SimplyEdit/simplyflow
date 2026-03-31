@@ -1054,14 +1054,19 @@
     let curr = root;
     let part;
     part = parts.shift();
+    let prevPart = null;
     while (part && curr) {
       part = decodeURIComponent(part);
       if (part == "0" && !Array.isArray(curr)) {
+      } else if (part == ":key") {
+        curr = prevPart;
+      } else if (part == ":value") {
       } else if (Array.isArray(curr) && typeof curr[part] == "undefined") {
         curr = curr[0][part];
       } else {
         curr = curr[part];
       }
+      prevPart = part;
       part = parts.shift();
     }
     return curr;
