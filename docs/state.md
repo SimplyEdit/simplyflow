@@ -301,3 +301,39 @@ const baz = effect(() => {
 
 })
 ```
+
+### trace and addTracer
+
+These functions allow you to keep track of what is going on behind the scenes. You can add a custom tracer like this:
+
+```javascript
+import {addTracer, trace} from 'simplyflow/src/state.mjs'
+
+addTracer({
+	get: function(signal, property) {
+		console.log('get',signal,property)
+	},
+	set: function(signal, context, listener) {
+		console.log('set',signal,context,listener)
+	}
+})
+```
+
+You can skip either the 'set' or the 'get' property, but not both. Once you've added one or more tracers, you can enable them with the `trace()` function like this:
+
+```javascript
+let foo = signal({value: 1})
+trace(() => {
+	foo.value++
+})
+```
+
+This should trigger both the get and set tracer once.
+
+The `context` parameter to `tracer.set` is a Map with a list of properties as keys. Each key maps to an object with `{ was: x, now: y}` where x and y are the previous and new value for those properties.
+
+The `listener` parameter is the internal function called whenever an effect is triggered. This function has 2 useful properties:
+- `listener.effectType` - e.g. 'throttledEffect' or 'effect'
+- `listener.effectFunction` - the actual function passed to effect() that is now triggered
+
+In addition you could access the call stack inside your tracer function, or trigger a breakpoint with the `debugger;` statement. 

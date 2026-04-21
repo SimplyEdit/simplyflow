@@ -8,6 +8,7 @@
   // src/state.mjs
   var state_exports = {};
   __export(state_exports, {
+    addTracer: () => addTracer,
     batch: () => batch,
     clockEffect: () => clockEffect,
     destroy: () => destroy,
@@ -121,19 +122,49 @@
     }
     return signals.get(v);
   }
+  var tracers = [];
+  var tracing = false;
   function trace(signal2, prop) {
-    const listeners = getListeners(signal2, prop);
-    return listeners.map((listener) => {
-      return {
-        effect: listener.effectType,
-        fn: listener.effectFunction,
-        signal: signals.get(listener.effectFunction)
-      };
-    });
+    if (typeof signal2 === "function") {
+      tracing = true;
+      signal2();
+      tracing = false;
+    } else {
+      const listeners = getListeners(signal2, prop);
+      return listeners.map((listener) => {
+        return {
+          effect: listener.effectType,
+          fn: listener.effectFunction,
+          signal: signals.get(listener.effectFunction)
+        };
+      });
+    }
+  }
+  function addTracer(tracer) {
+    if (!tracer.get && !tracer.set) {
+      throw new Error('simply.state: addTracer: missing "get" or "set" property in tracer', tracer);
+    }
+    if (tracer.get && typeof tracer.get !== "function") {
+      throw new Error('simply.state: addTracer: "get" is not a function', tracer);
+    }
+    if (tracer.set && typeof tracer.set !== "function") {
+      throw new Error('simply.state: addTracer: "set" is not a function', tracer);
+    }
+    tracers.push(tracer);
+  }
+  function callTracers(getset, ...params) {
+    for (const tracer of tracers) {
+      if (tracer[getset]) {
+        tracer[getset](...params);
+      }
+    }
   }
   var batchedListeners = /* @__PURE__ */ new Set();
   var batchMode = 0;
   function notifySet(self, context = {}) {
+    if (disableTracking) {
+      return;
+    }
     let listeners = [];
     context.forEach((change, property) => {
       let propListeners = getListeners(self, property);
@@ -152,6 +183,9 @@
         const currentEffect = computeStack[computeStack.length - 1];
         for (let listener of Array.from(listeners)) {
           if (listener != currentEffect && listener?.needsUpdate) {
+            if (tracing && tracers.length) {
+              callTracers("set", self, context, listener);
+            }
             listener();
           }
           clearContext(listener);
@@ -185,8 +219,14 @@
     delete listener.needsUpdate;
   }
   function notifyGet(self, property) {
+    if (disableTracking) {
+      return;
+    }
     let currentCompute = computeStack[computeStack.length - 1];
     if (currentCompute) {
+      if (tracing && tracers.length) {
+        callTracers("get", self, property);
+      }
       setListeners(self, property, currentCompute);
     }
   }
@@ -409,13 +449,13 @@
     computeEffect();
     return connectedSignal;
   }
+  var disableTracking = false;
   function untracked(fn) {
-    const remember = computeStack.slice();
-    computeStack = [];
+    disableTracking = true;
     try {
       return fn();
     } finally {
-      computeStack = remember;
+      disableTracking = false;
     }
   }
 

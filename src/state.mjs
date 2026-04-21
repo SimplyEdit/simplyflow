@@ -134,26 +134,68 @@ export function signal(v) {
     return signals.get(v)
 }
 
+let tracers = []
+let tracing = false
 /**
- * Lists all effects that are currently listening to changes in
- * the given signal and property
+ * @param Signal|Function signal
+ * If given a singal and property, this function lists all effects 
+ * that are currently listening to changes to that signal and property
  * returns a list with 
  * - effect: the effect function (effect, throttledEffect, clockEffect)
  * - fn: the user provided function to this effect function
  * - signal: the connectedSignal to this user provided function
- * @param Signal signal
  * @param string prop 
  * @return array of { effect, fn, signal }
+ * 
+ * If given a function, it will enable any tracers added with addTracer
+ * call the given function and then disable all tracers.
+ * @return void
  */
 export function trace(signal, prop) {
-    const listeners = getListeners(signal, prop)
-    return listeners.map(listener => {
-        return {
-            effect: listener.effectType,
-            fn: listener.effectFunction,
-            signal: signals.get(listener.effectFunction)
+    if (typeof signal==='function') {
+        tracing = true
+        signal()
+        tracing = false
+    } else {
+        const listeners = getListeners(signal, prop)
+        return listeners.map(listener => {
+            return {
+                effect: listener.effectType,
+                fn: listener.effectFunction,
+                signal: signals.get(listener.effectFunction)
+            }
+        })
+    }
+}
+
+/**
+ * Adds a tracer. This is an object with a 'set' and/or 'get' function.
+ * If enabled (with the trace() method) each access to notifyGet will 
+ * call the 'get' function. Each access to notifySet will call the 'set'
+ * function.
+ * @param tracer { get: fn, set: fn }
+ * get: function(signal, property)
+ * set: function(signal, context, listener)
+ */
+export function addTracer(tracer) {
+    if (!tracer.get && !tracer.set) {
+        throw new Error('simply.state: addTracer: missing "get" or "set" property in tracer', tracer)
+    }
+    if (tracer.get && typeof tracer.get!=='function') {
+        throw new Error('simply.state: addTracer: "get" is not a function', tracer)
+    }
+    if (tracer.set && typeof tracer.set!=='function') {
+        throw new Error('simply.state: addTracer: "set" is not a function', tracer)
+    }
+    tracers.push(tracer)
+}
+
+function callTracers(getset, ...params) {
+    for (const tracer of tracers) {
+        if (tracer[getset]) {
+            tracer[getset](...params)
         }
-    })
+    }
 }
 
 let batchedListeners = new Set()
@@ -164,6 +206,9 @@ let batchMode = 0
  * to re-compute its values
  */
 function notifySet(self, context={}) {
+    if (disableTracking) {
+        return
+    }
     let listeners = []
     context.forEach((change, property) => {
         let propListeners = getListeners(self, property)
@@ -182,6 +227,9 @@ function notifySet(self, context={}) {
             const currentEffect = computeStack[computeStack.length-1]
             for (let listener of Array.from(listeners)) {
                 if (listener!=currentEffect && listener?.needsUpdate) {
+                    if (tracing && tracers.length) {
+                        callTracers('set', self, context, listener)
+                    }
                     listener()
                 }
                 clearContext(listener)
@@ -225,8 +273,14 @@ function clearContext(listener) {
  * listeners. These are later called if this property changes
  */
 function notifyGet(self, property) {
+    if (disableTracking) {
+        return
+    }
     let currentCompute = computeStack[computeStack.length-1]
     if (currentCompute) {
+        if (tracing && tracers.length) {
+            callTracers('get', self, property)
+        }
         // get was part of a react() function, so add it
         setListeners(self, property, currentCompute)
     }
@@ -565,12 +619,12 @@ export function clockEffect(fn, clock) {
     return connectedSignal
 }
 
+let disableTracking = false
 export function untracked(fn) {
-    const remember = computeStack.slice()
-    computeStack = []
+    disableTracking = true
     try {
         return fn()
     } finally {
-        computeStack = remember
+        disableTracking = false
     }
 }

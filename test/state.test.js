@@ -1,4 +1,4 @@
-import { signal, effect, batch, throttledEffect, clockEffect } from '../src/state.mjs'
+import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer } from '../src/state.mjs'
 
 class Foo {
 	#bar
@@ -307,9 +307,9 @@ describe('effects', () => {
 					} finally {
 						done()
 					}
-				}, 20)
+				}, 100)
 			}
-		}, 20)
+		}, 100)
 	})
 
 	it('clockEffect', () => {
@@ -365,5 +365,30 @@ describe('effects', () => {
 		expect(baz.current).toBe('2 baz 1')
 		foo.value++
 		expect(baz.current).toBe('4 baz 2')
+	})
+
+	it('can be traced', () => {
+		let foo = signal({ value: 1 })
+		let bar = effect(() => {
+			return foo.value + ' bar'
+		})
+		let count = 0
+		let tracing = []
+		addTracer({
+			get: (s, p) => {
+				tracing.push({ get: {s, p}})
+			},
+			set: (s, c, l) => {
+				tracing.push({ set: {s, c, l}})
+			}
+		})
+		trace(() => {
+			foo.value++
+		})
+		expect(bar.current).toBe('2 bar')
+		expect(tracing[0].set.s === foo)
+		expect(tracing[0].set.c.has('value')).toBe(true)
+		expect(tracing[1].get.s === foo)
+		expect(tracing[1].get.p === 'value')
 	})
 })
