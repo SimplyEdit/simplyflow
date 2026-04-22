@@ -1,4 +1,4 @@
-import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer } from '../src/state.mjs'
+import { signal, domSignal, effect, batch, throttledEffect, clockEffect, trace, addTracer } from '../src/state.mjs'
 
 class Foo {
 	#bar
@@ -390,5 +390,27 @@ describe('effects', () => {
 		expect(tracing[0].set.c.has('value')).toBe(true)
 		expect(tracing[1].get.s === foo)
 		expect(tracing[1].get.p === 'value')
+	})
+})
+
+describe('dom signals can', (done) => {
+	it('trigger effects', () => {
+		const source = `<div id="foo">foo</div>`
+		document.body.innerHTML = source
+
+		const foo = domSignal(document.getElementById('foo'))
+
+		let currentFoo
+		effect(() => {
+			currentFoo = foo.innerHTML
+		})
+		expect(currentFoo).toBe('foo')
+
+		document.getElementById('foo').innerHTML = 'bar'
+
+		setTimeout(() => {
+			expect(currentFoo).toBe('bar')
+			done()
+		});
 	})
 })
