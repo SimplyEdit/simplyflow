@@ -12,6 +12,7 @@
     batch: () => batch,
     clockEffect: () => clockEffect,
     destroy: () => destroy,
+    domSignal: () => domSignal,
     effect: () => effect,
     signal: () => signal,
     throttledEffect: () => throttledEffect,
@@ -122,6 +123,54 @@
     }
     return signals.get(v);
   }
+  var domSignalHandler = {
+    get: (target, property, receiver) => {
+      if (property === Symbol.xRay) {
+        return target;
+      }
+      if (property === Symbol.Signal) {
+        return true;
+      }
+      const value = target?.[property];
+      domListen(target, receiver);
+      notifyGet(receiver, property);
+      if (typeof value === "function") {
+        return value.bind(receiver);
+      }
+      if (value && value instanceof Element) {
+        return domSignal(value);
+      }
+      if (value && typeof value == "object") {
+        return signal(value);
+      }
+      return value;
+    },
+    has: (target, property) => {
+      let receiver = signals.get(target);
+      if (receiver) {
+        domListen(target, receiver);
+        notifyGet(receiver, property);
+      }
+      return Object.hasOwn(target, property);
+    },
+    ownKeys: (target) => {
+      let receiver = signals.get(target);
+      if (receiver) {
+        domListen(target, receiver);
+        notifyGet(receiver, iterate);
+      }
+      return Reflect.ownKeys(target);
+    }
+  };
+  function domSignal(el) {
+    if (el[Symbol.xRay]) {
+      return el;
+    }
+    if (!signals.has(el)) {
+      signals.set(el, new Proxy(el, domSignalHandler));
+    }
+    return signals.get(el);
+  }
   var tracers = [];
   var tracing = false;
   function trace(signal2, prop) {
@@ -191,6 +240,40 @@
           clearContext(listener);
         }
       }
+    }
+  }
+  var observers = /* @__PURE__ */ new WeakMap();
+  function domListen(el, signal2) {
+    let oldContentHTML = el.innerHTML;
+    let oldContentText = el.innerText;
+    if (!observers.has(el)) {
+      const observer = new MutationObserver((mutationList, observer2) => {
+        const changes = {};
+        for (const mutation of mutationList) {
+          if (mutation.type === "attributes") {
+            changes[mutation.attributeName] = mutation.attributeOldValue;
+          } else if (mutation.type === "subtree" || mutation.type === "characterData") {
+            if (el.innerHTML != oldContentHTML) {
+              changes.innerHTML = oldContentHTML;
+              oldContentHTML = el.innerHTML;
+            }
+            if (el.innerText != oldContentText) {
+              changes.innerText = oldContentText;
+              oldContentText = el.innerText;
+            }
+          }
+        }
+        for (const prop in changes) {
+          notifySet(signal2, makeContext(prop, { was: changes[prop], now: el[prop] }));
+        }
+      });
+      observer.observe(el, {
+        characterData: true,
+        subtree: true,
+        attributes: true,
+        attributesOldValue: true
+      });
+      observers.set(el, observer);
     }
   }
   function makeContext(property, change) {
