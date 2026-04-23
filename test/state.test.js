@@ -413,4 +413,24 @@ describe('dom signals can', (done) => {
 			done()
 		});
 	})
+
+	it('trigger effects on child data changes', () => {
+		const source = `<div id="foo"><span id="bar">foo</span></div>`
+		document.body.innerHTML = source
+
+		const foo = domSignal(document.getElementById('foo'))
+
+		let currentFoo
+		effect(() => {
+			currentFoo = foo.querySelector('#bar').innerHTML
+		})
+		expect(currentFoo).toBe('foo')
+
+		document.getElementById('bar').innerHTML = 'bar'
+
+		setTimeout(() => {
+			expect(currentFoo).toBe('bar')
+			done()
+		});
+	})
 })

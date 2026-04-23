@@ -61,7 +61,6 @@ const signalHandler = {
             }
         }
         if (value && typeof value == 'object') {
-            //NOTE: get now returns a signal, set doesn't 'unsignal' the value set
             return signal(value)
         }
         return value
@@ -146,10 +145,7 @@ const domSignalHandler = {
         domListen(target, receiver)
         notifyGet(receiver, property)
         if (typeof value === 'function') {
-            return value.bind(receiver)
-        }
-        if (value && value instanceof Element) {
-            return domSignal(value)
+            return value.bind(target) // make sure element functions are not linked to the proxy
         }
         if (value && typeof value == 'object') {
             return signal(value)
