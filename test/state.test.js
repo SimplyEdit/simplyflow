@@ -391,6 +391,14 @@ describe('effects', () => {
 		expect(tracing[1].get.s === foo)
 		expect(tracing[1].get.p === 'value')
 	})
+
+	it('cannot contain signals', () => {
+		let nonproxy = {value: 'foo'}
+		let foo = signal(nonproxy)
+		let bar = signal({bar: foo})
+		expect(bar[Symbol.xRay].bar[Symbol.xRay]).toBe(undefined)
+		expect(bar[Symbol.xRay].bar).toBe(nonproxy)
+	})
 })
 
 describe('dom signals can', (done) => {

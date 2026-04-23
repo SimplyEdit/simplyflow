@@ -67,6 +67,8 @@ const signalHandler = {
     },
     set: (target, property, value, receiver) => {
         value = value?.[Symbol.xRay] || value // unwraps signal
+        //FIXME: if value contains child objects, these may be signals as well... so do this recursively
+        unwrap(value)
         let current = target[property]
         if (current!==value) {
             target[property] = value
@@ -121,6 +123,7 @@ const signals = new WeakMap()
  * to allow reactive functions to be triggered when signal values change.
  */
 export function signal(v) {
+    unwrap(v)
     if (v[Symbol.Signal]) { // avoid wrapping a Signal inside a Signal
         let target = v[Symbol.xRay]
         if (!signals.has(target)) {
@@ -712,5 +715,36 @@ export function untracked(fn) {
         return fn()
     } finally {
         disableTracking = false
+    }
+}
+
+let seen = new WeakMap()
+
+function innerUnwrap(ob) {
+    if (!ob || typeof ob!=='object' || seen.has(ob)) {
+        return
+    }
+    seen.set(ob, true)
+    for (const prop in ob) {
+        if (ob[prop]?.[Symbol.Signal]) {
+            ob[prop] = ob[prop][Symbol.xRay]
+        }
+        if (Array.isArray(ob[prop])) {
+            for (const [key, value] of Object.entries(ob[prop])) {
+                if (value && typeof value==='object') {
+                    innerUnwrap(value)
+                }
+            }
+        } else if (ob[prop] && typeof ob[prop] === 'object') {
+            innerUnwrap(ob[prop])
+        }
+    }
+}
+
+export function unwrap(ob) {
+    if (ob && typeof ob==='object') {
+        seen = new WeakMap()
+        innerUnwrap(ob)
+        seen = null
     }
 }
