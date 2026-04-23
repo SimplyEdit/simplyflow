@@ -2,6 +2,7 @@
  * Default renderers for data binding
  * Will be used unless overriden in the SimplyBind options parameter
  */
+import { domSignal } from './state.mjs'
 
 /**
  * This function is used by default to render dom elements with the `data-flow-field` attribute.
@@ -22,6 +23,16 @@ export function field(context)
         }
     } else if (this.options.renderers['*']) {
         this.options.renderers['*'].call(this, context)
+        // FIXME: should call a setter (defined in field type) to set the value back into root data
+        if (this.options.twoway) { 
+            // TODO: make content-editable if editmode is toggled on
+            // how do you toggle editmode? global signal?
+            // make uneditable if editmode is toggled off
+            const s = domSignal(context.element)
+            effect(() => {
+                setValueByPath(this.options.root, context.path, s.innerHTML)
+            })
+        }
     }
     return context
 }
@@ -57,6 +68,39 @@ export function map(context)
         objectByTemplates.call(this, context)
     }
     return context
+}
+
+export function setValueByPath(root, path, value)
+{
+    let parts = path.split('.')
+    let curr = root
+    let part
+    part = parts.shift()
+    let prev = null
+    let prevPart = null
+    while (part && curr) {
+        part = decodeURIComponent(part)
+        if (part=='0' && !Array.isArray(curr)) {
+            // ignore so that data-flow-list="nonarray" will work
+        } else if (part==':key') {
+            // FIXME: should change the key, not the value... not supported yet?
+            throw new Error('setting key not yet supported')
+            curr = prevPart
+        } else if (part==':value') {
+            // do nothing
+        } else if (Array.isArray(curr) && typeof curr[part]=='undefined') {
+            prev = curr[0]
+            curr = curr[0][part] // so that data-flow-field="array.foo" works
+        } else {
+            prev = curr
+            curr = curr[part]
+        }
+        prevPart = part
+        part = parts.shift()
+    }
+    if (prev && prevPart && prev[prevPart]!==value) {
+        prev[prevPart] = value
+    }
 }
 
 /**
