@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="./style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimplyFlow two-way databinding test</title>
+  </head>
+  <body>
+    <h1>SimplyFlow two-way databinding test</h1>
+    <p>Editor:</p>
+    <div id="editor" data-flow-field="demo" contenteditable></div>
+    <p>Listener</p>
+    <div data-flow-field="demo"></div>
+    <script src="../../dist/simply.flow.js"></script>
+    <script>
+      const data = simply.state.signal({
+        demo: 'initial content'
+      })
+      simply.bind({
+        root: data
+      })
+      const editor = document.getElementById('editor')
+      const demo = simply.state.domSignal(editor)
+      simply.state.effect(() => {
+        data.demo = demo.innerHTML
+      })
+    </script>
+  </body>
+</html>
