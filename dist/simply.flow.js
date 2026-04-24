@@ -13,11 +13,12 @@
     clockEffect: () => clockEffect,
     destroy: () => destroy,
     domSignal: () => domSignal,
-    effect: () => effect,
+    effect: () => effect2,
     signal: () => signal,
     throttledEffect: () => throttledEffect,
     trace: () => trace,
-    untracked: () => untracked
+    untracked: () => untracked,
+    unwrap: () => unwrap
   });
   var iterate = Symbol("iterate");
   if (!Symbol.xRay) {
@@ -71,6 +72,7 @@
     },
     set: (target, property, value, receiver) => {
       value = value?.[Symbol.xRay] || value;
+      unwrap(value);
       let current = target[property];
       if (current !== value) {
         target[property] = value;
@@ -112,6 +114,7 @@
   };
   var signals = /* @__PURE__ */ new WeakMap();
   function signal(v) {
+    unwrap(v);
     if (v[Symbol.Signal]) {
       let target = v[Symbol.xRay];
       if (!signals.has(target)) {
@@ -135,10 +138,7 @@
       domListen(target, receiver);
       notifyGet(receiver, property);
       if (typeof value === "function") {
-        return value.bind(receiver);
-      }
-      if (value && value instanceof Element) {
-        return domSignal(value);
+        return value.bind(target);
       }
       if (value && typeof value == "object") {
         return signal(value);
@@ -354,7 +354,7 @@
   var effectStack = [];
   var effectMap = /* @__PURE__ */ new WeakMap();
   var signalStack = [];
-  function effect(fn) {
+  function effect2(fn) {
     if (effectStack.findIndex((f) => fn == f) !== -1) {
       throw new Error("Recursive update() call", { cause: fn });
     }
@@ -372,7 +372,7 @@
       }
       clearListeners(computeEffect2);
       computeEffect2.effectFunction = fn;
-      computeEffect2.effectType = effect;
+      computeEffect2.effectType = effect2;
       computeStack.push(computeEffect2);
       signalStack.push(connectedSignal);
       let result;
@@ -541,6 +541,34 @@
       disableTracking = false;
     }
   }
+  var seen = /* @__PURE__ */ new WeakMap();
+  function innerUnwrap(ob) {
+    if (!ob || typeof ob !== "object" || seen.has(ob)) {
+      return;
+    }
+    seen.set(ob, true);
+    for (const prop in ob) {
+      if (ob[prop]?.[Symbol.Signal]) {
+        ob[prop] = ob[prop][Symbol.xRay];
+      }
+      if (Array.isArray(ob[prop])) {
+        for (const [key, value] of Object.entries(ob[prop])) {
+          if (value && typeof value === "object") {
+            innerUnwrap(value);
+          }
+        }
+      } else if (ob[prop] && typeof ob[prop] === "object") {
+        innerUnwrap(ob[prop]);
+      }
+    }
+  }
+  function unwrap(ob) {
+    if (ob && typeof ob === "object") {
+      seen = /* @__PURE__ */ new WeakMap();
+      innerUnwrap(ob);
+      seen = null;
+    }
+  }
 
   // src/bind.transformers.mjs
   function escape_html(context, next) {
@@ -575,6 +603,12 @@
       }
     } else if (this.options.renderers["*"]) {
       this.options.renderers["*"].call(this, context);
+      if (this.options.twoway) {
+        const s = domSignal(context.element);
+        effect(() => {
+          setValueByPath(this.options.root, context.path, s.innerHTML);
+        });
+      }
     }
     return context;
   }
@@ -598,6 +632,34 @@
       objectByTemplates.call(this, context);
     }
     return context;
+  }
+  function setValueByPath(root, path, value) {
+    let parts = path.split(".");
+    let curr = root;
+    let part;
+    part = parts.shift();
+    let prev = null;
+    let prevPart = null;
+    while (part && curr) {
+      part = decodeURIComponent(part);
+      if (part == "0" && !Array.isArray(curr)) {
+      } else if (part == ":key") {
+        throw new Error("setting key not yet supported");
+        curr = prevPart;
+      } else if (part == ":value") {
+      } else if (Array.isArray(curr) && typeof curr[part] == "undefined") {
+        prev = curr[0];
+        curr = curr[0][part];
+      } else {
+        prev = curr;
+        curr = curr[part];
+      }
+      prevPart = part;
+      part = parts.shift();
+    }
+    if (prev && prevPart && prev[prevPart] !== value) {
+      prev[prevPart] = value;
+    }
   }
   function arrayByTemplates(context) {
     const attribute = this.options.attribute;
@@ -822,8 +884,7 @@
     }
     let strValue = "" + value;
     if (typeof value != "object" || strValue.substring(0, 8) != "[object ") {
-      el.innerHTML = strValue;
-      return;
+      value = { innerHTML: value };
     }
     setProperties(el, value, "innerHTML", "title", "id", "className");
   }

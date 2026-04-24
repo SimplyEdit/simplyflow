@@ -1,6 +1,6 @@
 {
   "name": "simplyflow",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Flow based programming in javascript, with signals and effects",
   "main": "src/flow.mjs",
   "type": "module",
@@ -10,7 +10,8 @@
   "scripts": {
     "build": "esbuild src/flow.mjs --bundle --outfile=dist/simply.flow.min.js --minify --sourcemap",
     "build-dev": "esbuild src/flow.mjs --bundle --outfile=dist/simply.flow.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "watch": "watch 'npm run build-dev' ./src & npx http-server ."
   },
   "repository": {
     "type": "git",
@@ -37,7 +38,6 @@
     "globals": "^15.13.0",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0"
-
   },
   "files": [
     "README.md",
@@ -47,5 +47,8 @@
   "jest": {
     "transform": {},
     "testEnvironment": "jsdom"
+  },
+  "dependencies": {
+    "watch": "^1.0.2"
   }
 }
