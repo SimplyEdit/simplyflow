@@ -418,8 +418,7 @@ export function element(context)
     }
     let strValue = ''+value
     if (typeof value!='object' || strValue.substring(0,8)!='[object ') {
-        el.innerHTML = strValue
-        return
+        value = { innerHTML: value }
     }
     setProperties(el, value, 'innerHTML', 'title', 'id', 'className')
 }
