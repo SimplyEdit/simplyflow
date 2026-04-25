@@ -21,7 +21,9 @@
         root: data
       })
       const editor = document.getElementById('editor')
-      const demo = simply.state.domSignal(editor)
+
+      const demo = simply.dom.signal(editor)
+
       simply.state.effect(() => {
         data.demo = demo.innerHTML
       })

@@ -2,7 +2,7 @@
  * Default renderers for data binding
  * Will be used unless overriden in the SimplyBind options parameter
  */
-import { domSignal } from './state.mjs'
+import { signal as domSignal } from './dom.mjs'
 
 /**
  * This function is used by default to render dom elements with the `data-flow-field` attribute.

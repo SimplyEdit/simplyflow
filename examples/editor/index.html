@@ -55,11 +55,18 @@
     <p>Editor:</p>
     <div id="editor" class="editor" data-code-lang="js">
       <div id="gutter" class="editor-gutter"></div>
-      <pre class="editor-highlight language-js" id="highlight"></pre>
+      <pre class="editor-highlight language-html" id="highlight"></pre>
       <textarea id="editorInner" spellcheck="false">
-Start with a few lines
-like this
-and some more
+<html>
+<style>
+.foo {
+  color: red;
+|
+</style>
+<script>
+function bar() {
+}
+</script>
       </textarea>
     </div>
     <script src="../../dist/simply.flow.js"></script>
@@ -68,7 +75,7 @@ and some more
       const editorContent = document.getElementById('editorInner')
       const highlight = document.getElementById('highlight')
       const state = simply.state.signal({})
-      const demo = simply.state.domSignal(editorContent)
+      const demo = simply.dom.signal(editorContent)
       const gutter = document.getElementById('gutter')
       simply.state.effect(() => {
         state.content = demo.value
@@ -80,7 +87,7 @@ and some more
       })
 
       simply.state.effect(() => {
-        highlight.innerHTML = Prism.highlight(state.content, Prism.languages.javascript, 'javascript')
+        highlight.innerHTML = Prism.highlight(state.content, Prism.languages.html, 'html')
       })
 
       function updateLines(container, lines) {

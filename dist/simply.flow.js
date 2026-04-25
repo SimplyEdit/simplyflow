@@ -12,15 +12,18 @@
     batch: () => batch,
     clockEffect: () => clockEffect,
     destroy: () => destroy,
-    domSignal: () => domSignal,
     effect: () => effect2,
+    makeContext: () => makeContext,
+    notifyGet: () => notifyGet,
+    notifySet: () => notifySet,
     signal: () => signal,
+    signals: () => signals,
     throttledEffect: () => throttledEffect,
     trace: () => trace,
     untracked: () => untracked,
     unwrap: () => unwrap
   });
-  var iterate = Symbol("iterate");
+  var iterate2 = Symbol("iterate");
   if (!Symbol.xRay) {
     Symbol.xRay = Symbol("xRay");
   }
@@ -79,7 +82,7 @@
         notifySet(receiver, makeContext(property, { was: current, now: value }));
       }
       if (typeof current === "undefined") {
-        notifySet(receiver, makeContext(iterate, {}));
+        notifySet(receiver, makeContext(iterate2, {}));
       }
       return true;
     },
@@ -102,13 +105,13 @@
     defineProperty: (target, property, descriptor) => {
       if (typeof target[property] === "undefined") {
         let receiver = signals.get(target);
-        notifySet(receiver, makeContext(iterate, {}));
+        notifySet(receiver, makeContext(iterate2, {}));
       }
       return Object.defineProperty(target, property, descriptor);
     },
     ownKeys: (target) => {
       let receiver = signals.get(target);
-      notifyGet(receiver, iterate);
+      notifyGet(receiver, iterate2);
       return Reflect.ownKeys(target);
     }
   };
@@ -126,60 +129,15 @@
     }
     return signals.get(v);
   }
-  var domSignalHandler = {
-    get: (target, property, receiver) => {
-      if (property === Symbol.xRay) {
-        return target;
-      }
-      if (property === Symbol.Signal) {
-        return true;
-      }
-      const value = target?.[property];
-      domListen(target, receiver);
-      notifyGet(receiver, property);
-      if (typeof value === "function") {
-        return value.bind(target);
-      }
-      if (value && typeof value == "object") {
-        return signal(value);
-      }
-      return value;
-    },
-    has: (target, property) => {
-      let receiver = signals.get(target);
-      if (receiver) {
-        domListen(target, receiver);
-        notifyGet(receiver, property);
-      }
-      return Object.hasOwn(target, property);
-    },
-    ownKeys: (target) => {
-      let receiver = signals.get(target);
-      if (receiver) {
-        domListen(target, receiver);
-        notifyGet(receiver, iterate);
-      }
-      return Reflect.ownKeys(target);
-    }
-  };
-  function domSignal(el) {
-    if (el[Symbol.xRay]) {
-      return el;
-    }
-    if (!signals.has(el)) {
-      signals.set(el, new Proxy(el, domSignalHandler));
-    }
-    return signals.get(el);
-  }
   var tracers = [];
   var tracing = false;
-  function trace(signal2, prop) {
-    if (typeof signal2 === "function") {
+  function trace(signal3, prop) {
+    if (typeof signal3 === "function") {
       tracing = true;
-      signal2();
+      signal3();
       tracing = false;
     } else {
-      const listeners = getListeners(signal2, prop);
+      const listeners = getListeners(signal3, prop);
       return listeners.map((listener) => {
         return {
           effect: listener.effectType,
@@ -238,53 +196,6 @@
             listener();
           }
           clearContext(listener);
-        }
-      }
-    }
-  }
-  var observers = /* @__PURE__ */ new WeakMap();
-  function domListen(el, signal2) {
-    let oldContentHTML = el.innerHTML;
-    let oldContentText = el.innerText;
-    if (!observers.has(el)) {
-      const observer = new MutationObserver((mutationList, observer2) => {
-        const changes = {};
-        for (const mutation of mutationList) {
-          if (mutation.type === "attributes") {
-            changes[mutation.attributeName] = mutation.attributeOldValue;
-          } else if (mutation.type === "subtree" || mutation.type === "characterData") {
-            if (el.innerHTML != oldContentHTML) {
-              changes.innerHTML = oldContentHTML;
-              oldContentHTML = el.innerHTML;
-            }
-            if (el.innerText != oldContentText) {
-              changes.innerText = oldContentText;
-              oldContentText = el.innerText;
-            }
-          }
-        }
-        for (const prop in changes) {
-          notifySet(signal2, makeContext(prop, { was: changes[prop], now: el[prop] }));
-        }
-      });
-      observer.observe(el, {
-        characterData: true,
-        subtree: true,
-        attributes: true,
-        attributesOldValue: true
-      });
-      observers.set(el, observer);
-      if (el.matches("input, textarea, select")) {
-        let prevValue = el.value;
-        el.addEventListener("change", (evt) => {
-          notifySet(signal2, makeContext("value", { was: prevValue, now: el.value }));
-          prevValue = el.value;
-        });
-        if (el.matches("input, textarea")) {
-          el.addEventListener("input", (evt) => {
-            notifySet(signal2, makeContext("value", { was: prevValue, now: el.value }));
-            prevValue = el.value;
-          });
         }
       }
     }
@@ -605,6 +516,104 @@
     next(context);
   }
 
+  // src/dom.mjs
+  var dom_exports = {};
+  __export(dom_exports, {
+    signal: () => signal2
+  });
+  var domSignalHandler = {
+    get: (target, property, receiver) => {
+      if (property === Symbol.xRay) {
+        return target;
+      }
+      if (property === Symbol.Signal) {
+        return true;
+      }
+      const value = target?.[property];
+      domListen(target, receiver);
+      notifyGet(receiver, property);
+      if (typeof value === "function") {
+        return value.bind(target);
+      }
+      if (value && typeof value == "object") {
+        return signal2(value);
+      }
+      return value;
+    },
+    has: (target, property) => {
+      let receiver = signals.get(target);
+      if (receiver) {
+        domListen(target, receiver);
+        notifyGet(receiver, property);
+      }
+      return Object.hasOwn(target, property);
+    },
+    ownKeys: (target) => {
+      let receiver = signals.get(target);
+      if (receiver) {
+        domListen(target, receiver);
+        notifyGet(receiver, iterate);
+      }
+      return Reflect.ownKeys(target);
+    }
+  };
+  function signal2(el) {
+    if (el[Symbol.xRay]) {
+      return el;
+    }
+    if (!signals.has(el)) {
+      signals.set(el, new Proxy(el, domSignalHandler));
+    }
+    return signals.get(el);
+  }
+  var observers = /* @__PURE__ */ new WeakMap();
+  function domListen(el, signal3) {
+    let oldContentHTML = el.innerHTML;
+    let oldContentText = el.innerText;
+    if (!observers.has(el)) {
+      const observer = new MutationObserver((mutationList, observer2) => {
+        const changes = {};
+        for (const mutation of mutationList) {
+          if (mutation.type === "attributes") {
+            changes[mutation.attributeName] = mutation.attributeOldValue;
+          } else if (mutation.type === "subtree" || mutation.type === "characterData") {
+            if (el.innerHTML != oldContentHTML) {
+              changes.innerHTML = oldContentHTML;
+              oldContentHTML = el.innerHTML;
+            }
+            if (el.innerText != oldContentText) {
+              changes.innerText = oldContentText;
+              oldContentText = el.innerText;
+            }
+          }
+        }
+        for (const prop in changes) {
+          notifySet(signal3, makeContext(prop, { was: changes[prop], now: el[prop] }));
+        }
+      });
+      observer.observe(el, {
+        characterData: true,
+        subtree: true,
+        attributes: true,
+        attributesOldValue: true
+      });
+      observers.set(el, observer);
+      if (el.matches("input, textarea, select")) {
+        let prevValue = el.value;
+        el.addEventListener("change", (evt) => {
+          notifySet(signal3, makeContext("value", { was: prevValue, now: el.value }));
+          prevValue = el.value;
+        });
+        if (el.matches("input, textarea")) {
+          el.addEventListener("input", (evt) => {
+            notifySet(signal3, makeContext("value", { was: prevValue, now: el.value }));
+            prevValue = el.value;
+          });
+        }
+      }
+    }
+  }
+
   // src/bind.render.mjs
   function field(context) {
     if (context.templates?.length) {
@@ -617,7 +626,7 @@
     } else if (this.options.renderers["*"]) {
       this.options.renderers["*"].call(this, context);
       if (this.options.twoway) {
-        const s = domSignal(context.element);
+        const s = signal2(context.element);
         effect(() => {
           setValueByPath(this.options.root, context.path, s.innerHTML);
         });
@@ -1526,7 +1535,8 @@
   Object.assign(globalThis.simply, {
     bind,
     flow: model_exports,
-    state: state_exports
+    state: state_exports,
+    dom: dom_exports
   });
   var flow_default = globalThis.simply;
 })();
