@@ -5,6 +5,7 @@
     <link rel="stylesheet" href="./style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SimplyFlow editor with domsignal</title>
+    <link href="prism.css" rel="stylesheet" />
     <style>
       .editor {
         font-family: monospace;
@@ -13,7 +14,10 @@
         display: grid;
         grid-template: "gutter editor";
         grid-template-columns: 1fr 100%;
+        tab-size: 4;
       }
+      pre[class*="language-"],
+      .editor-highlight,
       .editor textarea {
         font-size: inherit;
         font-family: inherit;
@@ -21,7 +25,10 @@
         border: none;
         background-color: inherit;
         margin: 0;
-        padding: 0 3px;
+        padding: 0;
+        line-height: inherit;
+        tab-size: inherit;
+        white-space: pre;
       }
       .editor-gutter {
         background-color: #CCCC;
@@ -35,14 +42,21 @@
         line-height: inherit;
         white-space: pre;
       }
+      .editor textarea {
+        background: transparent;
+        color: transparent;
+        caret-color: red;
+      }
     </style>
+    <script src="prism.js" data-manual></script>
   </head>
   <body>
     <h1>SimplyFlow editor with domSignal</h1>
     <p>Editor:</p>
-    <div id="editor" class="editor">
+    <div id="editor" class="editor" data-code-lang="js">
       <div id="gutter" class="editor-gutter"></div>
-      <textarea id="editorInner">
+      <pre class="editor-highlight language-js" id="highlight"></pre>
+      <textarea id="editorInner" spellcheck="false">
 Start with a few lines
 like this
 and some more
@@ -52,10 +66,10 @@ and some more
     <script>
       const editor = document.getElementById('editor')
       const editorContent = document.getElementById('editorInner')
+      const highlight = document.getElementById('highlight')
       const state = simply.state.signal({})
       const demo = simply.state.domSignal(editorContent)
       const gutter = document.getElementById('gutter')
-
       simply.state.effect(() => {
         state.content = demo.value
         state.linecount = demo.value.split("\n").length
@@ -65,11 +79,16 @@ and some more
         updateLines(editor, state.linecount)
       })
 
+      simply.state.effect(() => {
+        highlight.innerHTML = Prism.highlight(state.content, Prism.languages.javascript, 'javascript')
+      })
+
       function updateLines(container, lines) {
         gutter.innerHTML = Array.from({
           length: lines
         }, (_, i) => i).join("\n")
       }
+
     </script>
   </body>
 </html>
