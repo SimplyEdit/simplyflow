@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="./style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimplyFlow two-way databinding test</title>
+    <style>
+      .editor {
+        font-family: monospace;
+        font-size: 1rem;
+        line-height: normal;
+        display: grid;
+        grid-template: "gutter editor";
+        grid-template-columns: 1fr 100%;
+      }
+      .editor textarea {
+        font-size: inherit;
+        font-family: inherit;
+        grid-area: editor;
+        border: none;
+        background-color: inherit;
+      }
+      .editor-gutter {
+        background-color: #CCCC;
+        grid-area: gutter;
+      }
+      .editor-lines {
+        list-style: none;
+        margin: 0;
+        padding: 0 5px;
+        font-size: inherit;
+        line-height: inherit;
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SimplyFlow two-way databinding test</h1>
+    <p>Editor:</p>
+    <div id="editor" class="editor">
+      <div id="gutter" class="editor-gutter"></div>
+      <textarea id="editorInner">
+        Start with a few lines
+        like this
+        and some more
+      </textarea>
+    </div>
+    <script src="../../dist/simply.flow.js"></script>
+    <script>
+      const editor = document.getElementById('editor')
+      const editorContent = document.getElementById('editorInner')
+      const state = simply.state.signal({})
+      const demo = simply.state.domSignal(editorContent)
+      const gutter = document.getElementById('gutter')
+
+      simply.state.effect(() => {
+        state.content = demo.value
+        state.linecount = demo.value.split("\n").length
+      })
+
+      simply.state.effect(() => {
+        updateLines(editor, state.linecount)
+      })
+
+      function updateLines(container, lines) {
+        let linesHTML = '<ul class="editor-lines">'
+        for (let i=1; i<=lines; i++) {
+          linesHTML += '<li>'+i+'</li>'
+        }
+        linesHTML += '</ul>'
+        gutter.innerHTML = linesHTML
+      }
+    </script>
+  </body>
+</html>
