@@ -324,6 +324,19 @@ function domListen(el, signal) {
         })
         observers.set(el, observer)
         //@TODO: unregister the observer when el is removed from the dom (after a timeout)
+        if (el.matches('input, textarea, select')) {
+            let prevValue = el.value
+            el.addEventListener('change', (evt) => {
+                notifySet(signal, makeContext('value', { was: prevValue, now: el.value }))
+                prevValue = el.value
+            })
+            if (el.matches('input, textarea')) {
+                el.addEventListener('input', (evt) => {
+                    notifySet(signal, makeContext('value', { was: prevValue, now: el.value }))
+                    prevValue = el.value
+                })
+            }
+        }
     }
 }
 
