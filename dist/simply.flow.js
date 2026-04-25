@@ -274,6 +274,19 @@
         attributesOldValue: true
       });
       observers.set(el, observer);
+      if (el.matches("input, textarea, select")) {
+        let prevValue = el.value;
+        el.addEventListener("change", (evt) => {
+          notifySet(signal2, makeContext("value", { was: prevValue, now: el.value }));
+          prevValue = el.value;
+        });
+        if (el.matches("input, textarea")) {
+          el.addEventListener("input", (evt) => {
+            notifySet(signal2, makeContext("value", { was: prevValue, now: el.value }));
+            prevValue = el.value;
+          });
+        }
+      }
     }
   }
   function makeContext(property, change) {
