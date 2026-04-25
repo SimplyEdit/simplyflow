@@ -5,7 +5,8 @@
     <link rel="stylesheet" href="./style.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SimplyFlow editor with domsignal</title>
-    <link href="prism.css" rel="stylesheet" />
+    <!-- link href="prism.css" rel="stylesheet" / -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/prismjs/prism-themes/themes/prism-cb.css">
     <style>
       .editor {
         font-family: monospace;
@@ -14,7 +15,11 @@
         display: grid;
         grid-template: "gutter editor";
         grid-template-columns: 1fr 100%;
+        gap: 3px;
         tab-size: 4;
+        background-color: #333;
+        border-radius: 5px;
+        overflow: hidden;
       }
       pre[class*="language-"],
       .editor-highlight,
@@ -30,11 +35,15 @@
         tab-size: inherit;
         white-space: pre;
       }
+      .editor textarea:focus {
+        outline: none;
+      }
       .editor-gutter {
-        background-color: #CCCC;
+        background-color: #444;
         grid-area: gutter;
         padding: 0 5px;
         text-align: right;
+        color: #CCC;
       }
       .editor-lines {
         margin: 0;
@@ -46,6 +55,12 @@
         background: transparent;
         color: transparent;
         caret-color: red;
+      }
+      pre[class*="language-"],
+      .editor textarea,
+      .editor-gutter {
+        padding-top: 3px;
+        padding-bottom: 3px;
       }
     </style>
     <script src="prism.js" data-manual></script>
@@ -61,7 +76,7 @@
 <style>
 .foo {
   color: red;
-|
+}
 </style>
 <script>
 function bar() {
@@ -96,6 +111,16 @@ function bar() {
         }, (_, i) => i).join("\n")
       }
 
+      editorContent.addEventListener('keydown', function(evt) {
+        if (evt.key=='Tab') {
+          let startPos = editorContent.selectionStart
+          editorContent.value = editorContent.value.substring(0, startPos) + "\t" + editorContent.value.substring(startPos)
+          editorContent.selectionStart = startPos + 1
+          editorContent.selectionEnd = editorContent.selectionStart
+          evt.preventDefault()
+          evt.target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      })
     </script>
   </body>
 </html>
