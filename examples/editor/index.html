@@ -204,25 +204,28 @@ function bar() {
             case 'Tab':
               if (evt.shiftKey) {
                 if (state.block) {
-                  outdentCode(editorContent, state.block.start, state.block.end)
+                  blockChange(editorContent, state.block.start, state.block.end, outdentCode)
                 }
               } else if (state.block) {
-                indentCode(editorContent, state.block.start, state.block.end)
+                blockChange(editorContent, state.block.start, state.block.end, indentCode)
               } else {
                 insertTab(editorContent, editorContent.selectionStart, editorContent.selectionEnd)
               }
-              evt.preventDefault()
-              evt.target.dispatchEvent(new Event('input', { bubbles: true }));
+              fireInput(evt)
               break
             case '/':
               if (evt.ctrlKey) {
-                toggleBlockComments(editorContent, state.block.start, state.block.end)
-                evt.preventDefault()
-                evt.target.dispatchEvent(new Event('input', { bubbles: true }));
+                blockChange(editorContent, state.block.start, state.block.end, toggleBlockComments)
               }
+              fireInput(evt)
               break
         }
       })
+
+      function fireInput(evt) {
+        evt.preventDefault()
+        evt.target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
 
       function insertTab(textarea, start, end) {
         textarea.value = textarea.value.substring(0, start) + "\t" + textarea.value.substring(end)
@@ -230,21 +233,27 @@ function bar() {
         textarea.selectionEnd = textarea.selectionStart
       }
 
-      function indentCode(textarea, start, end) {
+      function blockChange(textarea, start, end, fn) {
         const block = state.lines.slice(start, end)
+        let outblock, outcount;
+        [ outblock, outcount ] = fn(block)
+        console.log(outblock, outcount)
+        const selection = { start: state.selection.start, end: state.selection.end}
+        textarea.value = state.lines.slice(0, start).concat(outblock).concat(state.lines.slice(end)).join("\n")
+        textarea.selectionStart = selection.start
+        textarea.selectionEnd = selection.end + outcount
+      }
+
+      function indentCode(block) {
         let count = 0
         const indented = block.map(line => {
           count++ //inserted characters
           return "\t"+line
         })
-        const selection = { start: state.selection.start, end: state.selection.end}
-        textarea.value = state.lines.slice(0, start).concat(indented).concat(state.lines.slice(end)).join("\n")
-        textarea.selectionStart = selection.start
-        textarea.selectionEnd = selection.end + count
+        return [ indented, count ]
       }
 
-      function outdentCode(textarea, start, end) {
-        const block = state.lines.slice(start, end)
+      function outdentCode(block) {
         let count = 0
         const outdented = block.map(line => {
           if (line[0]==="\t") {
@@ -253,27 +262,19 @@ function bar() {
           }
           return line
         })
-        const selection = { start: state.selection.start, end: state.selection.end}
-        textarea.value = state.lines.slice(0, start).concat(outdented).concat(state.lines.slice(end)).join("\n")
-        textarea.selectionStart = selection.start
-        textarea.selectionEnd = selection.end - count
+        return [ outdented, count ]
       }
 
-      function toggleBlockComments(textarea, start, end) {
-        let block = state.lines.slice(start, end)
+      function toggleBlockComments(block) {
         if (block[0].substring(0,3)=="//\t") {
-          [block, count] = uncommentBlock(block)
+          return uncommentBlock(block)
         } else {
-          [block, count] = commentBlock(block)
+          return commentBlock(block)
         }
-        const selection = { start: state.selection.start, end: state.selection.end}
-        textarea.value = state.lines.slice(0, start).concat(block).concat(state.lines.slice(end)).join("\n")
-        textarea.selectionStart = selection.start
-        textarea.selectionEnd = selection.end + count
       }
 
       function commentBlock(block) {
-        count = 0
+        let count = 0
         block = block.map(line => {
           count += 3
           return "//\t" + line
