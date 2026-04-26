@@ -205,19 +205,21 @@ function bar() {
               if (evt.shiftKey) {
                 if (state.block) {
                   blockChange(editorContent, state.block.start, state.block.end, outdentCode)
+                  fireInput(evt)
                 }
               } else if (state.block) {
                 blockChange(editorContent, state.block.start, state.block.end, indentCode)
+                fireInput(evt)
               } else {
                 insertTab(editorContent, editorContent.selectionStart, editorContent.selectionEnd)
+                fireInput(evt)
               }
-              fireInput(evt)
               break
             case '/':
               if (evt.ctrlKey) {
                 blockChange(editorContent, state.block.start, state.block.end, toggleBlockComments)
+                fireInput(evt)
               }
-              fireInput(evt)
               break
         }
       })
@@ -237,7 +239,6 @@ function bar() {
         const block = state.lines.slice(start, end)
         let outblock, outcount;
         [ outblock, outcount ] = fn(block)
-        console.log(outblock, outcount)
         const selection = { start: state.selection.start, end: state.selection.end}
         textarea.value = state.lines.slice(0, start).concat(outblock).concat(state.lines.slice(end)).join("\n")
         textarea.selectionStart = selection.start
@@ -257,7 +258,7 @@ function bar() {
         let count = 0
         const outdented = block.map(line => {
           if (line[0]==="\t") {
-            count++ //removed characters
+            count-- //removed characters
             return line.substring(1)
           }
           return line
