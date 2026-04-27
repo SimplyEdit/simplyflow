@@ -43,12 +43,12 @@ let options = {
 simply.state.effect(() => {
   source = state.content
   if (window.jslint) {
-    result = jslint.jslint(source, options, options.globals);
-    console.log('linter',result)
-    if (result.ok) {
-      clearWarnings()
-    } else {
-      setWarnings(result)
+    clearWarnings()
+    try {
+      result = eval(source)
+    } catch(err) {
+      console.log(err.message, err.lineNumber)
+      setWarning(err.message, err.lineNumber)
     }
   }
 })
@@ -59,15 +59,13 @@ function clearWarnings() {
 }
 
 const warningSymbol = '⚠'
-function setWarnings(lint) {
-  for (const warning of lint.warnings) {
-    let warn = document.createElement('abbr')
-    warn.innerHTML = warningSymbol
-    warn.className = 'editor-warning'
-    warn.setAttribute('style', "--line:"+warning.line+";")
-    warn.title=warning.message
-    warnings.appendChild(warn)
-  }
+function setWarning(message,line) {
+  let warn = document.createElement('abbr')
+  warn.innerHTML = warningSymbol
+  warn.className = 'editor-warning'
+  warn.setAttribute('style', "--line:"+line+";")
+  warn.title=message
+  warnings.appendChild(warn)
 }
 
 /* selection signal */
