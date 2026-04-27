@@ -1,0 +1,87 @@
+.editor {
+  font-family: monospace;
+  font-size: 1rem;
+  line-height: normal;
+  display: grid;
+  grid-template: "scroll" "status";
+  grid-template-rows: 100fr 1fr;
+  tab-size: 4;
+  background-color: #333;
+  color: white;
+  border-radius: 5px;
+  overflow: hidden;
+  width: 80vw;
+  max-height: 80vh;
+}
+.editor-scroll {
+  display: grid;
+  grid-template: "gutter editor";
+  grid-template-columns: 1fr 100fr;
+  gap: 3px;
+  overflow: auto;
+  min-height: 10rem;
+  height: 100%;
+  width: 100%;
+}
+pre[class*="language-"],
+.editor-highlight,
+.editor textarea {
+  font-size: inherit;
+  font-family: inherit;
+  grid-area: editor;
+  border: none;
+  background-color: inherit;
+  margin: 0;
+  padding: 0;
+  line-height: inherit;
+  tab-size: inherit;
+  white-space: pre;
+}
+.editor textarea:focus {
+  outline: none;
+}
+.editor-gutter {
+  background-color: #444;
+  grid-area: gutter;
+  padding: 0 5px 0 30px;
+  text-align: right;
+  color: #CCC;
+}
+.editor-warnings {
+  grid-area: gutter;
+  padding: 0 5px;
+  position: relative;
+}
+.editor-warning {
+  position: absolute;
+  top: calc(1.2rem * (var(--line) - 1) + 3px);
+  left: 10px;
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1rem;
+}
+.editor-lines {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+.editor textarea {
+  background: transparent;
+  color: transparent;
+  caret-color: white;
+}
+pre[class*="language-"],
+.editor textarea,
+.editor-gutter {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.editor-status {
+  grid-area: status;
+  font-size: 0.75em;
+}
+.editor-cursor {
+  color: #AAA;
+  margin: 3px;
+}
