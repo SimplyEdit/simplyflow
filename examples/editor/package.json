@@ -1,0 +1,14 @@
+{
+    "name": "SimplyFlow code editor",
+    "scripts": {
+        "build": "esbuild acorn.mjs --bundle --outfile=acorn.js --minify",
+        "watch": "watch ."
+    },
+    "devDependencies": {
+        "esbuild": "^0.28.0",
+        "watch": "^1.0.2"
+    },
+    "dependencies": {
+        "acorn": "^8.16.0"
+    }
+}

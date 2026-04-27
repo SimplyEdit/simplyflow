@@ -5,6 +5,8 @@ const gutter = document.getElementById('gutter')
 
 const state = simply.state.signal({})
 const demo = simply.dom.signal(editorContent)
+const warnings = document.getElementById('warnings')
+const warningSymbol = '⚠'
 
 /* content and lines signals */
 simply.state.effect(() => {
@@ -41,24 +43,20 @@ let options = {
   globals: ["caches", "indexedDb", "console"]
 }
 simply.state.effect(() => {
-  source = state.content
-  if (window.jslint) {
     clearWarnings()
     try {
-      result = eval(source)
+      result = acorn.parse(state.content)
+      console.log(result)
     } catch(err) {
-      console.log(err.message, err.lineNumber)
-      setWarning(err.message, err.lineNumber)
+      console.log(err.message, err.loc.line)
+      setWarning(err.message, err.loc.line)
     }
-  }
 })
 
-const warnings = document.getElementById('warnings')
 function clearWarnings() {
   warnings.innerHTML = ''
 }
 
-const warningSymbol = '⚠'
 function setWarning(message,line) {
   let warn = document.createElement('abbr')
   warn.innerHTML = warningSymbol
