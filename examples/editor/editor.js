@@ -27,30 +27,29 @@ function updateLines(container, lines) {
 
 /* syntax highlighting */
 simply.state.effect(() => {
-  highlight.innerHTML = Prism.highlight(state.content, Prism.languages.javascript, 'javascript')
+  let content = state.content
+  if (window.Prism) {
+    content = Prism.highlight(state.content, Prism.languages.javascript, 'javascript')
+  }
+  highlight.innerHTML = content
 })
 
 /* linting */
-let options = {
-  browser: true,
-  for: true,
-  single: true,
-  this: true,
-  unordered: true,
-  white: true,
-  devel: true,
-  subscript: true,
-  globals: ["caches", "indexedDb", "console"]
-}
 simply.state.effect(() => {
-    clearWarnings()
+  clearWarnings()
+  if (window.acorn) {
     try {
       result = acorn.parse(state.content)
-      console.log(result)
     } catch(err) {
-      console.log(err.message, err.loc.line)
       setWarning(err.message, err.loc.line)
     }
+  } else {
+    try {
+      eval(state.content)
+    } catch(err) {
+      setWarning(err.message, err.lineNumber)
+    }
+  }
 })
 
 function clearWarnings() {
