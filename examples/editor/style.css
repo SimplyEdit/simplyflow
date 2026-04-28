@@ -2,16 +2,12 @@
   font-family: monospace;
   font-size: 1rem;
   line-height: normal;
-  display: grid;
-  grid-template: "scroll" "status";
-  grid-template-rows: 100fr 1fr;
   tab-size: 4;
   background-color: #333;
   color: white;
   border-radius: 5px;
   overflow: hidden;
   width: 80vw;
-  max-height: 80vh;
 }
 .editor-scroll {
   display: grid;
@@ -19,8 +15,8 @@
   grid-template-columns: 1fr 100fr;
   gap: 3px;
   overflow: auto;
-  min-height: 10rem;
-  height: 100%;
+  min-height: 5rem;
+  max-height: 80vh;
   width: 100%;
 }
 pre[class*="language-"],
