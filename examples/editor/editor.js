@@ -16,13 +16,11 @@ simply.state.effect(() => {
 
 /* line gutter */
 simply.state.effect(() => {
-  updateLines(editor, state.lines.length)
+  updateLines(editor, state.lines)
 })
 
 function updateLines(container, lines) {
-  gutter.innerHTML = Array.from({
-    length: lines
-  }, (_, i) => i+1).join("\n")
+  gutter.innerHTML = Array.from(lines, (_, i) => i+1).join("\n")
 }
 
 /* syntax highlighting */
@@ -45,7 +43,7 @@ simply.state.effect(() => {
     }
   } else {
     try {
-      eval(state.content)
+      eval(state.content) // new Function is unreliable
     } catch(err) {
       setWarning(err.message, err.lineNumber)
     }
@@ -57,12 +55,7 @@ function clearWarnings() {
 }
 
 function setWarning(message,line) {
-  let warn = document.createElement('abbr')
-  warn.innerHTML = warningSymbol
-  warn.className = 'editor-warning'
-  warn.setAttribute('style', "--line:"+line+";")
-  warn.title=message
-  warnings.appendChild(warn)
+  warnings.innerHTML = `<span class="editor-warning" style="--line: ${line}" title="${message}">⚠</span>`
 }
 
 /* selection signal */
@@ -95,7 +88,7 @@ simply.state.effect(() => {
   if (state.selection?.start!=state.selection?.end) {
     let lines = ''
     if (state.block) {
-      lines = state.block.end - state.block.start
+      lines = state.block.end - state.block.start + 1
       if (lines===1) {
         lines += ' line, '
       } else {
