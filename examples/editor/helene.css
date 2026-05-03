@@ -1,0 +1,87 @@
+.helene {
+  font-family: monospace;
+  font-size: 1rem;
+  line-height: normal;
+  tab-size: 4;
+  background-color: #333;
+  color: white;
+  border-radius: 5px;
+  overflow: hidden;
+  width: 80vw;
+}
+.helene-scroll {
+  display: grid;
+  grid-template: "gutter editor";
+  grid-template-columns: 1fr 100fr;
+  gap: 3px;
+  overflow: auto;
+  min-height: 5rem;
+  max-height: 80vh;
+  width: 100%;
+
+.helene pre[class*="language-"],
+.helene-highlight,
+.helene-content,
+.helene textarea {
+  font-size: inherit;
+  font-family: inherit;
+  grid-area: editor;
+  border: none;
+  background-color: inherit;
+  margin: 0;
+  padding: 0;
+  line-height: inherit;
+  tab-size: inherit;
+  white-space: pre;
+}
+.helene-content:focus,
+.helene textarea:focus {
+  outline: none;
+}
+.helene-gutter {
+  background-color: #444;
+  grid-area: gutter;
+  padding: 0 5px 0 30px;
+  text-align: right;
+  color: #CCC;
+}
+.helene pre[class*="language-"],
+.helene-content,
+.helene textarea,
+.helene-gutter {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.helene-warnings {
+  grid-area: gutter;
+  padding: 0 5px;
+  position: relative;
+}
+.helene-warning {
+  position: absolute;
+  top: calc(1.2rem * (var(--line) - 1) + 3px);
+  left: 10px;
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1rem;
+}
+.helene-lines {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: pre;
+}
+.helene-content,
+.helene textarea {
+  background: transparent;
+  color: transparent;
+  caret-color: white;
+}
+.helene-status {
+  grid-area: status;
+  font-size: 0.75em;
+}
+.helene-cursor {
+  color: #AAA;
+  margin: 3px;
+}

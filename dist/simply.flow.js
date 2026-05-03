@@ -467,7 +467,7 @@
   }
   var seen = /* @__PURE__ */ new WeakMap();
   function innerUnwrap(ob) {
-    if (!ob || typeof ob !== "object" || seen.has(ob)) {
+    if (!ob || typeof ob !== "object" || ob instanceof HTMLElement || seen.has(ob)) {
       return;
     }
     seen.set(ob, true);
