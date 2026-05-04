@@ -18,7 +18,7 @@
   min-height: 5rem;
   max-height: 80vh;
   width: 100%;
-
+}
 .helene pre[class*="language-"],
 .helene-highlight,
 .helene-content,
@@ -62,7 +62,7 @@
 }
 .helene-warning {
   position: absolute;
-  top: calc(1.2rem * (var(--line) - 1) + 3px);
+  top: calc(1.2rem * (var(--line) - 1));
   left: 10px;
   font-size: 1.4rem;
   cursor: pointer;

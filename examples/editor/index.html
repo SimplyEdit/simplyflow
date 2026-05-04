@@ -21,7 +21,7 @@
 </div>
         </textarea>
     <script type="module">
-      import helene, {lines, warnings, parseJavascript, parseHTML, parseCSS} from './editor.mjs'
+      import helene, {lines, warnings, cursor, parseJavascript, parseHTML, parseCSS} from './editor.mjs'
 
       const editor = helene({
         textarea: document.getElementById('editorInner'),
@@ -29,6 +29,7 @@
       })
       editor.addEffect(lines())
       editor.addEffect(warnings())
+      editor.addEffect(cursor())
       switch(editor.state.options.language) {
         case 'javascript':
           editor.addEffect(parseJavascript())

@@ -59,6 +59,7 @@ export function heleneForWeb(...options) {
 	const editor = new Helene(...options)
 	editor.addEffect(lines())
 	editor.addEffect(warnings())
+	editor.addEffect(cursor())
 	switch(editor.state.options.language) {
 		case 'javascript':
 			editor.addEffect(parseJavascript())
@@ -115,15 +116,67 @@ export function lines(options) {
 }
 
 export function selection(options) {
-	this.state.selection = null
-	this.textarea.addEventListener('selectionchange', (evt) => {
-		this.state.selection = {
-			start: this.textarea.selectionStart,
-			end: this.textarea.selectionEnd,
-			before: this.textarea.value.substring(0, this.textarea.selectionStart).split("\n"),
-			after: this.textarea.value.substring(this.textarea.selectionEnd).split("\n")
+	return function() {
+		this.state.selection = null
+		this.textarea.addEventListener('selectionchange', (evt) => {
+			this.state.selection = {
+				start: this.textarea.selectionStart,
+				end: this.textarea.selectionEnd,
+				before: this.textarea.value.substring(0, this.textarea.selectionStart).split("\n"),
+				after: this.textarea.value.substring(this.textarea.selectionEnd).split("\n")
+			}
+		})
+		return () => {
+			const lines = {
+				start: this.state.selection?.before.length-1
+			}
+			lines.end = this.state.lines.length - this.state.selection?.after.length
+			if (lines.start == lines.end) {
+				this.state.block = null
+			} else {
+				this.state.block = lines
+			}
 		}
-	})
+	}
+}
+
+export function cursor(options) {
+	return function() {
+		if (!this.state.selection) {
+			this.addEffect(selection(options))
+		}
+		this.cursor = document.createElement('div')
+		this.cursor.classList.add('helene-cursor')
+		this.status.appendChild(this.cursor)
+		this.state.cursor = {
+		  line: 1,
+		  column: 1
+		}
+		simply.state.effect(() => {
+		  if (this.state.selection?.before) {
+		    this.state.cursor = {
+		      line: this.state.selection.before.length || 1,
+		      column: this.state.selection.before[this.state.selection.before.length-1]?.length+1
+		    }
+		  }
+		})
+		simply.state.effect(() => {
+		  if (this.state.selection?.start!=this.state.selection?.end) {
+		    let lines = ''
+		    if (this.state.block) {
+		      lines = this.state.block.end - this.state.block.start + 1
+		      if (lines===1) {
+		        lines += ' line, '
+		      } else {
+		        lines += ' lines, '
+		      }
+		    }
+		    this.cursor.innerHTML = lines + (this.state.selection.end - this.state.selection.start) + ' characters selected'
+		  } else {
+		    this.cursor.innerHTML = 'Line '+this.state.cursor.line+', column '+this.state.cursor.column
+		  }
+		})
+	}
 }
 
 export function highlight(options) {
@@ -201,7 +254,6 @@ function domWalk(htmlStr, callback) {
 			return line
 		}
 	}
-	// TODO: turn tagStack into array [{tag,lineNumber}]
 	const innerWalk = function(el) {
 		lineNumber = findTag(el.tagName)
 		callback(el, lineNumber)
@@ -242,7 +294,6 @@ export function parseHTML(options={}) {
 				}
 				// now check for script tags
 				domWalk(this.textarea.value, (el, lineNumber) => {
-					console.log(el.tagName, lineNumber)
 					if (el.tagName==='SCRIPT' && !el.src && (!el.type || el.type=='javascript') && el.innerText) {
 						this.clearWarnings('javascript'+lineNumber)
 						if (globalThis.acorn) {
