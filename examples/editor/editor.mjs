@@ -49,12 +49,28 @@ export class Helene
 			}
 		}
 	}
-
-
 }
 
 export default function helene(...options) {
 	return new Helene(...options)
+}
+
+export function heleneForWeb(...options) {
+	const editor = new Helene(...options)
+	editor.addEffect(lines())
+	editor.addEffect(warnings())
+	switch(editor.state.options.language) {
+		case 'javascript':
+			editor.addEffect(parseJavascript())
+		break;
+		case 'html':
+			editor.addEffect(parseHTML())
+		break;
+		case 'css':
+			editor.addEffect(parseCSS())
+		break;
+	} 
+	return editor
 }
 
 export function warnings(options) {
@@ -130,8 +146,11 @@ export function highlight(options) {
 	}
 }
 
-export function parseJavascript(options) {
+export function parseJavascript(options={}) {
 	// will be called on helene instance, so short arrow syntax will bind this correctly
+	options = Object.assign({
+		validate: true
+	}, options)
 	return function() {
 		return () => {
 			if (this.warnings && options.validate) {
@@ -160,25 +179,91 @@ export function parseJavascript(options) {
 	}
 }
 
-export function parseHTML(options) {
+function domWalk(htmlStr, callback) {
+    const dom = globalThis.document.createRange().createContextualFragment(htmlStr)
+	const lines = htmlStr.split("\n")
+	let lineNumber = 0
+	const tagRE = /^[a-zA-Z][a-zA-Z\-]*/
+	const tagStack = lines.map(l => l.split('<').map(s => tagRE.exec(s)?.[0]).filter(Boolean))
+	let alltags = []
+	for (let line=0; line<tagStack.length; line++) {
+		for (const tag of tagStack[line]) {
+			alltags.push({tag, line})
+		}
+	}
+	const findTag = function(tag) {
+		while (alltags.length && alltags[0]?.tag.toUpperCase()!==tag) {
+			alltags = alltags.slice(1)
+		}
+		if (alltags[0]?.tag) {
+			const line = alltags[0].line
+			alltags = alltags.slice(1)
+			return line
+		}
+	}
+	// TODO: turn tagStack into array [{tag,lineNumber}]
+	const innerWalk = function(el) {
+		lineNumber = findTag(el.tagName)
+		callback(el, lineNumber)
+		if (el.childElements) {
+			for (const child of el.childElements) {
+				innerWalk(child)
+			}
+		}
+	}
+	for (const child of dom.children) {
+		innerWalk(child)
+	}
+}
+
+export function parseHTML(options={}) {
+	options = Object.assign({
+		validate: true
+	}, options)
 	return function() {
 		return () => {
 			if (this.warnings && options.validate) {
 				this.clearWarnings('html')
 			}
-			const parser = new DOMParser()
-			//TODO: support full html as an option
-			this.parsedHTML = parser.parseFromString(this.textarea.value, 'text/html')?.body
+			const fragment = globalThis.document.createRange().createContextualFragment(this.textarea.value)
+			this.parsedHTML = document.createElement('div')
+			this.parsedHTML.appendChild(fragment)
 			if (this.warnings && options.validate) {
 				const constructedLines = this.parsedHTML.innerHTML.split("\n")
 				let count = 0
 				for (const line of constructedLines) {
 					if (line != this.state.lines.current[count]) {
-						this.addWarning('html', 'Invalid HTML', count+1)
-						return
+						if (!this.state.lines.current[count].match(/\<script\b/i)) {
+							this.addWarning('html', 'Invalid HTML', count+1)
+							return
+						}
 					}
 					count++
 				}
+				// now check for script tags
+				domWalk(this.textarea.value, (el, lineNumber) => {
+					console.log(el.tagName, lineNumber)
+					if (el.tagName==='SCRIPT' && !el.src && (!el.type || el.type=='javascript') && el.innerText) {
+						this.clearWarnings('javascript'+lineNumber)
+						if (globalThis.acorn) {
+							try {
+								acorn.parse(el.innerText)
+							} catch(err) {
+								if (this.warnings && options.validate) {
+									this.addWarning('javascript'+lineNumber, err.message, lineNumber + err.loc.line)
+								}
+							}
+						} else {
+							try {
+								eval(el.innerText) // new Function is unreliable
+							} catch(err) {
+								if (this.warnings && options.validate) {
+									this.addWarning('javascript'+lineNumber, err.message, lineNumber + err.lineNumber)
+								}
+							}
+						}
+					}
+				})
 			} else if (options.validate) {
 				console.log('helene: warnings effect not loaded, so parseHTML cannot show parse errors')
 			}
@@ -186,7 +271,10 @@ export function parseHTML(options) {
 	}
 }
 
-export function parseCSS(options) {
+export function parseCSS(options={}) {
+	options = Object.assign({
+		validate: true
+	}, options)
 	return function() {
 		return () => {
 			if (this.warnings && options.validate) {
