@@ -16,19 +16,30 @@
     <h1>SimplyFlow code editor with domSignal</h1>
     <p>Editor:</p>
         <textarea id="editorInner" data-helene-language="javascript" spellcheck="false">
-function foo() {
-  bar = 'bar'
-  // comments
-
-}
+<div>
+  <a href="#">foo
+</div>
         </textarea>
     <script type="module">
-      import helene, {parseJavascript} from './editor.mjs'
+      import helene, {lines, warnings, parseJavascript, parseHTML, parseCSS} from './editor.mjs'
 
       const editor = helene({
-        textarea: document.getElementById('editorInner')
+        textarea: document.getElementById('editorInner'),
+        language: 'html'
       })
-      editor.addEffect(parseJavascript)
+      editor.addEffect(lines())
+      editor.addEffect(warnings())
+      switch(editor.state.options.language) {
+        case 'javascript':
+          editor.addEffect(parseJavascript())
+          break;
+        case 'html':
+          editor.addEffect(parseHTML())
+          break;
+        case 'css':
+          editor.addEffect(parseCSS())
+          break;
+      } 
       globalThis.editor = editor
     </script>
   </body>

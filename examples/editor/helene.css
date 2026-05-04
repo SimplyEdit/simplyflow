@@ -1,7 +1,7 @@
 .helene {
   font-family: monospace;
   font-size: 1rem;
-  line-height: normal;
+  line-height: 1.2rem;
   tab-size: 4;
   background-color: #333;
   color: white;
@@ -51,11 +51,14 @@
 .helene-gutter {
   padding-top: 3px;
   padding-bottom: 3px;
+  position: relative;
 }
 .helene-warnings {
-  grid-area: gutter;
   padding: 0 5px;
-  position: relative;
+  position: absolute;
+  top: 3px;
+  left: 0;
+  z-index: 10;
 }
 .helene-warning {
   position: absolute;
