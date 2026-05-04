@@ -1,4 +1,4 @@
-import { signals, notifyGet, notifySet, makeContext } from './state.mjs'
+import { signals, signal as stateSignal, notifyGet, notifySet, makeContext } from './state.mjs'
 
 const domSignalHandler = {
     get: (target, property, receiver) => {
@@ -9,20 +9,18 @@ const domSignalHandler = {
             return true
         }
         const value = target?.[property]
-        domListen(target, receiver)
         notifyGet(receiver, property)
         if (typeof value === 'function') {
             return value.bind(target) // make sure element functions are not linked to the proxy
         }
         if (value && typeof value == 'object') {
-            return signal(value)
+            return stateSignal(value)
         }
         return value
     },
     has: (target, property) => {
         let receiver = signals.get(target)
         if (receiver) {
-            domListen(target, receiver)
             notifyGet(receiver, property)
         }
         return Object.hasOwn(target, property)
@@ -30,7 +28,6 @@ const domSignalHandler = {
     ownKeys: (target) => {
         let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
         if (receiver) {
-            domListen(target, receiver)
             notifyGet(receiver, iterate)
         }
         return Reflect.ownKeys(target)
@@ -43,6 +40,7 @@ export function signal(el) {
     }
     if (!signals.has(el)) {
         signals.set(el, new Proxy(el, domSignalHandler))
+        domListen(el, signals.get(el))
     }
     return signals.get(el)
 }
