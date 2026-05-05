@@ -20,7 +20,7 @@
   <a href="#">foo
 </div>
         </textarea>
-    <script type="module">
+    <!-- script type="module">
       import helene, {lines, warnings, cursor, parseJavascript, parseHTML, parseCSS} from './editor.mjs'
 
       const editor = helene({
@@ -42,6 +42,12 @@
           break;
       } 
       globalThis.editor = editor
+    </script -->
+    <script type="module">
+      import helene from './helene.mjs'
+      const editor = helene({
+        textarea: document.getElementById('editorInner')
+      })
     </script>
   </body>
 </html>
