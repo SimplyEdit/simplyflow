@@ -14,18 +14,26 @@
   grid-template: "gutter editor";
   grid-template-columns: 1fr 100fr;
   gap: 3px;
-  overflow: auto;
+  overflow-y: auto;
   min-height: 5rem;
   max-height: 80vh;
   width: 100%;
+}
+.helene-pane {
+  grid-area: editor;
+  display:grid;
+  grid-template: "pane";
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
 }
 .helene pre[class*="language-"],
 .helene-highlight,
 .helene-content,
 .helene textarea {
+  grid-area: pane;
   font-size: inherit;
   font-family: inherit;
-  grid-area: editor;
   border: none;
   background-color: inherit;
   margin: 0;
@@ -33,6 +41,7 @@
   line-height: inherit;
   tab-size: inherit;
   white-space: pre;
+  overflow: visible;
 }
 .helene-content:focus,
 .helene textarea:focus {
@@ -51,7 +60,6 @@
 .helene-gutter {
   padding-top: 3px;
   padding-bottom: 3px;
-  position: relative;
 }
 .helene-warnings {
   padding: 0 5px;

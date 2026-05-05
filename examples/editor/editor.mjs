@@ -11,7 +11,10 @@ export class Helene
 		const decoration = `<div class="helene">
 		<div class="helene-scroll">
 			<div class="helene-gutter"></div>
-			<textarea></textarea>
+			<div class="helene-pane">
+				<pre class="helene-highlight"></pre>
+				<textarea></textarea>
+			</div>
 		</div>
 		<div class="helene-status">
 		</div>
@@ -28,16 +31,19 @@ export class Helene
 		options.textarea.classList.add('helene-content')
 		options.textarea.parentElement.insertBefore(this.editor, options.textarea)
 		this.scroll = this.editor.querySelector('.helene-scroll')
-		this.scroll.replaceChild(options.textarea, this.scroll.querySelector('textarea'))
+		this.viewpane = this.editor.querySelector('.helene-pane')
+		this.viewpane.replaceChild(options.textarea, this.editor.querySelector('textarea'))
 		this.gutter = this.editor.querySelector('.helene-gutter')
 		this.status = this.editor.querySelector('.helene-status')
+		this.highlight = this.editor.querySelector('.helene-highlight')
 		this.state = simply.state.signal({
 			options
 		})
 		this.addEffect(highlight(options)) // highlight makes the text visible and autogrows the editor
 	}
 
-	addEffect(fn, resultState) {
+	addEffect(fn, resultState)
+	{
 		const effect = fn.apply(this)
 		if (effect) {
 			if (typeof effect !== 'function') {
@@ -51,11 +57,13 @@ export class Helene
 	}
 }
 
-export default function helene(...options) {
+export default function helene(...options)
+{
 	return new Helene(...options)
 }
 
-export function heleneForWeb(...options) {
+export function heleneForWeb(...options)
+{
 	const editor = new Helene(...options)
 	editor.addEffect(lines())
 	editor.addEffect(warnings())
@@ -74,7 +82,8 @@ export function heleneForWeb(...options) {
 	return editor
 }
 
-export function warnings(options) {
+export function warnings(options)
+{
 	return function() {
 		this.warnings = document.createElement('div')
 		this.warnings.classList.add('helene-warnings')
@@ -101,7 +110,8 @@ export function warnings(options) {
 	}
 }
 
-export function lines(options) {
+export function lines(options)
+{
 	return function() {
 		this.state.lines = simply.state.effect(() => {
 			return this.textarea.value.split("\n")
@@ -115,7 +125,8 @@ export function lines(options) {
 	}
 }
 
-export function selection(options) {
+export function selection(options)
+{
 	return function() {
 		this.state.selection = null
 		this.textarea.addEventListener('selectionchange', (evt) => {
@@ -140,7 +151,8 @@ export function selection(options) {
 	}
 }
 
-export function cursor(options) {
+export function cursor(options)
+{
 	return function() {
 		if (!this.state.selection) {
 			this.addEffect(selection(options))
@@ -179,11 +191,9 @@ export function cursor(options) {
 	}
 }
 
-export function highlight(options) {
+export function highlight(options)
+{
 	return function() {
-		this.highlight = document.createElement('pre')
-		this.highlight.classList.add('helene-highlight')
-		this.scroll.insertBefore(this.highlight, this.scroll.firstChild)
 		if (options.language) {
 			this.highlight.classList.add(`language-${options.language}`)
 		} else {
@@ -199,7 +209,8 @@ export function highlight(options) {
 	}
 }
 
-export function parseJavascript(options={}) {
+export function parseJavascript(options={})
+{
 	// will be called on helene instance, so short arrow syntax will bind this correctly
 	options = Object.assign({
 		validate: true
@@ -232,7 +243,8 @@ export function parseJavascript(options={}) {
 	}
 }
 
-function domWalk(htmlStr, callback) {
+export function domWalk(htmlStr, callback)
+{
     const dom = globalThis.document.createRange().createContextualFragment(htmlStr)
 	const lines = htmlStr.split("\n")
 	let lineNumber = 0
@@ -268,7 +280,8 @@ function domWalk(htmlStr, callback) {
 	}
 }
 
-export function parseHTML(options={}) {
+export function parseHTML(options={})
+{
 	options = Object.assign({
 		validate: true
 	}, options)
@@ -322,7 +335,8 @@ export function parseHTML(options={}) {
 	}
 }
 
-export function parseCSS(options={}) {
+export function parseCSS(options={})
+{
 	options = Object.assign({
 		validate: true
 	}, options)
