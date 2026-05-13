@@ -530,20 +530,18 @@
         return true;
       }
       const value = target?.[property];
-      domListen(target, receiver);
       notifyGet(receiver, property);
       if (typeof value === "function") {
         return value.bind(target);
       }
       if (value && typeof value == "object") {
-        return signal2(value);
+        return signal(value);
       }
       return value;
     },
     has: (target, property) => {
       let receiver = signals.get(target);
       if (receiver) {
-        domListen(target, receiver);
         notifyGet(receiver, property);
       }
       return Object.hasOwn(target, property);
@@ -551,7 +549,6 @@
     ownKeys: (target) => {
       let receiver = signals.get(target);
       if (receiver) {
-        domListen(target, receiver);
         notifyGet(receiver, iterate);
       }
       return Reflect.ownKeys(target);
@@ -563,6 +560,7 @@
     }
     if (!signals.has(el)) {
       signals.set(el, new Proxy(el, domSignalHandler));
+      domListen(el, signals.get(el));
     }
     return signals.get(el);
   }
@@ -1429,7 +1427,7 @@
           let result = {};
           for (let key of Object.keys(this.state.options.columns)) {
             if (!this.state.options.columns[key]?.hidden) {
-              result[key] = input2[key];
+              result[key] = input2[key] ?? null;
             }
           }
           return result;
