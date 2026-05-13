@@ -1,4 +1,5 @@
-import { signal, domSignal, effect, batch, throttledEffect, clockEffect, trace, addTracer } from '../src/state.mjs'
+import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer } from '../src/state.mjs'
+import { signal as domSignal } from '../src/dom.mjs'
 
 class Foo {
 	#bar
