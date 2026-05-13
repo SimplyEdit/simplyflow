@@ -75,7 +75,6 @@
     },
     set: (target, property, value, receiver) => {
       value = value?.[Symbol.xRay] || value;
-      unwrap(value);
       let current = target[property];
       if (current !== value) {
         target[property] = value;
@@ -117,7 +116,6 @@
   };
   var signals = /* @__PURE__ */ new WeakMap();
   function signal(v) {
-    unwrap(v);
     if (v[Symbol.Signal]) {
       let target = v[Symbol.xRay];
       if (!signals.has(target)) {
