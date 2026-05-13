@@ -68,7 +68,7 @@ const signalHandler = {
     set: (target, property, value, receiver) => {
         value = value?.[Symbol.xRay] || value // unwraps signal
         //FIXME: if value contains child objects, these may be signals as well... so do this recursively
-        unwrap(value)
+        //unwrap(value)
         let current = target[property]
         if (current!==value) {
             target[property] = value
@@ -123,7 +123,7 @@ export const signals = new WeakMap()
  * to allow reactive functions to be triggered when signal values change.
  */
 export function signal(v) {
-    unwrap(v)
+    //unwrap(v)
     if (v[Symbol.Signal]) { // avoid wrapping a Signal inside a Signal
         let target = v[Symbol.xRay]
         if (!signals.has(target)) {
