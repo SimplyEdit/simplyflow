@@ -198,7 +198,7 @@ export function columns(options={}) {
 				let result = {}
 				for (let key of Object.keys(this.state.options.columns)) {
 					if (!this.state.options.columns[key]?.hidden) {
-						result[key] = input[key]
+						result[key] = input[key] ?? null
 					}
 				}
 				return result
