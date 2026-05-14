@@ -295,6 +295,23 @@ describe('effects', () => {
 		expect(bar.current).toBe('"Foo"')
 	})
 
+	it('still runs other effects inside untracked', () => {
+		let foo = signal({value: 'Foo'})
+		let baz = effect(() => {
+			return foo.value+'bar'
+		})
+		let bar = effect(() => {
+			return untracked(() => {
+				foo.value+='-foo'
+				return '"'+foo.value+'"'
+			})
+		})
+		expect(baz.current).toBe('Foo-foobar')
+		foo.value = 'Baz'
+		expect(bar.current).toBe('"Foo-foo"')
+		expect(baz.current).toBe('Bazbar')
+	})
+
 	it('throttledEffect', (done) => {
 		let foo = signal({ value: 1})
 		let count = 0
@@ -320,9 +337,9 @@ describe('effects', () => {
 					} finally {
 						done()
 					}
-				}, 100)
+				}, 200)
 			}
-		}, 100)
+		}, 200)
 	})
 
 	it('clockEffect', () => {
