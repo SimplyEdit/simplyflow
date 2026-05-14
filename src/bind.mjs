@@ -335,10 +335,7 @@ class SimplyBind
                     return t
                 }
             }
-            if (!matches && currentItem!==null && currentItem!==undefined) {
-                //FIXME: this doesn't run templates in lists where list entry is null
-                //which messes up the count
-                //
+            if (!matches) {
                 // no data-bind-match is set, so return this template
                 return t
             }

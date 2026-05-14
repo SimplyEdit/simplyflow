@@ -197,7 +197,7 @@ export function objectByTemplates(context)
             context.element.appendChild(clone)
             continue
         }
-        if (item.getAttribute[attribute+'-key']!=key) { 
+        if (item.getAttribute(attribute+'-key')!=key) { 
             // next item doesn't match key
             items.unshift(item) // put item back for next cycle
             let outOfOrderItem = context.element.querySelector(':scope > ['+attribute+'-key="'+key+'"]') //FIXME: escape key
