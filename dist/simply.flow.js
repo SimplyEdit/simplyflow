@@ -756,7 +756,7 @@
         context.element.appendChild(clone2);
         continue;
       }
-      if (item.getAttribute[attribute + "-key"] != key) {
+      if (item.getAttribute(attribute + "-key") != key) {
         items.unshift(item);
         let outOfOrderItem = context.element.querySelector(":scope > [" + attribute + '-key="' + key + '"]');
         if (!outOfOrderItem) {
@@ -1209,7 +1209,7 @@
             return t;
           }
         }
-        if (!matches && currentItem !== null && currentItem !== void 0) {
+        if (!matches) {
           return t;
         }
       };
