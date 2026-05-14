@@ -1,4 +1,4 @@
-import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer } from '../src/state.mjs'
+import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer, untracked } from '../src/state.mjs'
 import { signal as domSignal } from '../src/dom.mjs'
 
 class Foo {
@@ -283,6 +283,18 @@ describe('effects', () => {
 		},10)
 	})
 
+	it('can be decoupled from signals using untracked', () => {
+		let foo = signal({value: 'Foo'})
+		let bar = effect(() => {
+			return untracked(() => {
+				return '"'+foo.value+'"'
+			})
+		})
+		expect(bar.current).toBe('"Foo"')
+		foo.value = 'Baz'
+		expect(bar.current).toBe('"Foo"')
+	})
+
 	it('throttledEffect', (done) => {
 		let foo = signal({ value: 1})
 		let count = 0
@@ -393,12 +405,12 @@ describe('effects', () => {
 		expect(tracing[1].get.p === 'value')
 	})
 
-	it('cannot contain signals', () => {
+	it('does not wrap signals', () => {
 		let nonproxy = {value: 'foo'}
 		let foo = signal(nonproxy)
 		let bar = signal({bar: foo})
-		expect(bar[Symbol.xRay].bar[Symbol.xRay]).toBe(undefined)
-		expect(bar[Symbol.xRay].bar).toBe(nonproxy)
+		expect(bar.bar[Symbol.xRay][Symbol.xRay]).toBe(undefined)
+		expect(bar.bar).toBe(foo)
 	})
 })
 

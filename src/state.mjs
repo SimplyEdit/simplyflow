@@ -66,9 +66,6 @@ const signalHandler = {
         return value
     },
     set: (target, property, value, receiver) => {
-        value = value?.[Symbol.xRay] || value // unwraps signal
-        //FIXME: if value contains child objects, these may be signals as well... so do this recursively
-        //unwrap(value)
         let current = target[property]
         if (current!==value) {
             target[property] = value
@@ -123,14 +120,10 @@ export const signals = new WeakMap()
  * to allow reactive functions to be triggered when signal values change.
  */
 export function signal(v) {
-    //unwrap(v)
-    if (v[Symbol.Signal]) { // avoid wrapping a Signal inside a Signal
-        let target = v[Symbol.xRay]
-        if (!signals.has(target)) {
-            signals.set(target, v)
-        }
-        v = target
-    } else if (!signals.has(v)) {
+    if (v[Symbol.Signal]) { // there can be only one signal for any value
+        return v
+    }
+    if (!signals.has(v)) {
         signals.set(v, new Proxy(v, signalHandler))
     }
     return signals.get(v)
@@ -209,9 +202,6 @@ let batchMode = 0
  * to re-compute its values
  */
 export function notifySet(self, context={}) {
-    if (disableTracking) {
-        return
-    }
     let listeners = []
     context.forEach((change, property) => {
         let propListeners = getListeners(self, property)
@@ -277,9 +267,6 @@ function clearContext(listener) {
  * listeners. These are later called if this property changes
  */
 export function notifyGet(self, property) {
-    if (disableTracking) {
-        return
-    }
     let currentCompute = computeStack[computeStack.length-1]
     if (currentCompute) {
         if (tracing && tracers.length) {
@@ -623,43 +610,74 @@ export function clockEffect(fn, clock) {
     return connectedSignal
 }
 
-let disableTracking = false
+/**
+ * Any signal access inside `fn` is not tracked for the current effect.
+ * Any changes to signals inside `fn` will still trigger any effect listening to thoses signals.
+ * @param fn Function that is called immediately. Its result is returned.
+ * @result mixed
+ */
 export function untracked(fn) {
-    disableTracking = true
+    const pos = computeStack.length-1
+    const remember = computeStack[pos]
+    computeStack[pos] = false
     try {
         return fn()
     } finally {
-        disableTracking = false
+        computeStack[pos] = remember
     }
 }
 
-let seen = new WeakMap()
-
-function innerUnwrap(ob) {
-    if (!ob || typeof ob!=='object' || ob instanceof HTMLElement || seen.has(ob)) {
-        return
-    }
-    seen.set(ob, true)
-    for (const prop in ob) {
-        if (ob[prop]?.[Symbol.Signal]) {
-            ob[prop] = ob[prop][Symbol.xRay]
+/**
+ * This function will created a copy of the input, recursive if deep==true
+ * It will replace any non-clonable values with null
+ * It will replace signals with a clone of their target
+ * It will keep cyclical references intact
+ * @param value Object
+ * @param deep Boolean default: false
+ * @return mixed a clone of the value
+ */
+export function clone(value, deep=false)
+{
+    let seen = new Map()
+    const innerClone = function(value) {
+        if (seen.has(value)) {
+            return seen.get(value)
         }
-        if (Array.isArray(ob[prop])) {
-            for (const [key, value] of Object.entries(ob[prop])) {
-                if (value && typeof value==='object') {
-                    innerUnwrap(value)
+        switch(typeof value) {
+            case 'object':
+                if (!value) {
+                    return value
                 }
-            }
-        } else if (ob[prop] && typeof ob[prop] === 'object') {
-            innerUnwrap(ob[prop])
+                if (Array.isArray(value)) {
+                    let result = []
+                    if (!deep) {
+                        result = value.slice()
+                        seen.set(value, result)
+                        return result
+                    }
+                    seen.set(value, result)
+                    for (const key of value) {
+                        result[key] = innerClone(value[key])
+                    }
+                } else if (!value.constructor || value.constructor===Object) {
+                    let result = {}
+                    if (!value.constructor) {
+                        result = Object.create(null)
+                    }
+                    seen.set(value, result)
+                    for (const key in value) {
+                        result[key] = deep ? innerClone(value[key]) : value[key]
+                    }
+                    return result
+                } else {
+                    // cannot clone, ignore? throw error?
+                    return value
+                }
+            break
+            default:
+                return null // ignore non-cloneable values
+            break
         }
     }
-}
-
-export function unwrap(ob) {
-    if (ob && typeof ob==='object') {
-        seen = new WeakMap()
-        innerUnwrap(ob)
-        seen = null
-    }
+    return innerClone(value)
 }
