@@ -11,6 +11,7 @@
     addTracer: () => addTracer,
     batch: () => batch,
     clockEffect: () => clockEffect,
+    clone: () => clone,
     destroy: () => destroy,
     effect: () => effect2,
     makeContext: () => makeContext,
@@ -20,8 +21,7 @@
     signals: () => signals,
     throttledEffect: () => throttledEffect,
     trace: () => trace,
-    untracked: () => untracked,
-    unwrap: () => unwrap
+    untracked: () => untracked
   });
   var iterate2 = Symbol("iterate");
   if (!Symbol.xRay) {
@@ -74,7 +74,6 @@
       return value;
     },
     set: (target, property, value, receiver) => {
-      value = value?.[Symbol.xRay] || value;
       let current = target[property];
       if (current !== value) {
         target[property] = value;
@@ -117,12 +116,9 @@
   var signals = /* @__PURE__ */ new WeakMap();
   function signal(v) {
     if (v[Symbol.Signal]) {
-      let target = v[Symbol.xRay];
-      if (!signals.has(target)) {
-        signals.set(target, v);
-      }
-      v = target;
-    } else if (!signals.has(v)) {
+      return v;
+    }
+    if (!signals.has(v)) {
       signals.set(v, new Proxy(v, signalHandler));
     }
     return signals.get(v);
@@ -167,9 +163,6 @@
   var batchedListeners = /* @__PURE__ */ new Set();
   var batchMode = 0;
   function notifySet(self, context = {}) {
-    if (disableTracking) {
-      return;
-    }
     let listeners = [];
     context.forEach((change, property) => {
       let propListeners = getListeners(self, property);
@@ -224,9 +217,6 @@
     delete listener.needsUpdate;
   }
   function notifyGet(self, property) {
-    if (disableTracking) {
-      return;
-    }
     let currentCompute = computeStack[computeStack.length - 1];
     if (currentCompute) {
       if (tracing && tracers.length) {
@@ -454,42 +444,58 @@
     computeEffect();
     return connectedSignal;
   }
-  var disableTracking = false;
   function untracked(fn) {
-    disableTracking = true;
+    const pos = computeStack.length - 1;
+    const remember = computeStack[pos];
+    computeStack[pos] = false;
     try {
       return fn();
     } finally {
-      disableTracking = false;
+      computeStack[pos] = remember;
     }
   }
-  var seen = /* @__PURE__ */ new WeakMap();
-  function innerUnwrap(ob) {
-    if (!ob || typeof ob !== "object" || ob instanceof HTMLElement || seen.has(ob)) {
-      return;
-    }
-    seen.set(ob, true);
-    for (const prop in ob) {
-      if (ob[prop]?.[Symbol.Signal]) {
-        ob[prop] = ob[prop][Symbol.xRay];
+  function clone(value, deep = false) {
+    let seen = /* @__PURE__ */ new Map();
+    const innerClone = function(value2) {
+      if (seen.has(value2)) {
+        return seen.get(value2);
       }
-      if (Array.isArray(ob[prop])) {
-        for (const [key, value] of Object.entries(ob[prop])) {
-          if (value && typeof value === "object") {
-            innerUnwrap(value);
+      switch (typeof value2) {
+        case "object":
+          if (!value2) {
+            return value2;
           }
-        }
-      } else if (ob[prop] && typeof ob[prop] === "object") {
-        innerUnwrap(ob[prop]);
+          if (Array.isArray(value2)) {
+            let result = [];
+            if (!deep) {
+              result = value2.slice();
+              seen.set(value2, result);
+              return result;
+            }
+            seen.set(value2, result);
+            for (const key of value2) {
+              result[key] = innerClone(value2[key]);
+            }
+          } else if (!value2.constructor || value2.constructor === Object) {
+            let result = {};
+            if (!value2.constructor) {
+              result = /* @__PURE__ */ Object.create(null);
+            }
+            seen.set(value2, result);
+            for (const key in value2) {
+              result[key] = deep ? innerClone(value2[key]) : value2[key];
+            }
+            return result;
+          } else {
+            return value2;
+          }
+          break;
+        default:
+          return null;
+          break;
       }
-    }
-  }
-  function unwrap(ob) {
-    if (ob && typeof ob === "object") {
-      seen = /* @__PURE__ */ new WeakMap();
-      innerUnwrap(ob);
-      seen = null;
-    }
+    };
+    return innerClone(value);
   }
 
   // src/bind.transformers.mjs
@@ -746,16 +752,16 @@
       context.index = key;
       let item = items.shift();
       if (!item) {
-        let clone = this.applyTemplate(context);
-        context.element.appendChild(clone);
+        let clone2 = this.applyTemplate(context);
+        context.element.appendChild(clone2);
         continue;
       }
       if (item.getAttribute[attribute + "-key"] != key) {
         items.unshift(item);
         let outOfOrderItem = context.element.querySelector(":scope > [" + attribute + '-key="' + key + '"]');
         if (!outOfOrderItem) {
-          let clone = this.applyTemplate(context);
-          context.element.insertBefore(clone, item);
+          let clone2 = this.applyTemplate(context);
+          context.element.insertBefore(clone2, item);
           continue;
         } else {
           context.element.insertBefore(outOfOrderItem, item);
@@ -765,8 +771,8 @@
       }
       let newTemplate = this.findTemplate(context.templates, context.list[context.index]);
       if (newTemplate != item[Symbol.bindTemplate]) {
-        let clone = this.applyTemplate(context);
-        context.element.replaceChild(clone, item);
+        let clone2 = this.applyTemplate(context);
+        context.element.replaceChild(clone2, item);
       }
     }
     while (items.length) {
@@ -781,15 +787,15 @@
     if (rendered) {
       if (template) {
         if (rendered?.[Symbol.bindTemplate] != template) {
-          const clone = this.applyTemplate(context);
-          context.element.replaceChild(clone, rendered);
+          const clone2 = this.applyTemplate(context);
+          context.element.replaceChild(clone2, rendered);
         }
       } else {
         context.element.removeChild(rendered);
       }
     } else if (template) {
-      const clone = this.applyTemplate(context);
-      context.element.appendChild(clone);
+      const clone2 = this.applyTemplate(context);
+      context.element.appendChild(clone2);
     }
   }
   function getParentPath(el, attribute) {
@@ -1105,16 +1111,16 @@
         result.innerHTML = "<!-- no matching template -->";
         return result;
       }
-      let clone = template.content.cloneNode(true);
-      if (!clone.children?.length) {
-        return clone;
+      let clone2 = template.content.cloneNode(true);
+      if (!clone2.children?.length) {
+        return clone2;
       }
-      if (clone.children.length > 1) {
+      if (clone2.children.length > 1) {
         throw new Error("template must contain a single root node", { cause: template });
       }
       const attribute = this.options.attribute;
       const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
-      const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`);
+      const bindings = clone2.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`);
       for (let binding of bindings) {
         if (binding.tagName == "TEMPLATE") {
           continue;
@@ -1133,10 +1139,10 @@
         }
       }
       if (typeof index !== "undefined") {
-        clone.children[0].setAttribute(attribute + "-key", index);
+        clone2.children[0].setAttribute(attribute + "-key", index);
       }
-      clone.children[0][Symbol.bindTemplate] = template;
-      return clone;
+      clone2.children[0][Symbol.bindTemplate] = template;
+      return clone2;
     }
     parseLinks(links) {
       let result = {};
@@ -1486,20 +1492,20 @@
       if (template) {
         let content = template.content.cloneNode(true);
         for (const node of content.childNodes) {
-          const clone = node.cloneNode(true);
-          if (clone.nodeType == document.ELEMENT_NODE) {
-            clone.querySelectorAll("template").forEach(function(t) {
+          const clone2 = node.cloneNode(true);
+          if (clone2.nodeType == document.ELEMENT_NODE) {
+            clone2.querySelectorAll("template").forEach(function(t) {
               t.setAttribute("simply-render", "");
             });
             if (this.attributes) {
               for (const attr of this.attributes) {
                 if (attr.name != "rel") {
-                  clone.setAttribute(attr.name, attr.value);
+                  clone2.setAttribute(attr.name, attr.value);
                 }
               }
             }
           }
-          this.parentNode.insertBefore(clone, this);
+          this.parentNode.insertBefore(clone2, this);
         }
         this.parentNode.removeChild(this);
       } else {
