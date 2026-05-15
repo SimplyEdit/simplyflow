@@ -75,6 +75,7 @@ const signalHandler = {
         }
         if (typeof current === 'undefined') {
             notifySet(receiver, makeContext(Symbol.iterate, {}))
+            notifySet(receiver, makeContext('length', {}))
         }
         return true
     },
