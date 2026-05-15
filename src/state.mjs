@@ -1,4 +1,6 @@
-const iterate = Symbol('iterate')
+if (!Symbol.iterate) {
+    Symbol.iterate = Symbol('iterate')
+}
 if (!Symbol.xRay) {
     Symbol.xRay = Symbol('xRay')
 }
@@ -72,7 +74,7 @@ const signalHandler = {
             notifySet(receiver, makeContext(property, { was: current, now: value } ) )
         }
         if (typeof current === 'undefined') {
-            notifySet(receiver, makeContext(iterate, {}))
+            notifySet(receiver, makeContext(Symbol.iterate, {}))
         }
         return true
     },
@@ -95,13 +97,13 @@ const signalHandler = {
     defineProperty: (target, property, descriptor) => {
         if (typeof target[property] === 'undefined') {
             let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-            notifySet(receiver, makeContext(iterate, {}))
+            notifySet(receiver, makeContext(Symbol.iterate, {}))
         }
         return Object.defineProperty(target, property, descriptor)
     },
     ownKeys: (target) => {
         let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-        notifyGet(receiver, iterate)
+        notifyGet(receiver, Symbol.iterate)
         return Reflect.ownKeys(target)
     }
 
@@ -120,6 +122,9 @@ export const signals = new WeakMap()
  * to allow reactive functions to be triggered when signal values change.
  */
 export function signal(v) {
+    if (!v) {
+        v = {}
+    }
     if (v[Symbol.Signal]) { // there can be only one signal for any value
         return v
     }

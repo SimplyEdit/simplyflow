@@ -56,7 +56,8 @@ class SimplyBind
                 'META':render.meta,
                 'TEMPLATE':null,
                 '*':render.element
-            }
+            },
+            twoway: false
         }
         if (!options?.root) {
             throw new Error('bind needs at least options.root set')

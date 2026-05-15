@@ -3,7 +3,7 @@
  * Will be used unless overriden in the SimplyBind options parameter
  */
 import { signal as domSignal } from './dom.mjs'
-
+import { throttledEffect, effect, untracked, batch } from './state.mjs'
 /**
  * This function is used by default to render dom elements with the `data-flow-field` attribute.
  * It will switch to only switching in template content if the context has any templates.
@@ -23,16 +23,6 @@ export function field(context)
         }
     } else if (this.options.renderers['*']) {
         this.options.renderers['*'].call(this, context)
-        // FIXME: should call a setter (defined in field type) to set the value back into root data
-        if (this.options.twoway) { 
-            // TODO: make content-editable if editmode is toggled on
-            // how do you toggle editmode? global signal?
-            // make uneditable if editmode is toggled off
-            const s = domSignal(context.element)
-            effect(() => {
-                setValueByPath(this.options.root, context.path, s.innerHTML)
-            })
-        }
     }
     return context
 }
@@ -70,37 +60,72 @@ export function map(context)
     return context
 }
 
+/**
+ * This function sets a given value on the given path, starting at the given root.
+ * It will automatically create objects if a path part does not yet exist.
+ * @param root the root object
+ * @param path a JSON path
+ * @param value the value to set
+ */
 export function setValueByPath(root, path, value)
 {
-    let parts = path.split('.')
-    let curr = root
-    let part
-    part = parts.shift()
-    let prev = null
-    let prevPart = null
-    while (part && curr) {
-        part = decodeURIComponent(part)
-        if (part=='0' && !Array.isArray(curr)) {
-            // ignore so that data-flow-list="nonarray" will work
-        } else if (part==':key') {
-            // FIXME: should change the key, not the value... not supported yet?
-            throw new Error('setting key not yet supported')
-            curr = prevPart
-        } else if (part==':value') {
-            // do nothing
-        } else if (Array.isArray(curr) && typeof curr[part]=='undefined') {
-            prev = curr[0]
-            curr = curr[0][part] // so that data-flow-field="array.foo" works
-        } else {
-            prev = curr
-            curr = curr[part]
-        }
-        prevPart = part
+    batch(() => {
+        let parts = path.split('.')
+        let curr = root
+        let part
         part = parts.shift()
-    }
-    if (prev && prevPart && prev[prevPart]!==value) {
-        prev[prevPart] = value
-    }
+        let prev = null
+        let prevPart = null
+        let prevCurr = curr
+        while (part && curr) {
+            prevCurr = curr
+            part = decodeURIComponent(part)
+            if (part=='0' && !Array.isArray(curr)) {
+                // ignore so that data-flow-list="nonarray" will work
+            } else if (part==':key') {
+                // FIXME: should change the key, not the value... not supported yet?
+                throw new Error('setting key not yet supported')
+                curr = prevPart
+            } else if (part==':value') {
+                // do nothing
+            } else if (Array.isArray(curr) && typeof curr[part]=='undefined') {
+                prev = curr[0]
+                curr = curr[0][part] // so that data-flow-field="array.foo" works
+            } else {
+                prev = curr
+                curr = curr[part]
+            }
+            prevPart = part
+            part = parts.shift()
+            if (part && !curr) {
+                // path in html does not exist yet, so create it
+                const intKey = parseInt(part)
+                if (intKey>=0 && part===''+intKey) {
+                    prevCurr[prevPart] = []
+                } else {
+                    prevCurr[prevPart] = {}
+                }
+                curr = prevCurr[prevPart]
+            }
+        }
+        if (prev && prevPart && prev[prevPart]!==value) {
+            if (value && typeof value=='object') {
+                curr = prev[prevPart]
+                if (!curr) {
+                    // last part of path in html does not exist yet, create it
+                    prev[prevPart] = {}
+                    curr = prev[prevPart]
+                }
+                for (const prop in value) {
+                    if (curr[prop]!==value[prop]) {
+                        curr[prop] = value[prop]
+                    }
+                }
+            } else {
+                prev[prevPart] = value
+            }
+        }
+    })
 }
 
 /**
@@ -291,8 +316,7 @@ export function input(context)
  */
 export function button(context)
 {
-    element(context)
-    setProperties(context.element, context.value, 'value')
+    element(context, 'value')
 }
 
 /**
@@ -377,8 +401,12 @@ export function setSelectOptions(select,options)
  */
 export function anchor(context)
 {
-    element(context)
-    setProperties(context.element, context.value, 'target', 'href', 'name', 'newwindow', 'nofollow')
+    element(context, 'target', 'href', 'name', 'newwindow', 'nofollow')
+    if (this.options.twoway) {
+        batch(() => {
+            updateProperties.call(this, context, ['target', 'href', 'name', 'newwindow', 'nofollow'])
+        })
+    }
 }
 
 /**
@@ -387,6 +415,11 @@ export function anchor(context)
 export function image(context)
 {
     setProperties(context.element, context.value, 'title', 'alt', 'src', 'id')
+    if (this.options.twoway) {
+        batch(() => {
+            updateProperties.call(this, context, ['title', 'alt', 'src', 'id'])
+        })
+    }
 }
 
 /**
@@ -395,6 +428,11 @@ export function image(context)
 export function iframe(context)
 {
     setProperties(context.element, context.value, 'title', 'src', 'id')
+    if (this.options.twoway) {
+        batch(() => {
+            updateProperties.call(this, context, ['title','src','id'])
+        })
+    }
 }
 
 /**
@@ -402,25 +440,57 @@ export function iframe(context)
  */
 export function meta(context)
 {
-    setProperties(context.element, context.value, 'content', 'id')    
+    setProperties(context.element, context.value, 'content', 'id')
+    if (this.options.twoway) {
+        batch(() => {
+            updateProperties.call(this, context, ['content','id'])
+        })
+    }
 }
+
+const domSignals = new WeakMap()
 
 /**
  * sets the innerHTML and title and id properties of any HTML element
  */
-export function element(context)
+export function element(context, ...extraprops)
 {
     const el  = context.element
     let value = context.value
+    let valueIsString = false
+    if (typeof value!='undefined' && value!==null) {
+        let strValue = ''+value
+        if (typeof value!='object' || strValue.substring(0,8)!='[object ') {
+            value = { innerHTML: value }
+            valueIsString = true
+        }
+    }
+    const props = ['innerHTML','title','id','className'].concat(extraprops)
+    setProperties(el, value, ...props)
+    if (this.options.twoway) {
+        batch(() => {
+            updateProperties.call(this, context, props, valueIsString)
+        })
+    }
+}
 
-    if (typeof value=='undefined' || value==null) {
-        value = ''
+export function updateProperties(context, props, valueIsString) {
+    if (domSignals.has(context.element)) {
+        return
     }
-    let strValue = ''+value
-    if (typeof value!='object' || strValue.substring(0,8)!='[object ') {
-        value = { innerHTML: value }
-    }
-    setProperties(el, value, 'innerHTML', 'title', 'id', 'className')
+    const s = domSignal(context.element)
+    domSignals.set(context.element, s)
+    //TODO: run reverse transformers (extract)
+    throttledEffect(() => {
+        let updateValue = s.innerHTML //incorrect: in an anchor this could be s.href
+        if (!valueIsString) {
+            updateValue = getProperties(s, ...props)
+        }
+        untracked(() => {
+            // don't trigger this effect when the data changes (root.path)
+            setValueByPath(this.options.root, context.path, updateValue)
+        })
+    })
 }
 
 /**
@@ -445,6 +515,18 @@ export function setProperties(el, data, ...properties) {
             el[property] = ''+data[property]
         }
     }
+}
+
+export function getProperties(el, ...properties) {
+    const result = {}
+    for (const property of properties) {
+        switch(property) {
+            default: 
+                result[property] = el[property]
+            break
+        }
+    }
+    return result
 }
 
 /**
