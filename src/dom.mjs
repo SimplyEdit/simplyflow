@@ -34,20 +34,29 @@ const domSignalHandler = {
     }
 }
 
-export function signal(el) {
+export function signal(el, options) {
     if (el[Symbol.xRay]) {
         return el
     }
     if (!signals.has(el)) {
         signals.set(el, new Proxy(el, domSignalHandler))
-        domListen(el, signals.get(el))
+        domListen(el, signals.get(el), options)
     }
     return signals.get(el)
 }
 
 const observers = new WeakMap()
 
-function domListen(el, signal) {
+function domListen(el, signal, options) {
+    const defaultOptions = {
+        characterData: true,
+        subtree: true,
+        attributes: true,
+        attributesOldValue: true
+    }
+    if (!options) {
+        options = defaultOptions
+    }
     let oldContentHTML = el.innerHTML
     let oldContentText = el.innerText
     if (!observers.has(el)) {
@@ -68,18 +77,20 @@ function domListen(el, signal) {
                         changes.innerText = oldContentText
                         oldContentText = el.innerText
                     }
+                } else if (mutation.type==='childList') {
+                    changes.children = { //FIXME: overwrites changes in this list path if list is rendered multiple times
+                        was: Array.from(el.children) //FIXME; fill in 'now'
+                    }
+                    changes.length = -1 //FIXME: don't do this :)
+                } else {
+                    console.log('nothing to do for',el,mutation.type)
                 }
             }
             for (const prop in changes) {
                 notifySet(signal, makeContext(prop, { was: changes[prop], now: el[prop] }))
             }
         })
-        observer.observe(el, {
-            characterData: true,
-            subtree: true,
-            attributes: true,
-            attributesOldValue: true
-        })
+        observer.observe(el, options)
         observers.set(el, observer)
         //@TODO: unregister the observer when el is removed from the dom (after a timeout)
         if (el.matches('input, textarea, select')) {
