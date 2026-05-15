@@ -12,17 +12,21 @@
     <div id="editor" data-flow-field="demo" contenteditable>Initial content</div>
     <p>Listener</p>
     <div data-flow-field="demo"></div>
+    <ul data-flow-list="list">
+      <template>
+        <li data-flow-field=":value">field</li>
+      </template>
+    </ul>
     <script src="../../dist/simply.flow.js"></script>
     <script>
-      const data = simply.state.signal()
+      const data = simply.state.signal({
+        list: ['a','b']
+      })
       simply.bind({
         root: data,
         twoway: true
       })
       const editor = document.getElementById('editor')
-      simply.state.effect(() => {
-        console.log(data.demo)
-      })
     </script>
   </body>
 </html>
