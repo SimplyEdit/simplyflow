@@ -13,7 +13,7 @@
     clockEffect: () => clockEffect,
     clone: () => clone,
     destroy: () => destroy,
-    effect: () => effect2,
+    effect: () => effect,
     makeContext: () => makeContext,
     notifyGet: () => notifyGet,
     notifySet: () => notifySet,
@@ -23,7 +23,9 @@
     trace: () => trace,
     untracked: () => untracked
   });
-  var iterate2 = Symbol("iterate");
+  if (!Symbol.iterate) {
+    Symbol.iterate = Symbol("iterate");
+  }
   if (!Symbol.xRay) {
     Symbol.xRay = Symbol("xRay");
   }
@@ -80,7 +82,8 @@
         notifySet(receiver, makeContext(property, { was: current, now: value }));
       }
       if (typeof current === "undefined") {
-        notifySet(receiver, makeContext(iterate2, {}));
+        notifySet(receiver, makeContext(Symbol.iterate, {}));
+        notifySet(receiver, makeContext("length", {}));
       }
       return true;
     },
@@ -103,18 +106,21 @@
     defineProperty: (target, property, descriptor) => {
       if (typeof target[property] === "undefined") {
         let receiver = signals.get(target);
-        notifySet(receiver, makeContext(iterate2, {}));
+        notifySet(receiver, makeContext(Symbol.iterate, {}));
       }
       return Object.defineProperty(target, property, descriptor);
     },
     ownKeys: (target) => {
       let receiver = signals.get(target);
-      notifyGet(receiver, iterate2);
+      notifyGet(receiver, Symbol.iterate);
       return Reflect.ownKeys(target);
     }
   };
   var signals = /* @__PURE__ */ new WeakMap();
   function signal(v) {
+    if (!v) {
+      v = {};
+    }
     if (v[Symbol.Signal]) {
       return v;
     }
@@ -266,7 +272,7 @@
   var effectStack = [];
   var effectMap = /* @__PURE__ */ new WeakMap();
   var signalStack = [];
-  function effect2(fn) {
+  function effect(fn) {
     if (effectStack.findIndex((f) => fn == f) !== -1) {
       throw new Error("Recursive update() call", { cause: fn });
     }
@@ -284,7 +290,7 @@
       }
       clearListeners(computeEffect2);
       computeEffect2.effectFunction = fn;
-      computeEffect2.effectType = effect2;
+      computeEffect2.effectType = effect;
       computeStack.push(computeEffect2);
       signalStack.push(connectedSignal);
       let result;
@@ -558,18 +564,27 @@
       return Reflect.ownKeys(target);
     }
   };
-  function signal2(el) {
+  function signal2(el, options) {
     if (el[Symbol.xRay]) {
       return el;
     }
     if (!signals.has(el)) {
       signals.set(el, new Proxy(el, domSignalHandler));
-      domListen(el, signals.get(el));
+      domListen(el, signals.get(el), options);
     }
     return signals.get(el);
   }
   var observers = /* @__PURE__ */ new WeakMap();
-  function domListen(el, signal3) {
+  function domListen(el, signal3, options) {
+    const defaultOptions = {
+      characterData: true,
+      subtree: true,
+      attributes: true,
+      attributesOldValue: true
+    };
+    if (!options) {
+      options = defaultOptions;
+    }
     let oldContentHTML = el.innerHTML;
     let oldContentText = el.innerText;
     if (!observers.has(el)) {
@@ -587,18 +602,22 @@
               changes.innerText = oldContentText;
               oldContentText = el.innerText;
             }
+          } else if (mutation.type === "childList") {
+            changes.children = {
+              //FIXME: overwrites changes in this list path if list is rendered multiple times
+              was: Array.from(el.children)
+              //FIXME; fill in 'now'
+            };
+            changes.length = -1;
+          } else {
+            console.log("nothing to do for", el, mutation.type);
           }
         }
         for (const prop in changes) {
           notifySet(signal3, makeContext(prop, { was: changes[prop], now: el[prop] }));
         }
       });
-      observer.observe(el, {
-        characterData: true,
-        subtree: true,
-        attributes: true,
-        attributesOldValue: true
-      });
+      observer.observe(el, options);
       observers.set(el, observer);
       if (el.matches("input, textarea, select")) {
         let prevValue = el.value;
@@ -627,12 +646,6 @@
       }
     } else if (this.options.renderers["*"]) {
       this.options.renderers["*"].call(this, context);
-      if (this.options.twoway) {
-        const s = signal2(context.element);
-        effect(() => {
-          setValueByPath(this.options.root, context.path, s.innerHTML);
-        });
-      }
     }
     return context;
   }
@@ -640,6 +653,7 @@
     if (!Array.isArray(context.value)) {
       context.value = [context.value];
     }
+    const length = context.value.length;
     if (!context.templates?.length) {
       console.error("No templates found in", context.element);
     } else {
@@ -657,33 +671,64 @@
     }
     return context;
   }
+  function isInt(s) {
+    if (parseInt(s) == s) {
+      return true;
+    }
+  }
   function setValueByPath(root, path, value) {
-    let parts = path.split(".");
-    let curr = root;
-    let part;
-    part = parts.shift();
-    let prev = null;
-    let prevPart = null;
-    while (part && curr) {
-      part = decodeURIComponent(part);
-      if (part == "0" && !Array.isArray(curr)) {
-      } else if (part == ":key") {
-        throw new Error("setting key not yet supported");
-        curr = prevPart;
-      } else if (part == ":value") {
-      } else if (Array.isArray(curr) && typeof curr[part] == "undefined") {
-        prev = curr[0];
-        curr = curr[0][part];
-      } else {
-        prev = curr;
-        curr = curr[part];
-      }
-      prevPart = part;
+    batch(() => {
+      let parts = path.split(".");
+      let curr = root;
+      let part;
       part = parts.shift();
-    }
-    if (prev && prevPart && prev[prevPart] !== value) {
-      prev[prevPart] = value;
-    }
+      let prev = null;
+      let prevPart = null;
+      let prevCurr = curr;
+      while (part && curr) {
+        prevCurr = curr;
+        part = decodeURIComponent(part);
+        if (part == "0" && !Array.isArray(curr)) {
+        } else if (part == ":key") {
+          throw new Error("setting key not yet supported");
+          curr = prevPart;
+        } else if (part == ":value") {
+        } else if (Array.isArray(curr) && !isInt(part) && typeof curr[part] == "undefined") {
+          prev = curr[0];
+          curr = curr[0][part];
+        } else {
+          prev = curr;
+          curr = curr[part];
+        }
+        prevPart = part;
+        part = parts.shift();
+        if (part && !curr) {
+          const intKey = parseInt(part);
+          if (intKey >= 0 && part === "" + intKey) {
+            prevCurr[prevPart] = [];
+          } else {
+            prevCurr[prevPart] = {};
+          }
+          curr = prevCurr[prevPart];
+        }
+      }
+      if (prev && prevPart && prev[prevPart] !== value) {
+        if (value && typeof value == "object") {
+          curr = prev[prevPart];
+          if (!curr) {
+            prev[prevPart] = {};
+            curr = prev[prevPart];
+          }
+          for (const prop in value) {
+            if (curr[prop] !== value[prop]) {
+              curr[prop] = value[prop];
+            }
+          }
+        } else {
+          prev[prevPart] = value;
+        }
+      }
+    });
   }
   function arrayByTemplates(context) {
     const attribute = this.options.attribute;
@@ -742,6 +787,39 @@
         context.element.appendChild(this.applyTemplate(context));
         length++;
       }
+    }
+    if (this.options.twoway) {
+      const s = signal2(context.element, {
+        childList: true
+      });
+      throttledEffect(() => {
+        const children = Array.from(s.children);
+        batch(() => {
+          untracked(() => {
+            let key = 0;
+            const currentList = context.value.slice();
+            for (const item of children) {
+              if (item.tagName === "TEMPLATE") {
+                continue;
+              }
+              if (item.dataset.flowKey) {
+                if (item.dataset.flowKey != key) {
+                  setValueByPath(
+                    this.options.root,
+                    context.path + "." + key,
+                    currentList[item.dataset.flowKey]
+                  );
+                }
+                key++;
+              }
+            }
+            if (context.value.length > key) {
+              const source = getValueByPath(this.options.root, context.path);
+              source.length = key;
+            }
+          });
+        });
+      });
     }
   }
   function objectByTemplates(context) {
@@ -826,8 +904,7 @@
     }
   }
   function button(context) {
-    element(context);
-    setProperties(context.element, context.value, "value");
+    element(context, "value");
   }
   function select(context) {
     const el = context.element;
@@ -888,29 +965,72 @@
     }
   }
   function anchor(context) {
-    element(context);
-    setProperties(context.element, context.value, "target", "href", "name", "newwindow", "nofollow");
+    element(context, "target", "href", "name", "newwindow", "nofollow");
+    if (this.options.twoway) {
+      batch(() => {
+        updateProperties.call(this, context, ["target", "href", "name", "newwindow", "nofollow"]);
+      });
+    }
   }
   function image(context) {
     setProperties(context.element, context.value, "title", "alt", "src", "id");
+    if (this.options.twoway) {
+      batch(() => {
+        updateProperties.call(this, context, ["title", "alt", "src", "id"]);
+      });
+    }
   }
   function iframe(context) {
     setProperties(context.element, context.value, "title", "src", "id");
+    if (this.options.twoway) {
+      batch(() => {
+        updateProperties.call(this, context, ["title", "src", "id"]);
+      });
+    }
   }
   function meta(context) {
     setProperties(context.element, context.value, "content", "id");
+    if (this.options.twoway) {
+      batch(() => {
+        updateProperties.call(this, context, ["content", "id"]);
+      });
+    }
   }
-  function element(context) {
+  var domSignals = /* @__PURE__ */ new WeakMap();
+  function element(context, ...extraprops) {
     const el = context.element;
     let value = context.value;
-    if (typeof value == "undefined" || value == null) {
-      value = "";
+    let valueIsString = false;
+    if (typeof value != "undefined" && value !== null) {
+      let strValue = "" + value;
+      if (typeof value != "object" || strValue.substring(0, 8) != "[object ") {
+        value = { innerHTML: value };
+        valueIsString = true;
+      }
     }
-    let strValue = "" + value;
-    if (typeof value != "object" || strValue.substring(0, 8) != "[object ") {
-      value = { innerHTML: value };
+    const props = ["innerHTML", "title", "id", "className"].concat(extraprops);
+    setProperties(el, value, ...props);
+    if (this.options.twoway) {
+      batch(() => {
+        updateProperties.call(this, context, props, valueIsString);
+      });
     }
-    setProperties(el, value, "innerHTML", "title", "id", "className");
+  }
+  function updateProperties(context, props, valueIsString) {
+    if (domSignals.has(context.element)) {
+      return;
+    }
+    const s = signal2(context.element);
+    domSignals.set(context.element, s);
+    throttledEffect(() => {
+      let updateValue = s.innerHTML;
+      if (!valueIsString) {
+        updateValue = getProperties(s, ...props);
+      }
+      untracked(() => {
+        setValueByPath(this.options.root, context.path, updateValue);
+      });
+    });
   }
   function setProperties(el, data, ...properties) {
     if (!data || typeof data !== "object") {
@@ -929,6 +1049,17 @@
         el[property] = "" + data[property];
       }
     }
+  }
+  function getProperties(el, ...properties) {
+    const result = {};
+    for (const property of properties) {
+      switch (property) {
+        default:
+          result[property] = el[property];
+          break;
+      }
+    }
+    return result;
   }
   function matchValue(a, b) {
     if (a == ":empty" && !b) {
@@ -981,7 +1112,8 @@
           "META": meta,
           "TEMPLATE": null,
           "*": element
-        }
+        },
+        twoway: false
       };
       if (!options?.root) {
         throw new Error("bind needs at least options.root set");
