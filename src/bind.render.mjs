@@ -4,6 +4,7 @@
  */
 import { signal as domSignal } from './dom.mjs'
 import { throttledEffect, effect, untracked, batch } from './state.mjs'
+import { getValueByPath } from './bind.mjs'
 /**
  * This function is used by default to render dom elements with the `data-flow-field` attribute.
  * It will switch to only switching in template content if the context has any templates.
@@ -36,6 +37,8 @@ export function list(context)
     if (!Array.isArray(context.value)) {
         context.value = [context.value]
     }
+    // make sure this effect is triggered if the length of the array changes
+    const length = context.value.length
     if (!context.templates?.length) {
         console.error('No templates found in', context.element)
     } else {
@@ -58,6 +61,12 @@ export function map(context)
         objectByTemplates.call(this, context)
     }
     return context
+}
+
+function isInt(s) {
+    if (parseInt(s)==s) {
+        return true
+    }
 }
 
 /**
@@ -88,7 +97,7 @@ export function setValueByPath(root, path, value)
                 curr = prevPart
             } else if (part==':value') {
                 // do nothing
-            } else if (Array.isArray(curr) && typeof curr[part]=='undefined') {
+            } else if (Array.isArray(curr) && !isInt(part) && typeof curr[part]=='undefined') {
                 prev = curr[0]
                 curr = curr[0][part] // so that data-flow-field="array.foo" works
             } else {
@@ -200,6 +209,37 @@ export function arrayByTemplates(context)
             context.element.appendChild(this.applyTemplate(context))
             length++
         }
+    }
+    if (this.options.twoway) {
+        const s = domSignal(context.element, {
+            childList: true
+        })
+        throttledEffect(() => {
+            const children = Array.from(s.children)
+            batch(() => {
+                untracked(() => {
+                    let key=0
+                    const currentList = context.value.slice()
+                    for (const item of children) {
+                        if (item.tagName==='TEMPLATE') {
+                            continue
+                        }
+                        if (item.dataset.flowKey) {
+                            if (item.dataset.flowKey!=key) {
+                                setValueByPath(this.options.root, context.path+'.'+key,
+                                    currentList[item.dataset.flowKey])
+                            }
+                            key++
+                        }
+                    }
+                    if (context.value.length>key) {
+                        // remove extra values
+                        const source = getValueByPath(this.options.root, context.path)
+                        source.length = key
+                    }
+                })
+            })
+        })
     }
 }
 
