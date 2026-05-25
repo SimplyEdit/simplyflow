@@ -1,0 +1,14 @@
+<!doctype html>
+<body>
+<h1>simply.edit demo</h1>
+<div id="editor">
+<h2>A title</h2>
+<p>This is a bit of demo text</p>
+<p>And some more</p>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/simplyview@3.5.8/dist/simply.everything.js"></script>
+<script type="module">
+	import { edit as simplyEdit } from '../src/edit.mjs'
+	const editor = simplyEdit(document.querySelector('#editor'))
+</script>
+</body>
