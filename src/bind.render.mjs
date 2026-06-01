@@ -336,7 +336,7 @@ export function input(context)
     const el  = context.element
     let value = context.value
 
-    element(context)
+    element.call(this, context)
     if (typeof value == 'undefined') {
         value = ''
     }
@@ -356,7 +356,7 @@ export function input(context)
  */
 export function button(context)
 {
-    element(context, 'value')
+    element.call(this, context, 'value')
 }
 
 /**
@@ -441,7 +441,7 @@ export function setSelectOptions(select,options)
  */
 export function anchor(context)
 {
-    element(context, 'target', 'href', 'name', 'newwindow', 'nofollow')
+    element.call(this, context, 'target', 'href', 'name', 'newwindow', 'nofollow')
     if (this.options.twoway) {
         batch(() => {
             updateProperties.call(this, context, ['target', 'href', 'name', 'newwindow', 'nofollow'])
