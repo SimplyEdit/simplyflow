@@ -889,7 +889,7 @@
   function input(context) {
     const el = context.element;
     let value = context.value;
-    element(context);
+    element.call(this, context);
     if (typeof value == "undefined") {
       value = "";
     }
@@ -904,7 +904,7 @@
     }
   }
   function button(context) {
-    element(context, "value");
+    element.call(this, context, "value");
   }
   function select(context) {
     const el = context.element;
@@ -965,7 +965,7 @@
     }
   }
   function anchor(context) {
-    element(context, "target", "href", "name", "newwindow", "nofollow");
+    element.call(this, context, "target", "href", "name", "newwindow", "nofollow");
     if (this.options.twoway) {
       batch(() => {
         updateProperties.call(this, context, ["target", "href", "name", "newwindow", "nofollow"]);
@@ -1401,7 +1401,7 @@
       } else if (part == ":key") {
         curr = prevPart;
       } else if (part == ":value") {
-      } else if (Array.isArray(curr) && typeof curr[part] == "undefined") {
+      } else if (Array.isArray(curr) && typeof curr[part] == "undefined" && curr[0]) {
         curr = curr[0][part];
       } else {
         curr = curr[part];
