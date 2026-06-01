@@ -427,7 +427,7 @@ export function getValueByPath(root, path)
             curr = prevPart
         } else if (part==':value') {
             // do nothing
-        } else if (Array.isArray(curr) && typeof curr[part]=='undefined') {
+        } else if (Array.isArray(curr) && typeof curr[part]=='undefined' && curr[0]) {
             curr = curr[0][part] // so that data-flow-field="array.foo" works
         } else {
             curr = curr[part]
