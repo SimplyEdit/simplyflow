@@ -529,8 +529,11 @@
   // src/dom.mjs
   var dom_exports = {};
   __export(dom_exports, {
-    signal: () => signal2
+    signal: () => signal2,
+    trackDomField: () => trackDomField,
+    trackDomList: () => trackDomList
   });
+  var domSignals = /* @__PURE__ */ new WeakMap();
   var domSignalHandler = {
     get: (target, property, receiver) => {
       if (property === Symbol.xRay) {
@@ -633,6 +636,65 @@
         }
       }
     }
+  }
+  function trackDomList(element2) {
+    const path = this.getBindingPath(element2);
+    if (!path) {
+      throw new Error("Could not find binding path for element", { cause: element2 });
+    }
+    const s = signal2(element2, {
+      childList: true
+    });
+    throttledEffect(() => {
+      const children = Array.from(s.children);
+      untracked(() => {
+        batch(() => {
+          let key = 0;
+          const currentList = getValueByPath(this.options.root, path);
+          const source = currentList.slice();
+          for (const item of children) {
+            if (item.tagName === "TEMPLATE") {
+              continue;
+            }
+            if (item.dataset.flowKey) {
+              if (item.dataset.flowKey != key) {
+                setValueByPath(
+                  this.options.root,
+                  path + "." + key,
+                  source[item.dataset.flowKey]
+                );
+              }
+              key++;
+            }
+          }
+          if (currentList.length > key) {
+            currentList.length = key;
+          }
+        });
+      });
+    });
+  }
+  function trackDomField(element2, props, valueIsString) {
+    if (domSignals.has(element2)) {
+      return;
+    }
+    const path = this.getBindingPath(element2);
+    if (!path) {
+      throw new Error("Could not find binding path for element", { cause: element2 });
+    }
+    const s = signal2(element2);
+    domSignals.set(element2, s);
+    batch(() => {
+      throttledEffect(() => {
+        let updateValue = s.innerHTML;
+        if (!valueIsString) {
+          updateValue = getProperties(s, ...props);
+        }
+        untracked(() => {
+          setValueByPath(this.options.root, path, updateValue);
+        });
+      });
+    });
   }
 
   // src/bind.render.mjs
@@ -789,37 +851,7 @@
       }
     }
     if (this.options.twoway) {
-      const s = signal2(context.element, {
-        childList: true
-      });
-      throttledEffect(() => {
-        const children = Array.from(s.children);
-        batch(() => {
-          untracked(() => {
-            let key = 0;
-            const currentList = context.value.slice();
-            for (const item of children) {
-              if (item.tagName === "TEMPLATE") {
-                continue;
-              }
-              if (item.dataset.flowKey) {
-                if (item.dataset.flowKey != key) {
-                  setValueByPath(
-                    this.options.root,
-                    context.path + "." + key,
-                    currentList[item.dataset.flowKey]
-                  );
-                }
-                key++;
-              }
-            }
-            if (context.value.length > key) {
-              const source = getValueByPath(this.options.root, context.path);
-              source.length = key;
-            }
-          });
-        });
-      });
+      trackDomList.call(this, context.element);
     }
   }
   function objectByTemplates(context) {
@@ -996,7 +1028,6 @@
       });
     }
   }
-  var domSignals = /* @__PURE__ */ new WeakMap();
   function element(context, ...extraprops) {
     const el = context.element;
     let value = context.value;
@@ -1011,26 +1042,8 @@
     const props = ["innerHTML", "title", "id", "className"].concat(extraprops);
     setProperties(el, value, ...props);
     if (this.options.twoway) {
-      batch(() => {
-        updateProperties.call(this, context, props, valueIsString);
-      });
+      trackDomField.call(this, context.element, props, valueIsString);
     }
-  }
-  function updateProperties(context, props, valueIsString) {
-    if (domSignals.has(context.element)) {
-      return;
-    }
-    const s = signal2(context.element);
-    domSignals.set(context.element, s);
-    throttledEffect(() => {
-      let updateValue = s.innerHTML;
-      if (!valueIsString) {
-        updateValue = getProperties(s, ...props);
-      }
-      untracked(() => {
-        setValueByPath(this.options.root, context.path, updateValue);
-      });
-    });
   }
   function setProperties(el, data, ...properties) {
     if (!data || typeof data !== "object") {
