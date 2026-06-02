@@ -3,8 +3,20 @@ import { signals, signal as stateSignal, notifyGet, notifySet, makeContext,
 import { getValueByPath } from './bind.mjs'
 import { setValueByPath, getProperties } from './bind.render.mjs'
 
+
+/**
+ * Tracks element => signal mapping so that each element only has one signal
+ */
 const domSignals = new WeakMap()
 
+/**
+ * Tracks element => mutationObservers
+ */
+const observers = new WeakMap()
+
+/**
+ * A dom signal is a Proxy, to track access to properties
+ */
 const domSignalHandler = {
     get: (target, property, receiver) => {
         if (property===Symbol.xRay) {
@@ -39,6 +51,15 @@ const domSignalHandler = {
     }
 }
 
+/**
+ * This function returns a dom signal. Using this in an effect() function
+ * will automatically trigger the effect if a property of the dom signal 
+ * changes.
+ * Valid options are any of the mutationObserver options, like characterData, subtree, etc.
+ * @param HTMLElement el
+ * @param Object options
+ * @returns Proxy
+ */
 export function signal(el, options) {
     if (el[Symbol.xRay]) {
         return el
@@ -50,8 +71,9 @@ export function signal(el, options) {
     return signals.get(el)
 }
 
-const observers = new WeakMap()
-
+/**
+ * This sets up the mutationObserver that calls notifySet on changes in the DOM
+ */
 function domListen(el, signal, options) {
     const defaultOptions = {
         characterData: true,
@@ -114,6 +136,11 @@ function domListen(el, signal, options) {
     }
 }
 
+/**
+ * This function sets up the dom signal on an element, provided it has a `data-flow-list` attribute
+ * @param HTMLElement element - the element to track
+ * @returns Proxy
+ */
 export function trackDomList(element)
 {
     const path = this.getBindingPath(element)
@@ -149,8 +176,14 @@ export function trackDomList(element)
             })
         })
     })
+    return s
 }
 
+/**
+ * This function sets up the dom signal on an element, provided it has a `data-flow-field` attribute
+ * @param HTMLElement element - the element to track
+ * @returns Proxy
+ */
 export function trackDomField(element, props, valueIsString) {
     if (domSignals.has(element)) {
         return
@@ -174,4 +207,5 @@ export function trackDomField(element, props, valueIsString) {
             })
         })
     })
+    return s
 }
