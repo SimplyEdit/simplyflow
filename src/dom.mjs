@@ -1,4 +1,9 @@
-import { signals, signal as stateSignal, notifyGet, notifySet, makeContext } from './state.mjs'
+import { signals, signal as stateSignal, notifyGet, notifySet, makeContext,
+         throttledEffect, effect, untracked, batch } from './state.mjs'
+import { getValueByPath } from './bind.mjs'
+import { setValueByPath, getProperties } from './bind.render.mjs'
+
+const domSignals = new WeakMap()
 
 const domSignalHandler = {
     get: (target, property, receiver) => {
@@ -107,4 +112,66 @@ function domListen(el, signal, options) {
             }
         }
     }
+}
+
+export function trackDomList(element)
+{
+    const path = this.getBindingPath(element)
+    if (!path) {
+        throw new Error('Could not find binding path for element', { cause: element })
+    }
+    const s = signal(element, {
+        childList: true
+    })
+    throttledEffect(() => {
+        const children = Array.from(s.children)
+        untracked(() => { // don't track access to the data, only track dom changes
+            batch(() => { // apply all changes in the list as one change
+                let key=0
+                const currentList = getValueByPath(this.options.root, path)
+                const source = currentList.slice() // make sure changes in currentList don't affect the original source
+                for (const item of children) {
+                    if (item.tagName==='TEMPLATE') {
+                        continue
+                    }
+                    if (item.dataset.flowKey) { //FIXME: could be other attribute name
+                        if (item.dataset.flowKey!=key) {
+                            setValueByPath(this.options.root, path+'.'+key,
+                                source[item.dataset.flowKey])
+                        }
+                        key++
+                    }
+                }
+                if (currentList.length>key) {
+                    // remove extra values
+                    currentList.length = key
+                }
+            })
+        })
+    })
+}
+
+export function trackDomField(element, props, valueIsString) {
+    if (domSignals.has(element)) {
+        return
+    }
+    const path = this.getBindingPath(element)
+    if (!path) {
+        throw new Error('Could not find binding path for element', { cause: element })
+    }
+    const s = signal(element)
+    domSignals.set(element, s)
+    //TODO: run reverse transformers (extract)
+    batch(() => { // avoids cyclical dependencies - check why
+        throttledEffect(() => {
+            let updateValue = s.innerHTML //FIXME: incorrect: in an anchor this could be s.href - use extract here
+            if (!valueIsString) {
+                updateValue = getProperties(s, ...props)
+            }
+            untracked(() => { // don't track changes in data, only in the dom
+                // don't trigger this effect when the data changes (root.path)
+                setValueByPath(this.options.root, path, updateValue)
+            })
+        })
+    })
 }

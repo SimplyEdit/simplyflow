@@ -2,7 +2,7 @@
  * Default renderers for data binding
  * Will be used unless overriden in the SimplyBind options parameter
  */
-import { signal as domSignal } from './dom.mjs'
+import { signal as domSignal, trackDomField, trackDomList } from './dom.mjs'
 import { throttledEffect, effect, untracked, batch } from './state.mjs'
 import { getValueByPath } from './bind.mjs'
 /**
@@ -211,35 +211,7 @@ export function arrayByTemplates(context)
         }
     }
     if (this.options.twoway) {
-        const s = domSignal(context.element, {
-            childList: true
-        })
-        throttledEffect(() => {
-            const children = Array.from(s.children)
-            batch(() => {
-                untracked(() => {
-                    let key=0
-                    const currentList = context.value.slice()
-                    for (const item of children) {
-                        if (item.tagName==='TEMPLATE') {
-                            continue
-                        }
-                        if (item.dataset.flowKey) {
-                            if (item.dataset.flowKey!=key) {
-                                setValueByPath(this.options.root, context.path+'.'+key,
-                                    currentList[item.dataset.flowKey])
-                            }
-                            key++
-                        }
-                    }
-                    if (context.value.length>key) {
-                        // remove extra values
-                        const source = getValueByPath(this.options.root, context.path)
-                        source.length = key
-                    }
-                })
-            })
-        })
+        trackDomList.call(this, context.element)
     }
 }
 
@@ -488,8 +460,6 @@ export function meta(context)
     }
 }
 
-const domSignals = new WeakMap()
-
 /**
  * sets the innerHTML and title and id properties of any HTML element
  */
@@ -508,29 +478,8 @@ export function element(context, ...extraprops)
     const props = ['innerHTML','title','id','className'].concat(extraprops)
     setProperties(el, value, ...props)
     if (this.options.twoway) {
-        batch(() => {
-            updateProperties.call(this, context, props, valueIsString)
-        })
+        trackDomField.call(this, context.element, props, valueIsString)
     }
-}
-
-export function updateProperties(context, props, valueIsString) {
-    if (domSignals.has(context.element)) {
-        return
-    }
-    const s = domSignal(context.element)
-    domSignals.set(context.element, s)
-    //TODO: run reverse transformers (extract)
-    throttledEffect(() => {
-        let updateValue = s.innerHTML //incorrect: in an anchor this could be s.href
-        if (!valueIsString) {
-            updateValue = getProperties(s, ...props)
-        }
-        untracked(() => {
-            // don't trigger this effect when the data changes (root.path)
-            setValueByPath(this.options.root, context.path, updateValue)
-        })
-    })
 }
 
 /**
