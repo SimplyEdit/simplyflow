@@ -534,6 +534,7 @@
     trackDomList: () => trackDomList
   });
   var domSignals = /* @__PURE__ */ new WeakMap();
+  var observers = /* @__PURE__ */ new WeakMap();
   var domSignalHandler = {
     get: (target, property, receiver) => {
       if (property === Symbol.xRay) {
@@ -577,7 +578,6 @@
     }
     return signals.get(el);
   }
-  var observers = /* @__PURE__ */ new WeakMap();
   function domListen(el, signal3, options) {
     const defaultOptions = {
       characterData: true,
@@ -673,6 +673,7 @@
         });
       });
     });
+    return s;
   }
   function trackDomField(element2, props, valueIsString) {
     if (domSignals.has(element2)) {
@@ -695,6 +696,7 @@
         });
       });
     });
+    return s;
   }
 
   // src/bind.render.mjs
