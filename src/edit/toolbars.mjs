@@ -1,112 +1,193 @@
 import anchor from './anchor.mjs'
 import '../flow.mjs'
 
-const alignToolbar = {
-	buttons: [
-		{
-			label: 'Left',
-			icon: '#align-left',
-			command: 'align',
-			value: 'left'
-		},
-		{
-			label: 'Center',
-			icon: '#align-center',
-			command: 'align',
-			value: 'center'
-		},
-		{
-			label: 'Right',
-			icon: '#align-right',
-			command: 'align',
-			value: 'right'
-		},
-		{
-			label: 'Justify',
-			icon: '#align-justify',
-			command: 'align',
-			value: 'justify'
-		},
-		{
-			label: 'None',
-			icon: '#x',
-			command: 'align',
-			value: 'none'
-		}
-	]
-}
 
-const styleToolbar = {
-	buttons: [
-		{
-			label: 'Bold',
-			icon: '#bold',
-			command: 'toggle',
-			value: '<strong>'
-		},
-		{
-			label: 'Italic',
-			icon: '#italic',
-			command: 'toggle',
-			value: '<em>'
-		},
-		{
-			label: 'Underline',
-			icon: '#underline',
-			command: 'toggle',
-			value: '<u>'
-		},
-		{
-			label: 'Code',
-			icon: '#code',
-			command: 'toggle',
-			value: '<code>'
-		}
-	]
+const simplyToolbarCSS = css`
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;1,300&family=Roboto+Condensed:ital@0;1&display=swap');
+:host {
+    --ds-body-font: 'Lato', sans-serif;
+    --ds-heading-font: 'Roboto Condensed', Helvetica, sans-serif;
 }
+:host {
+    --simply-button-font: arial, helvetica, sans-serif;
+    --simply-button-font-size: 11px;
+    --simply-button-width: 60px;
+    --simply-button-height: 60px;
+    --simply-button-color: #333;
+    --simply-button-primary: var(--ds-primary);
+}
+.simply-button {
+    height: var(--simply-button-height);
+    border-top: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+    transition: background 0.2s ease;
+    font-size: var(--simply-button-font-size);
+    letter-spacing: 0;
+    font-family: var(--simply-button-font);
+    white-space: nowrap;
+    user-select: none;
+    vertical-align: top;
+    min-width: var(--simply-button-width);
+    text-align: center;
+    cursor: pointer;
+    padding: 0 4px;
+    text-transform: none;
+    background: transparent;
+    outline: none;
+    box-shadow: none;
+    border-radius: 0;
+    color: var(--simply-button-color);
+}
+.simply-button:hover {
+    border-bottom: 2px solid var(--simply-button-primary);
+    box-shadow: none;
+}
+.simply-button .ds-icon {
+    height: 26px;
+    font-size: 26px;
+    padding: 0 4px;
+    display: block;
+    margin: 6px auto -14px;
+    position: relative;
+}
+.simply-button.ds-selected {
+    border-top-color: var(--ds-grey-40);
+    background-color: var(--ds-grey-light);
+    border-left: 1px solid var(--ds-grey-40);
+    border-right: 1px solid var(--ds-white);
+}
+.simply-button:active {
+	border-bottom: 2px solid var(--ds-primary);
+    box-shadow: none;
+}
+.simply-toolbar {
+    border-top: 1px solid var(--simply-button-primary);
+    background: linear-gradient(180deg, var(--ds-white) 0, var(--ds-white) 95%, var(--ds-grey-40) 100%);
+    white-space: nowrap;
+    min-width: 100%;
+    min-height: 60px;
+    display: flex;
+    position: relative;
+}
+.simply-toolbar-inline {
+	min-width: 100px;
+}
+.simply-toolbar-inline .ds-button,
+.simply-toolbar .ds-button {
+    margin: 0;
+}
+.simply-toolbar-highlight {
+    background: var(--ds-primary-gradient-bump);
+    color: var(--ds-primary-contrast);
+}
+.simply-toolbar  .simply-toolbar-title {
+    margin-top: 0;
+}
+.simply-toolbar-spacer {
+    border-left: 1px solid #ccc;
+    height: 60px;
+    position: absolute;
+    display: inline-block;
+}
+.simply-button-expands:not(.ds-selected)::after {
+    content: "";
+    display: block;
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    margin-left: -3px;
+    width: 0;
+    border-top: 3px solid #888;
+    border-bottom: 0;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+}
+.simply-toolbar .simply-push-right {
+    margin-left: auto;
+}
+.simply-toolbar input[type="text"] {
+    margin-right:0;
+    margin-bottom: 0;
+    margin-top: 10px;
+    font-size: small;
+    line-height: 1.2em;
+    height: 35px;
+}
+.simply-toolbar-header {
+    border-top-width: 5px;
+}
+.ds-nightmode .simply-toolbar {
+    background: linear-gradient(var(--ds-grey-90) 0%, var(--ds-grey-90) 95%, black 100%);
+    color: var(--ds-white);
+}
+.ds-nightmode .simply-button {
+    color: var(--ds-white);
+}
+.ds-nightmode .simply-button.ds-selected {
+    background-color: var(--ds-grey-80);
+    border-left-color: var(--ds-black);
+    border-top-color: var(--ds-black);
+    border-right-color: var(--ds-grey-60);
+}
+.ds-nightmode .simply-button[disabled] {
+    background-color: transparent;
+    color: var(--ds-grey-60);
+}`
 
+
+const simplyToolbarContents = html`
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@muze-nl/theds@0.2.7/dist/theds.css">
+	<style>
+		${simplyToolbarCSS}
+	</style>
+	<nav class="simply-toolbar simply-toolbar-inline" data-flow-list="toolbars.floatToolbarText.buttons">
+		<template rel="simply-toolbar"></template>
+	</nav>
+	<!-- nav class="simply-toolbar-sub" data-flow-list="toolbars">
+		<template rel="simply-toolbar"></template>
+	</nav -->`
 
 export default {
 	css: {
-		'simply-toolbar-float': css`
+		simplyToolbarFloat: css`
 .simply-toolbar-float {
 	margin: 0;
 	border: 0;
 	width: auto;
 	position-anchor: --cursor-anchor;
 	position-area: end span-all;
-}
-`
+	position: absolute;
+	min-width:100px;
+	min-height: 60px;
+	background: white;
+	z-index: 10000;
+	margin-top: -4px;
+	border: 1px solid red;
+}`
 	},
 	html: {
 	'simply-toolbar': 
-html`<button class="simply-button" data-flow-field=":value" data-flow-transform="simplyToolbarButton">
+html`<button class="ds-button simply-button" data-flow-field=":value" data-flow-transform="simplyToolbarButton">
 	<svg class="ds-icon ds-icon-feather">
         <use xlink:href="/files/feather-sprite.svg#" data-flow-field="icon">
     </use></svg>
     <span data-flow-field="label"></span>
 </button>`,
 	'simply-toolbar-float': 
-html`<dialog class="simply-toolbar simply-toolbar-float" open>
-	<nav class="simply-toolbar" data-flow-list="buttons">
-		<template rel="simply-toolbar"></template>
-	</nav>
-	<nav class="simply-toolbar-sub" data-flow-list="toolbars">
-		<template rel="simply-toolbar"></template>
-	</nav>
-</dialog>`
+html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></div>`
 	},
 	transformers: {
 		simplyToolbarButton: function(context, next) {
-			this.value = context.value.command
+			const el = context.element
+			el.value = context.value.command
 			if (context.value.command=="expand") {
-				this.classList.add('simply-toolbar-button-expands')
+				el.classList.add('simply-toolbar-button-expands')
 			}
 			if (context.value.command) {
-				this.dataset.simplyCommand = context.value.command
+				el.dataset.simplyCommand = context.value.command
 			}
 			if (context.value.value) {
-				this.value = context.value.value
+				el.value = context.value.value
 			}
 			// skip next()
 		}
@@ -119,7 +200,7 @@ html`<dialog class="simply-toolbar simply-toolbar-float" open>
 
 		},
 		expand: function(el, value) {
-
+			alert('expand')
 		}
 	},
 	actions: {
@@ -130,79 +211,16 @@ html`<dialog class="simply-toolbar simply-toolbar-float" open>
 			this.state.toolbar.style.display = 'none'
 		}
 	},
-	state: {
-		toolbars: {
-			mainToolbar: {
-				buttons: [
-					{
-						label: 'Save',
-						command: 'save',
-						icon: '#save'
-					},
-					{
-						label: 'Undo',
-						command: 'undo',
-						icon: '#rotate-ccw'
-					},
-					{
-						label: 'Redo',
-						command: 'redo',
-						icon: '#rotate-cw'
-					},
-					{
-						label: 'Help',
-						command: 'help-main',
-						icon: '#help-circle'
-					},
-					{
-						label: 'Close',
-						command: 'close',
-						icon: ''
-					}
-				]
-			},
-			floatToolbarText: {
-				buttons: [
-					{
-						label: 'Text',
-						icon: '#type',
-						value: 'styleToolbar',
-						command: 'expand'
-					},
-					{
-						label: 'Align',
-						icon: '',
-						command: 'expand',
-						value: 'alignToolbar'
-					}
-				],
-				toolbars: {
-					styleToolbar,
-					alignToolbar
-				}
-			},
-			floatToolbarImg: {
-				buttons: [
-					{
-						label: 'Align',
-						icon: '',
-						command: 'expand',
-						value: 'alignToolbar'
-					}
-				],
-				toolbars: {
-					alignToolbar
-				}
-			}
-		}
-	},
 	hooks: {
 		start: function() {
 	        this.state.toolbar = this.container.querySelector('simply-edit-focus-toolbar')
 	        if (!this.state.toolbar) {
 				this.container.insertAdjacentHTML('beforeend','<simply-render rel="simply-toolbar-float"></simply-render>')
 				setTimeout(() => {
-					this.state.toolbar = document.querySelector('dialog.simply-toolbar-float')
+					const toolbar = document.querySelector('.simply-toolbar-float')
+					const shadow = toolbar.attachShadow({ mode: "open"})
+					shadow.innerHTML = simplyToolbarContents
+					this.state.toolbar = toolbar
 				    simply.state.effect(() => {
 						let visible = this.state.anchor.visible
 						if (visible) {
@@ -211,6 +229,14 @@ html`<dialog class="simply-toolbar simply-toolbar-float" open>
 							this.actions.hideToolbar()
 						}
 					})
+					// databinding doesn't reach into shadowRoot by default, so set it up here
+					simply.bind({
+						root: this.state,
+						container: toolbar.shadowRoot,
+						transformers: this.transformers
+					})
+					// same for commands, set container explicitly to the shadowRoot
+					simply.command({ app: this, container: toolbar.shadowRoot, commands: this.commands})
 				}, 100)
 	        }
 		}
