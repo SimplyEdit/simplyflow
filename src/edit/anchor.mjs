@@ -1,4 +1,4 @@
-import '../src/flow.mjs'
+import '../flow.mjs'
 
 export default {
 	html: {

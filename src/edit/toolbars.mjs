@@ -1,5 +1,5 @@
 import anchor from './anchor.mjs'
-import '../src/flow.mjs'
+import '../flow.mjs'
 
 const alignToolbar = {
 	buttons: [
