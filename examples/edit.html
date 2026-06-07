@@ -6,9 +6,13 @@
 <p>This is a bit of demo text</p>
 <p>And some more</p>
 </div>
+<div data-simply-field="foo">bar</div>
 <script src="https://cdn.jsdelivr.net/npm/simplyview@3.5.8/dist/simply.everything.js"></script>
+<script src="../dist/simplyflow.mjs"></script>
 <script type="module">
 	import { edit as simplyEdit } from '../src/edit.mjs'
-	const editor = simplyEdit(document.querySelector('#editor'))
+	const editor = simplyEdit(document.body)
+	editor.state.foo = 'Foo'
+	window.app = editor
 </script>
 </body>
