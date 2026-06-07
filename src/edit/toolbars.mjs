@@ -1,4 +1,5 @@
 import anchor from './anchor.mjs'
+import '../src/flow.mjs'
 
 const alignToolbar = {
 	buttons: [
@@ -197,23 +198,21 @@ html`<dialog class="simply-toolbar simply-toolbar-float" open>
 	},
 	hooks: {
 		start: function() {
-	        this.state.toolbar = document.querySelector('simply-edit-focus-toolbar')
+	        this.state.toolbar = this.container.querySelector('simply-edit-focus-toolbar')
 	        if (!this.state.toolbar) {
-	          document.body.insertAdjacentHTML('beforeend','<simply-render rel="simply-toolbar-float"></simply-render>')
-	          setTimeout(() => {
-	            this.state.toolbar = document.querySelector('dialog.simply-toolbar-float')
-       	        simply.state.effect(() => {
-		        	let visible = this.state.anchor.visible
-		        	if (visible) {
-		        		this.actions.showToolbar()
-		        	} else {
-		        		this.actions.hideToolbar()
-		        	}
-		        })
-
-	          }, 1000)
+				this.container.insertAdjacentHTML('beforeend','<simply-render rel="simply-toolbar-float"></simply-render>')
+				setTimeout(() => {
+					this.state.toolbar = document.querySelector('dialog.simply-toolbar-float')
+				    simply.state.effect(() => {
+						let visible = this.state.anchor.visible
+						if (visible) {
+							this.actions.showToolbar()
+						} else {
+							this.actions.hideToolbar()
+						}
+					})
+				}, 100)
 	        }
-
 		}
 	},
 	components: {

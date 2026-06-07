@@ -1,46 +1,4 @@
-/**
- * This function returns the cursor position and height, if the cursor is in
- * the given element. The x and y position are calculated relative to the top
- * left of the given element. This function does not alter the DOM in any way.
- */
-function getCursorPosition(element) {
-  const selection = window.getSelection();
-  if (!selection.rangeCount) return null;
-
-  const range = document.createRange();
-  range.setStart(selection.focusNode, selection.focusOffset);
-  range.collapse(true);
-
-  // Try getClientRects() first — often non-empty even on empty lines
-  const elementRect = element.getBoundingClientRect();
-
-  const cursorNode = selection.focusNode;
-  const cursorElement = cursorNode.nodeType === Node.TEXT_NODE
-    ? cursorNode.parentElement
-    : cursorNode;
-
-  let x,y,height;
-  const rects = range.getClientRects();
-  if (rects.length > 0) {
-  	x = rects[0].left - elementRect.left
-  	y = rects[0].top - elementRect.top
-    height = rects[0].height
-  } else {
-	  // Fallback for truly empty element: use padding from CSS
-    const style = window.getComputedStyle(cursorElement);
-    const lineHeight = parseFloat(style.lineHeight);
-    height = isNaN(lineHeight) ? parseFloat(style.fontSize) : lineHeight
-    const cursorElementRect = cursorElement.getBoundingClientRect();
-  	x = cursorElementRect.left - elementRect.left + parseFloat(style.paddingLeft)
-    y = cursorElementRect.top  - elementRect.top  + parseFloat(style.paddingTop)
-  }
-  return {
-  	x,
-  	y,
-  	height,
-  	element: cursorElement
-  }
-}
+import '../src/flow.mjs'
 
 export default {
 	html: {
@@ -121,5 +79,49 @@ export default {
 			})
 
 		}
+	}
+}
+
+/**
+ * This function returns the cursor position and height, if the cursor is in
+ * the given element. The x and y position are calculated relative to the top
+ * left of the given element. This function does not alter the DOM in any way.
+ */
+function getCursorPosition(element) {
+	const selection = window.getSelection();
+	if (!selection.rangeCount) return null;
+
+	const range = document.createRange();
+	range.setStart(selection.focusNode, selection.focusOffset);
+	range.collapse(true);
+
+	// Try getClientRects() first — often non-empty even on empty lines
+	const elementRect = element.getBoundingClientRect();
+
+	const cursorNode = selection.focusNode;
+	const cursorElement = cursorNode.nodeType === Node.TEXT_NODE
+	? cursorNode.parentElement
+	: cursorNode;
+
+	let x,y,height;
+	const rects = range.getClientRects();
+	if (rects.length > 0) {
+		x = rects[0].left - elementRect.left
+		y = rects[0].top - elementRect.top
+	height = rects[0].height
+	} else {
+		// Fallback for truly empty element: use padding from CSS
+		const style = window.getComputedStyle(cursorElement);
+		const lineHeight = parseFloat(style.lineHeight);
+		height = isNaN(lineHeight) ? parseFloat(style.fontSize) : lineHeight
+		const cursorElementRect = cursorElement.getBoundingClientRect();
+			x = cursorElementRect.left - elementRect.left + parseFloat(style.paddingLeft)
+		y = cursorElementRect.top  - elementRect.top  + parseFloat(style.paddingTop)
+	}
+	return {
+		x,
+		y,
+		height,
+		element: cursorElement
 	}
 }
