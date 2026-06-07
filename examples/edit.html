@@ -1,18 +1,25 @@
 <!doctype html>
 <body>
 <h1>simply.edit demo</h1>
-<div id="editor">
+<div class="editor">
 <h2>A title</h2>
 <p>This is a bit of demo text</p>
 <p>And some more</p>
 </div>
+<h2>Another</h2>
+<div class="editor">
+<h3>A title</h3>
+<p>This is a bit of demo text</p>
+<p>And some more</p>
+</div>
+
 <div data-simply-field="foo">bar</div>
-<script src="https://cdn.jsdelivr.net/npm/simplyview@3.5.8/dist/simply.everything.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/simplyview@3.5.9/dist/simply.everything.js"></script>
 <script src="../dist/simplyflow.mjs"></script>
 <script type="module">
 	import { edit as simplyEdit } from '../src/edit.mjs'
 	const editor = simplyEdit(document.body)
-	editor.state.foo = 'Foo'
+	editor.actions.editAll(document.querySelectorAll('.editor'))
 	window.app = editor
 </script>
 </body>
