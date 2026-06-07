@@ -1,13 +1,30 @@
 import toolbars from './edit/toolbars.mjs'
 import '../src/flow.mjs'
 
+const editSet = new Set()
+
 export function edit(rootElement)
 {
   return simply.app({
     container: rootElement,
     actions: {
-      close: function() {
-        this.container.removeAttribute('contenteditable')
+      editAll: function(elements) {
+        for (let el of elements) {
+          this.actions.edit(el)
+        }
+      },
+      edit: function(el) {
+        el.setAttribute('contenteditable', true)
+        editSet.add(el, true)
+      },
+      editClose: function(el) {
+        el.removeAttribute('contenteditable')
+        editSet.remove(el)
+      },
+      editQuit: function() {
+        for (let el of editSet.entries()) {
+          removeAttribute('contenteditable')
+        }
         document.removeEventListener(this.selectionListener)
       }
     },
@@ -96,7 +113,6 @@ export function edit(rootElement)
         simply.bind({
           root: this.state
         })
-        this.container.setAttribute('contenteditable', true)
         // move this code to default start() hook in app.mja, run it before
         // the app.hooks.start function
         for (let component in this.components) {

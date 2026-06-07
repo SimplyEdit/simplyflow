@@ -55,6 +55,10 @@ export default {
 					this.state.anchor.visible = false
 					return
 				}
+				if (!selection.anchorNode.parentElement.closest('[contenteditable]')) {
+					this.state.anchor.visible = false
+					return
+				}
 				this.state.anchor.visible = true
 				const position = getCursorPosition(this.container)
 				this.state.anchor.position = position
@@ -62,7 +66,6 @@ export default {
 			simply.state.effect(() => {
 				const pos = this.state.anchor.position
 				const offset = this.state.anchor.offset
-				console.log('anchor position', pos, offset)
 				simply.state.batch(() => {
 					this.state.anchor.element.style.top = (pos.y + pos.height + offset.top) + 'px'
 					this.state.anchor.element.style.left = (pos.x + offset.left) + 'px'

@@ -3,11 +3,6 @@ import '../flow.mjs'
 
 
 const simplyToolbarCSS = css`
-@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;1,300&family=Roboto+Condensed:ital@0;1&display=swap');
-:host {
-    --ds-body-font: 'Lato', sans-serif;
-    --ds-heading-font: 'Roboto Condensed', Helvetica, sans-serif;
-}
 :host {
     --simply-button-font: arial, helvetica, sans-serif;
     --simply-button-font-size: 11px;
@@ -135,6 +130,7 @@ const simplyToolbarCSS = css`
 }`
 
 
+//TODO: allow app to specify which toolbar to show instead of fixed toolbars.floatToolbarText.buttons
 const simplyToolbarContents = html`
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@muze-nl/theds@0.2.7/dist/theds.css">
 	<style>
@@ -150,6 +146,16 @@ const simplyToolbarContents = html`
 export default {
 	css: {
 		simplyToolbarFloat: css`
+:root {
+	--ds-shadow-light: rgba(0,0,0,0.07);
+	--ds-shadow-middle: rgba(0,0,0,0.09);
+	--ds-shadow-dark: rgba(0,0,0,0.11);
+	--ds-shadow-small: 
+	    0 1px 1px var(--ds-shadow-dark),
+	    0 2px 2px var(--ds-shadow-middle),
+	    0 4px 4px var(--ds-shadow-light)
+	;
+}
 .simply-toolbar-float {
 	margin: 0;
 	border: 0;
@@ -163,13 +169,14 @@ export default {
 	z-index: 10000;
 	margin-top: -4px;
 	border: 1px solid red;
+	box-shadow: var(--ds-shadow-small);
 }`
 	},
 	html: {
 	'simply-toolbar': 
 html`<button class="ds-button simply-button" data-flow-field=":value" data-flow-transform="simplyToolbarButton">
 	<svg class="ds-icon ds-icon-feather">
-        <use xlink:href="/files/feather-sprite.svg#" data-flow-field="icon">
+        <use xlink:href="feather-sprite.svg#x" data-flow-transform="simplyIcon" data-flow-field="icon">
     </use></svg>
     <span data-flow-field="label"></span>
 </button>`,
@@ -189,6 +196,12 @@ html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></di
 			if (context.value.value) {
 				el.value = context.value.value
 			}
+			// skip next()
+		},
+		simplyIcon: function(context, next) {
+			const url = new URL(context.element.getAttribute('xlink:href'), document.location)
+			url.hash = context.value
+//			context.element.setAttribute('xlink:href', url.href)
 			// skip next()
 		}
 	},
