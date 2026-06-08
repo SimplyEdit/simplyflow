@@ -74,6 +74,18 @@ const simplyToolbarCSS = css`
 .simply-toolbar .ds-button {
     margin: 0;
 }
+.simply-toolbar-sub .simply-toolbar {
+	background: #EEE;
+	min-height: 40px;
+}
+.simply-toolbar-sub .simply-button {
+	height: 40px;
+	width: 40px;
+}
+.simply-toolbar-sub .simply-button .ds-icon {
+    height: 20px;
+    font-size: 20px;
+}
 .simply-toolbar-highlight {
     background: var(--ds-primary-gradient-bump);
     color: var(--ds-primary-contrast);
@@ -99,6 +111,12 @@ const simplyToolbarCSS = css`
     border-bottom: 0;
     border-left: 3px solid transparent;
     border-right: 3px solid transparent;
+}
+.simply-button-expanded {
+	background: #EEE;
+}
+.simply-button.simply-button-expanded::after {
+	display: none;
 }
 .simply-toolbar .simply-push-right {
     margin-left: auto;
@@ -240,7 +258,12 @@ html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></di
 			}
 			const selectedToolbar = subToolbars.querySelector('#'+value)
 			if (selectedToolbar) {
-				selectedToolbar.classList.toggle('ds-hidden')
+				selectedToolbar.classList.remove('ds-hidden')
+				const buttons = Array.from(toolbar.querySelectorAll('.simply-button-expanded'))
+				for (let button of buttons) {
+					button.classList.remove('simply-button-expanded')
+				}
+				el.classList.add('simply-button-expanded')
 			} else {
 				console.error('toolbar '+value+' not found')
 			}
