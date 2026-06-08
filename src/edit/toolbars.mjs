@@ -80,7 +80,7 @@ const simplyToolbarCSS = css`
 }
 .simply-toolbar-sub .simply-button {
 	height: 40px;
-	width: 40px;
+	min-width: 40px;
 }
 .simply-toolbar-sub .simply-button .ds-icon {
     height: 20px;
@@ -188,6 +188,7 @@ export default {
 }
 .simply-toolbar-float {
 	margin: 0;
+	padding: 0;
 	border: 0;
 	width: auto;
 	position-anchor: --cursor-anchor;
@@ -198,7 +199,6 @@ export default {
 	background: white;
 	z-index: 10000;
 	margin-top: -4px;
-	border: 1px solid red;
 	box-shadow: var(--ds-shadow-small);
 }`
 	},
@@ -211,7 +211,7 @@ html`<button class="ds-button simply-button" data-flow-field=":value" data-flow-
     <span data-flow-field="label"></span>
 </button>`,
 	'simply-toolbar-float': 
-html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></div>`
+html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline" popover="manual"></div>`
 	},
 	transformers: {
 		simplyToolbar: function(context, next) {
@@ -271,10 +271,10 @@ html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></di
 	},
 	actions: {
 		showToolbar: function(position) {
-			this.state.toolbar.style.display = 'block'
+			this.state.toolbar.showPopover()
 		},
 		hideToolbar: function() {
-			this.state.toolbar.style.display = 'none'
+			this.state.toolbar.hidePopover()
 		}
 	},
 	hooks: {
