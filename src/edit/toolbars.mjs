@@ -149,8 +149,10 @@ const simplyToolbarCSS = css`
     background-color: transparent;
     color: var(--ds-grey-60);
 }
-.ds-hidden {
-	display: none;
+.simply-toolbar.ds-hidden {
+	height: 0px;
+	overflow: hidden;
+	min-height: 0px;
 }`
 
 
