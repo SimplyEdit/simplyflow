@@ -6,10 +6,10 @@ const simplyToolbarCSS = css`
 :host {
     --simply-button-font: arial, helvetica, sans-serif;
     --simply-button-font-size: 11px;
-    --simply-button-width: 60px;
-    --simply-button-height: 60px;
+    --simply-button-width: 50px;
+    --simply-button-height: 50px;
     --simply-button-color: #333;
-    --simply-button-primary: var(--ds-primary);
+    --simply-button-primary: #ea5922;
 }
 .simply-button {
     height: var(--simply-button-height);
@@ -32,6 +32,7 @@ const simplyToolbarCSS = css`
     box-shadow: none;
     border-radius: 0;
     color: var(--simply-button-color);
+    position: relative;
 }
 .simply-button:hover {
     border-bottom: 2px solid var(--simply-button-primary);
@@ -42,7 +43,7 @@ const simplyToolbarCSS = css`
     font-size: 26px;
     padding: 0 4px;
     display: block;
-    margin: 6px auto -14px;
+    margin: -2px auto -2px;
     position: relative;
 }
 .simply-button.ds-selected {
@@ -56,13 +57,15 @@ const simplyToolbarCSS = css`
     box-shadow: none;
 }
 .simply-toolbar {
-    border-top: 1px solid var(--simply-button-primary);
-    background: linear-gradient(180deg, var(--ds-white) 0, var(--ds-white) 95%, var(--ds-grey-40) 100%);
     white-space: nowrap;
     min-width: 100%;
-    min-height: 60px;
+    min-height: 50px;
     display: flex;
     position: relative;
+}
+.simply-toolbar-main {
+    border-top: 2px solid var(--simply-button-primary);
+    background: linear-gradient(180deg, white 0, white 95%, #CCC 100%);
 }
 .simply-toolbar-inline {
 	min-width: 100px;
@@ -88,7 +91,7 @@ const simplyToolbarCSS = css`
     content: "";
     display: block;
     position: absolute;
-    bottom: 6px;
+    bottom: 2px;
     left: 50%;
     margin-left: -3px;
     width: 0;
@@ -127,6 +130,9 @@ const simplyToolbarCSS = css`
 .ds-nightmode .simply-button[disabled] {
     background-color: transparent;
     color: var(--ds-grey-60);
+}
+.ds-hidden {
+	display: none;
 }`
 
 
@@ -136,12 +142,18 @@ const simplyToolbarContents = html`
 	<style>
 		${simplyToolbarCSS}
 	</style>
-	<nav class="simply-toolbar simply-toolbar-inline" data-flow-list="toolbars.floatToolbarText.buttons">
+	<nav class="simply-toolbar simply-toolbar-main simply-toolbar-inline" data-flow-list="toolbars.floatToolbarText.buttons">
 		<template rel="simply-toolbar"></template>
 	</nav>
-	<!-- nav class="simply-toolbar-sub" data-flow-list="toolbars">
-		<template rel="simply-toolbar"></template>
-	</nav -->`
+	<div class="simply-toolbar-sub" data-flow-map="toolbars.floatToolbarText.toolbars">
+		<template>
+			<nav class="simply-toolbar ds-hidden" data-flow-field=":key" data-flow-transform="simplyToolbar">
+				<div data-flow-list="buttons">
+					<template rel="simply-toolbar"></template>
+				</div>
+			</nav>
+		</template>
+	</div>`
 
 export default {
 	css: {
@@ -164,7 +176,7 @@ export default {
 	position-area: end span-all;
 	position: absolute;
 	min-width:100px;
-	min-height: 60px;
+	min-height: 50px;
 	background: white;
 	z-index: 10000;
 	margin-top: -4px;
@@ -184,11 +196,14 @@ html`<button class="ds-button simply-button" data-flow-field=":value" data-flow-
 html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></div>`
 	},
 	transformers: {
+		simplyToolbar: function(context, next) {
+			context.element.id = context.value
+		},
 		simplyToolbarButton: function(context, next) {
 			const el = context.element
 			el.value = context.value.command
 			if (context.value.command=="expand") {
-				el.classList.add('simply-toolbar-button-expands')
+				el.classList.add('simply-button-expands')
 			}
 			if (context.value.command) {
 				el.dataset.simplyCommand = context.value.command
@@ -201,7 +216,7 @@ html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></di
 		simplyIcon: function(context, next) {
 			const url = new URL(context.element.getAttribute('xlink:href'), document.location)
 			url.hash = context.value
-//			context.element.setAttribute('xlink:href', url.href)
+			context.element.setAttribute('xlink:href', url.href)
 			// skip next()
 		}
 	},
@@ -213,7 +228,22 @@ html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline"></di
 
 		},
 		expand: function(el, value) {
-			alert('expand')
+			const toolbar = el.closest('.simply-toolbar')
+			const subToolbars = toolbar.nextElementSibling;
+			if (!subToolbars) {
+				console.error('no subtoolbars')
+				return
+			}
+			const current = Array.from(subToolbars.querySelectorAll('.simply-toolbar:not(.ds-hidden)'))
+			for( let t of current) {
+				t.classList.add('ds-hidden')
+			}
+			const selectedToolbar = subToolbars.querySelector('#'+value)
+			if (selectedToolbar) {
+				selectedToolbar.classList.toggle('ds-hidden')
+			} else {
+				console.error('toolbar '+value+' not found')
+			}
 		}
 	},
 	actions: {

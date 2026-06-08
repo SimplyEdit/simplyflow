@@ -80,7 +80,7 @@ export function edit(rootElement)
             },
             {
               label: 'Align',
-              icon: '',
+              icon: '#align-left',
               command: 'expand',
               value: 'alignToolbar'
             }
