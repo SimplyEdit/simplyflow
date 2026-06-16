@@ -561,6 +561,13 @@ export function throttledEffect(fn, throttleTime) {
         }
         if (throttled && throttled>Date.now()) {
             hasChange = true
+
+            globalThis.setTimeout(() => {
+                if (hasChange) {
+                    computeEffect()
+                }
+            }, throttled - Date.now())
+
             return
         }
         // remove all dependencies (signals) from previous runs 
