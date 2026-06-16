@@ -252,8 +252,10 @@ class SimplyBind
         if (typeof index !== 'undefined') {
             clone.children[0].setAttribute(attribute+'-key',index)
         }
-        // keep track of the used template, so if that changes, the item can be updated
+        // keep track of the used template and value reference, so list items can be
+        // reused when an array insertion shifts their numeric index.
         clone.children[0][DEP.TEMPLATE] = template
+        clone.children[0][DEP.VALUE] = value
 
         // return clone, not the firstChild, so that all whitespace is cloned as well
         return clone

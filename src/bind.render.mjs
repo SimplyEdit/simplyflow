@@ -151,75 +151,109 @@ export function arrayByTemplates(context)
     const attribute      = this.options.attribute
     const attributes     = [attribute+'-field',attribute+'-list',attribute+'-map']
     const attrQuery      = '['+attributes.join('],[')+']'
-    let items = context.element.querySelectorAll(':scope > ['+attribute+'-key]')
-    // do single merge strategy for now, in future calculate optimal merge strategy from a number
-    // now just do a delete if a key <= last key, insert if a key >= last key
-    let lastKey = 0
-    let skipped = 0
+    const keyAttribute   = attribute+'-key'
+    const items          = Array.from(context.element.querySelectorAll(':scope > ['+keyAttribute+']'))
+    const usedItems      = new Set()
+    let cursor           = 0
+
     context.list = context.value
-    for (let item of items) {
-        let currentKey = parseInt(item.getAttribute(attribute+'-key'))
-        if (currentKey>lastKey) {
-            // insert before
-            context.index = lastKey
-            context.element.insertBefore(this.applyTemplate(context), item)
-        } else if (currentKey<lastKey) {
-            // remove this
-            item.remove()
-        } else {
-            // check that all data-bind params start with current json path or ':root', otherwise replaceChild
-            let bindings = Array.from(item.querySelectorAll(attrQuery))
-            if (item.matches(attrQuery)) {
-                bindings.unshift(item)
-            }
-            let needsReplacement = bindings.find(b => {
-                for (let attr of attributes) {
-                    let databind = b.getAttribute(attr)
-                    if (databind && databind.substr(0,5)!==':root' 
-                        && databind.substr(0, context.path.length)!==context.path) {
-                        return true
-                    }
-                }
-                return false
-            })
-            if (!needsReplacement) {
-                if (item[DEP.TEMPLATE]) {
-                    let newTemplate = this.findTemplate(context.templates, context.list[lastKey])
-                    if (newTemplate != item[DEP.TEMPLATE]){
-                        needsReplacement = true
-                        if (!newTemplate) {
-                            skipped++
-                        }
-                    }
-                }
-            }
-            if (needsReplacement) {
-                context.index = lastKey
-                context.element.replaceChild(this.applyTemplate(context), item)
-            }
-        }
-        lastKey++
-        if (lastKey>=context.value.length) {
-            break
-        }
-    }
-    items = context.element.querySelectorAll(':scope > ['+attribute+'-key]')
-    let length = items.length + skipped
-    if (length > context.value.length) {
-        while (length > context.value.length) {
-            let child = context.element.querySelectorAll(':scope > :not(template)')?.[length-1]
-            child?.remove()
-            length--
-        }
-    } else if (length < context.value.length ) {
-        while (length < context.value.length) {
-            context.index = length
+
+    for (let index = 0; index < context.value.length; index++) {
+        context.index = index
+        const value = context.list[index]
+        let item = nextUnusedItem(items, usedItems, cursor)
+
+        if (!item) {
             context.element.appendChild(this.applyTemplate(context))
-            length++
+            continue
+        }
+
+        const newTemplate = this.findTemplate(context.templates, value)
+        const currentValueMatches = item[DEP.VALUE] === value
+        let reusableItem = currentValueMatches
+            ? item
+            : findReusableItem(items, usedItems, value, newTemplate, cursor + 1)
+
+        if (reusableItem) {
+            if (newTemplate != reusableItem[DEP.TEMPLATE]) {
+                context.element.replaceChild(this.applyTemplate(context), reusableItem)
+            } else {
+                context.element.insertBefore(reusableItem, item)
+                updateItemIndex(reusableItem, index, context.path, keyAttribute, attributes, attrQuery)
+                reusableItem[DEP.VALUE] = value
+            }
+            usedItems.add(reusableItem)
+            if (reusableItem === item) {
+                cursor++
+            }
+            continue
+        }
+
+        context.element.insertBefore(this.applyTemplate(context), item)
+    }
+
+    for (let item of items) {
+        if (!usedItems.has(item)) {
+            item.remove()
         }
     }
+
     if (this.options.twoway) {
         trackDomList.call(this, context.element)
+    }
+}
+
+function nextUnusedItem(items, usedItems, start)
+{
+    while (start < items.length) {
+        const item = items[start]
+        if (!usedItems.has(item)) {
+            return item
+        }
+        start++
+    }
+}
+
+function findReusableItem(items, usedItems, value, template, start)
+{
+    for (let i = start; i < items.length; i++) {
+        const item = items[i]
+        if (!usedItems.has(item) && item[DEP.VALUE] === value && item[DEP.TEMPLATE] === template) {
+            return item
+        }
+    }
+}
+
+function updateItemIndex(item, index, path, keyAttribute, attributes, attrQuery)
+{
+    const oldIndex = item.getAttribute(keyAttribute)
+    const newIndex = ''+index
+
+    if (oldIndex === newIndex) {
+        return
+    }
+
+    item.setAttribute(keyAttribute, newIndex)
+
+    const oldPrefix = path+'.'+oldIndex
+    const newPrefix = path+'.'+newIndex
+    const bindings = Array.from(item.querySelectorAll(attrQuery))
+    if (item.matches(attrQuery)) {
+        bindings.unshift(item)
+    }
+
+    for (let binding of bindings) {
+        for (let attr of attributes) {
+            const bindPath = binding.getAttribute(attr)
+            if (!bindPath || bindPath.substr(0,5)===':root') {
+                continue
+            }
+            if (bindPath === oldPrefix) {
+                binding.setAttribute(attr, newPrefix)
+            } else if (bindPath.startsWith(oldPrefix+'.')) {
+                binding.setAttribute(attr, newPrefix+bindPath.substr(oldPrefix.length))
+            }
+        }
     }
 }
 
