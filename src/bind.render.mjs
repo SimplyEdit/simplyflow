@@ -5,6 +5,8 @@
 import { signal as domSignal, trackDomField, trackDomList } from './dom.mjs'
 import { throttledEffect, effect, untracked, batch } from './state.mjs'
 import { getValueByPath } from './bind.mjs'
+import { TEMPLATE } from './symbols.mjs'
+
 /**
  * This function is used by default to render dom elements with the `data-flow-field` attribute.
  * It will switch to only switching in template content if the context has any templates.
@@ -147,7 +149,8 @@ export function setValueByPath(root, path, value)
 export function arrayByTemplates(context)
 {
     const attribute      = this.options.attribute
-
+    const attributes     = [attribute+'-field',attribute+'-list',attribute+'-map']
+    const attrQuery      = '['+attributes.join('],[')+']'
     let items = context.element.querySelectorAll(':scope > ['+attribute+'-key]')
     // do single merge strategy for now, in future calculate optimal merge strategy from a number
     // now just do a delete if a key <= last key, insert if a key >= last key
@@ -165,19 +168,24 @@ export function arrayByTemplates(context)
             item.remove()
         } else {
             // check that all data-bind params start with current json path or ':root', otherwise replaceChild
-            let bindings = Array.from(item.querySelectorAll(`[${attribute}]`))
-            if (item.matches(`[${attribute}]`)) {
+            let bindings = Array.from(item.querySelectorAll(attrQuery))
+            if (item.matches(attrQuery)) {
                 bindings.unshift(item)
             }
             let needsReplacement = bindings.find(b => {
-                let databind = b.getAttribute(attribute)
-                return (databind.substr(0,5)!==':root' 
-                    && databind.substr(0, context.path.length)!==context.path)
+                for (let attr of attributes) {
+                    let databind = b.getAttribute(attr)
+                    if (databind && databind.substr(0,5)!==':root' 
+                        && databind.substr(0, context.path.length)!==context.path) {
+                        return true
+                    }
+                }
+                return false
             })
             if (!needsReplacement) {
-                if (item[Symbol.bindTemplate]) {
+                if (item[TEMPLATE]) {
                     let newTemplate = this.findTemplate(context.templates, context.list[lastKey])
-                    if (newTemplate != item[Symbol.bindTemplate]){
+                    if (newTemplate != item[TEMPLATE]){
                         needsReplacement = true
                         if (!newTemplate) {
                             skipped++
@@ -249,7 +257,7 @@ export function objectByTemplates(context)
             }
         }
         let newTemplate = this.findTemplate(context.templates, context.list[context.index])
-        if (newTemplate != item[Symbol.bindTemplate]){
+        if (newTemplate != item[TEMPLATE]){
             let clone = this.applyTemplate(context)
             context.element.replaceChild(clone, item)
         }
@@ -272,7 +280,7 @@ export function fieldByTemplates(context)
     context.parent = getParentPath(context.element)
     if (rendered) {
         if (template) {
-            if (rendered?.[Symbol.bindTemplate] != template) {
+            if (rendered?.[TEMPLATE] != template) {
                 const clone = this.applyTemplate(context)
                 context.element.replaceChild(clone, rendered)
             }

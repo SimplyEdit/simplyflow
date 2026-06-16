@@ -94,7 +94,7 @@ export function edit(rootElement)
           buttons: [
             {
               label: 'Align',
-              icon: '',
+              icon: '#align-left',
               command: 'expand',
               value: 'alignToolbar'
             }

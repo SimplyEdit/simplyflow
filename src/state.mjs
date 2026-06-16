@@ -1,19 +1,15 @@
-if (!Symbol.iterate) {
-    Symbol.iterate = Symbol('iterate')
-}
-if (!Symbol.xRay) {
-    Symbol.xRay = Symbol('xRay')
-}
-if (!Symbol.Signal) {
-    Symbol.Signal = Symbol('Signal')
-}
+import {
+    ITERATE,
+    XRAY,
+    SIGNAL
+} from './symbols.mjs'
 
 const signalHandler = {
     get: (target, property, receiver) => {
-        if (property===Symbol.xRay) {
+        if (property===XRAY) {
             return target // don't notifyGet here, this is only called by set
         }
-        if (property===Symbol.Signal) {
+        if (property===SIGNAL) {
             return true
         }
         const value = target?.[property] // Reflect.get fails on a Set.
@@ -74,7 +70,7 @@ const signalHandler = {
             notifySet(receiver, makeContext(property, { was: current, now: value } ) )
         }
         if (typeof current === 'undefined') {
-            notifySet(receiver, makeContext(Symbol.iterate, {}))
+            notifySet(receiver, makeContext(ITERATE, {}))
             notifySet(receiver, makeContext('length', {}))
         }
         return true
@@ -92,19 +88,21 @@ const signalHandler = {
             delete target[property]
             let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
             notifySet(receiver, makeContext(property,{ delete: true, was: current }))
+            notifySet(receiver, makeContext(ITERATE, { delete: true, property })
+        )
         }
         return true
     },
     defineProperty: (target, property, descriptor) => {
         if (typeof target[property] === 'undefined') {
             let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-            notifySet(receiver, makeContext(Symbol.iterate, {}))
+            notifySet(receiver, makeContext(ITERATE, {}))
         }
         return Object.defineProperty(target, property, descriptor)
     },
     ownKeys: (target) => {
         let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-        notifyGet(receiver, Symbol.iterate)
+        notifyGet(receiver, ITERATE)
         return Reflect.ownKeys(target)
     }
 
@@ -126,7 +124,7 @@ export function signal(v) {
     if (!v) {
         v = {}
     }
-    if (v[Symbol.Signal]) { // there can be only one signal for any value
+    if (v[SIGNAL]) { // there can be only one signal for any value
         return v
     }
     if (!signals.has(v)) {
@@ -333,17 +331,22 @@ function setListeners(self, property, compute) {
  * based on the current call (code path)
  */
 function clearListeners(compute) {
-    let connectedSignals = computeMap.get(compute)
-    if (connectedSignals) {
-        connectedSignals.forEach(property => {
-            property.forEach(s => {
-                let listeners = listenersMap.get(s)
-                if (listeners.has(property)) {
-                    listeners.get(property).delete(compute)
-                }
-            })
-        })
+    const connectedSignals = computeMap.get(compute)
+    if (!connectedSignals) {
+        return
     }
+
+    connectedSignals.forEach((signals, property) => {
+        signals.forEach(signal => {
+            const listeners = listenersMap.get(signal)
+
+            if (listeners?.has(property)) {
+                listeners.get(property).delete(compute)
+            }
+        })
+    })
+
+    computeMap.delete(compute)
 }
 
 /**

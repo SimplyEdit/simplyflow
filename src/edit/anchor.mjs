@@ -111,7 +111,7 @@ function getCursorPosition(element) {
 	if (rects.length > 0) {
 		x = rects[0].left - elementRect.left
 		y = rects[0].top - elementRect.top
-	height = rects[0].height
+		height = rects[0].height
 	} else {
 		// Fallback for truly empty element: use padding from CSS
 		const style = window.getComputedStyle(cursorElement);

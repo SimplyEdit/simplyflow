@@ -1,10 +1,7 @@
 import { throttledEffect, destroy } from './state.mjs'
 import { escape_html, fixed_content } from './bind.transformers.mjs'
 import * as render from './bind.render.mjs'
-
-if (!Symbol.bindTemplate) {
-    Symbol.bindTemplate = Symbol('bindTemplate')
-}
+import { TEMPLATE } from './symbols.mjs'
 
 /**
  * Implements one way databinding, updating dom elements with matching attributes
@@ -48,6 +45,7 @@ class SimplyBind
             },
             renderers: {
                 'INPUT':render.input,
+                'TEXTAREA':render.input,
                 'BUTTON':render.button,
                 'SELECT':render.select,
                 'A':render.anchor,
@@ -255,7 +253,7 @@ class SimplyBind
             clone.children[0].setAttribute(attribute+'-key',index)
         }
         // keep track of the used template, so if that changes, the item can be updated
-        clone.children[0][Symbol.bindTemplate] = template
+        clone.children[0][TEMPLATE] = template
 
         // return clone, not the firstChild, so that all whitespace is cloned as well
         return clone
