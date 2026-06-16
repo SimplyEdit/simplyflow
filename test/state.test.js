@@ -1,5 +1,6 @@
 import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer, untracked } from '../src/state.mjs'
 import { signal as domSignal } from '../src/dom.mjs'
+import { XRAY, SIGNAL } from '../src/symbols.mjs'
 
 class Foo {
 	#bar
@@ -551,7 +552,7 @@ describe('effects', () => {
 		let nonproxy = {value: 'foo'}
 		let foo = signal(nonproxy)
 		let bar = signal({bar: foo})
-		expect(bar.bar[Symbol.xRay][Symbol.xRay]).toBe(undefined)
+		expect(bar.bar[SIGNAL][SIGNAL]).toBe(undefined)
 		expect(bar.bar).toBe(foo)
 	})
 
