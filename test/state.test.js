@@ -1,6 +1,7 @@
 import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer, untracked } from '../src/state.mjs'
 import { signal as domSignal } from '../src/dom.mjs'
-import { XRAY, SIGNAL } from '../src/symbols.mjs'
+import { DEP } from '../src/symbols.mjs'
+import { jest } from '@jest/globals'
 
 class Foo {
 	#bar
@@ -438,34 +439,30 @@ describe('effects', () => {
 		expect(baz.current).toBe('Bazbar')
 	})
 
-	it('throttledEffect', (done) => {
-		let foo = signal({ value: 1})
-		let count = 0
-		let bar = throttledEffect(() => {
-			return foo.value+':'+count++
-		}, 10)
-		// throttled effect is called immediately
-		expect(bar.current).toBe('1:0')
-		for (let i=0;i<10;i++) {
-			setTimeout(() => {
+	it('throttledEffect', () => {
+		jest.useFakeTimers()
+		try {			
+			let foo = signal({ value: 1})
+			let count = 0
+			let bar = throttledEffect(() => {
+				return foo.value+':'+count++
+			}, 10)
+			// throttled effect is called immediately
+			expect(bar.current).toBe('1:0')
+			
+			for (let i=0;i<10;i++) {
 				foo.value++
-			},1)
-		}
-		setTimeout(() => {
-			// throttled effect called only once in each 10ms
-			try {
-				expect(bar.current).toBe('11:1')
-			} finally {
-				setTimeout(() => {
-					// make sure that throttle end timeout is only called if foo.value has changed in the mean time
-					try {
-						expect(bar.current).toBe('11:1')
-					} finally {
-						done()
-					}
-				}, 200)
 			}
-		}, 200)
+			expect(bar.current).toBe('1:0')
+
+			jest.advanceTimersByTime(10)
+			expect(bar.current).toBe('11:1')
+
+			jest.advanceTimersByTime(200)
+			expect(bar.current).toBe('11:1')
+		} finally {
+			jest.useRealTimers()
+		}
 	})
 
 	it('clockEffect', () => {
@@ -552,7 +549,7 @@ describe('effects', () => {
 		let nonproxy = {value: 'foo'}
 		let foo = signal(nonproxy)
 		let bar = signal({bar: foo})
-		expect(bar.bar[SIGNAL][SIGNAL]).toBe(undefined)
+		expect(bar.bar[DEP.SIGNAL][DEP.SIGNAL]).toBe(undefined)
 		expect(bar.bar).toBe(foo)
 	})
 

@@ -2,7 +2,7 @@ import { signals, signal as stateSignal, notifyGet, notifySet, makeContext,
          throttledEffect, effect, untracked, batch } from './state.mjs'
 import { getValueByPath } from './bind.mjs'
 import { setValueByPath, getProperties } from './bind.render.mjs'
-import { XRAY, SIGNAL } from '../src/symbols.mjs'
+import { DEP } from '../src/symbols.mjs'
 
 /**
  * Tracks element => signal mapping so that each element only has one signal
@@ -19,10 +19,10 @@ const observers = new WeakMap()
  */
 const domSignalHandler = {
     get: (target, property, receiver) => {
-        if (property===XRAY) {
+        if (property===DEP.XRAY) {
             return target // don't notifyGet here, this is only called by set
         }
-        if (property===SIGNAL) {
+        if (property===DEP.SIGNAL) {
             return true
         }
         const value = target?.[property]
@@ -61,7 +61,7 @@ const domSignalHandler = {
  * @returns Proxy
  */
 export function signal(el, options) {
-    if (el[XRAY]) {
+    if (el[DEP.XRAY]) {
         return el
     }
     if (!signals.has(el)) {

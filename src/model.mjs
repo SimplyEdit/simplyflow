@@ -1,5 +1,5 @@
 import {signal, effect, throttledEffect, batch} from './state.mjs'
-import { SIGNAL } from './symbols.mjs'
+import { DEP } from './symbols.mjs'
 
 /**
  * This class implements a pluggable data model, where you can
@@ -47,7 +47,7 @@ class SimplyFlowModel {
 		}
 		const dataSignal = this.effects[this.effects.length-1]
 		const connectedSignal = fn.call(this, dataSignal)
-		if (!connectedSignal || !connectedSignal[SIGNAL]) {
+		if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
 			throw new Error('addEffect function parameter must return a Signal', { cause: fn })
 		}
 		this.view = connectedSignal

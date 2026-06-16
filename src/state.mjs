@@ -1,81 +1,90 @@
-import {
-    ITERATE,
-    XRAY,
-    SIGNAL
-} from './symbols.mjs'
+import { DEP } from './symbols.mjs'
+
+function wrapMapMethod(target, property, receiver, value) {
+    return (...args) => {
+        if (property === 'get' || property === 'has') {
+            notifyGet(receiver, args[0])
+        }
+        if (['keys', 'values', 'entries', 'forEach', Symbol.iterator].includes(property)) {
+            notifyGet(receiver, DEP.ITERATE)
+        }
+
+        const oldSize = target.size
+        const result = value.apply(target, args)
+
+        if (property === 'set') {
+            notifySet(receiver, makeContext(args[0], { now: args[1] }))
+        }
+
+        if (property === 'delete') {
+            notifySet(receiver, makeContext(args[0], { delete: true}))
+        }
+
+        if (oldSize !== target.size) {
+            notifySet(receiver, makeContext(DEP.SIZE, {}))
+        }
+
+        if (['set','delete','clear'].includes(property) || oldSize!==target.size) {
+            notifySet(receiver, makeContext(DEP.ITERATE, {}))
+        }
+
+        return result
+    }
+
+}
+
+function wrapArrayMethod(target, property, receiver, value) {
+    return (...args) => {
+        let l = target.length
+        // by binding the function to the receiver
+        // all accesses in the function will be trapped
+        // by the Proxy, so get/set/delete is all handled
+        let result = value.apply(receiver, args)
+        if (l != target.length) {
+            notifySet(receiver,  makeContext(DEP.LENGTH, { was: l, now: target.length }) )
+        }
+        return result
+    }
+}
+
+function wrapSetMethod(target, property, receiver, value) {
+    return (...args) => {
+        // node doesn't allow you to call set/map functions
+        // bound to the receiver.. so using target instead
+        // there are no properties to update anyway, except for size
+        let s = target.size
+        let result = value.apply(target, args)
+        if (s != target.size) {
+            notifySet(receiver, makeContext( DEP.SIZE, { was: s, now: target.size }) )
+        }
+        // there is no efficient way to see if the function called
+        // has actually changed the Set/Map, but by assuming the
+        // 'setter' functions will change the results of the
+        // 'getter' functions, effects should update correctly
+        if (['set','add','clear','delete'].includes(property)) {
+            notifySet(receiver, makeContext( { entries: {}, forEach: {}, has: {}, keys: {}, values: {}, [Symbol.iterator]: {} } ) )
+        }
+        return result
+    }
+}
 
 const signalHandler = {
     get: (target, property, receiver) => {
-        if (property===XRAY) {
+        if (property===DEP.XRAY) {
             return target // don't notifyGet here, this is only called by set
         }
-        if (property===SIGNAL) {
+        if (property===DEP.SIGNAL) {
             return true
         }
         const value = target?.[property] // Reflect.get fails on a Set.
         notifyGet(receiver, property)
         if (typeof value === 'function') {
             if (Array.isArray(target)) {
-                return (...args) => {
-                    let l = target.length
-                    // by binding the function to the receiver
-                    // all accesses in the function will be trapped
-                    // by the Proxy, so get/set/delete is all handled
-                    let result = value.apply(receiver, args)
-                    if (l != target.length) {
-                        notifySet(receiver,  makeContext('length', { was: l, now: target.length }) )
-                    }
-                    return result
-                }
+                return wrapArrayMethod(target, property, receiver, value)
             } else if (target instanceof Map) {
-                return (...args) => {
-                    if (property === 'get' || property === 'has') {
-                        notifyGet(receiver, args[0])
-                    }
-                    if (['keys', 'values', 'entries', 'forEach', Symbol.iterator].includes(property)) {
-                        notifyGet(receiver, ITERATE)
-                    }
-
-                    const oldSize = target.size
-                    const result = value.apply(target, args)
-
-                    if (property === 'set') {
-                        notifySet(receiver, makeContext(args[0], { now: args[1] }))
-                    }
-
-                    if (property === 'delete') {
-                        notifySet(receiver, makeContext(args[0], { delete: true}))
-                    }
-
-                    if (oldSize !== target.size) {
-                        notifySet(receiver, makeContext('size', {}))
-                    }
-
-                    if (['set','delete','clear'].includes(property) || oldSize!==target.size) {
-                        notifySet(receiver, makeContext(ITERATE, {}))
-                    }
-
-                    return result
-                }
+                return wrapMapMethod(target, property, receiver, value)
             } else if (target instanceof Set) {
-                return (...args) => {
-                    // node doesn't allow you to call set/map functions
-                    // bound to the receiver.. so using target instead
-                    // there are no properties to update anyway, except for size
-                    let s = target.size
-                    let result = value.apply(target, args)
-                    if (s != target.size) {
-                        notifySet(receiver, makeContext( 'size', { was: s, now: target.size }) )
-                    }
-                    // there is no efficient way to see if the function called
-                    // has actually changed the Set/Map, but by assuming the
-                    // 'setter' functions will change the results of the
-                    // 'getter' functions, effects should update correctly
-                    if (['set','add','clear','delete'].includes(property)) {
-                        notifySet(receiver, makeContext( { entries: {}, forEach: {}, has: {}, keys: {}, values: {}, [Symbol.iterator]: {} } ) )
-                    }
-                    return result
-                }
+                return wrapSetMethod(target, property, receiver, value)
             } else if (
                 target instanceof HTMLElement
                 || target instanceof Number
@@ -100,8 +109,8 @@ const signalHandler = {
             notifySet(receiver, makeContext(property, { was: current, now: value } ) )
         }
         if (typeof current === 'undefined') {
-            notifySet(receiver, makeContext(ITERATE, {}))
-            notifySet(receiver, makeContext('length', {}))
+            notifySet(receiver, makeContext(DEP.ITERATE, {}))
+            notifySet(receiver, makeContext(DEP.LENGTH, {}))
         }
         return true
     },
@@ -118,7 +127,7 @@ const signalHandler = {
             delete target[property]
             let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
             notifySet(receiver, makeContext(property,{ delete: true, was: current }))
-            notifySet(receiver, makeContext(ITERATE, { delete: true, property })
+            notifySet(receiver, makeContext(DEP.ITERATE, { delete: true, property })
         )
         }
         return true
@@ -126,13 +135,13 @@ const signalHandler = {
     defineProperty: (target, property, descriptor) => {
         if (typeof target[property] === 'undefined') {
             let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-            notifySet(receiver, makeContext(ITERATE, {}))
+            notifySet(receiver, makeContext(DEP.ITERATE, {}))
         }
         return Object.defineProperty(target, property, descriptor)
     },
     ownKeys: (target) => {
         let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-        notifyGet(receiver, ITERATE)
+        notifyGet(receiver, DEP.ITERATE)
         return Reflect.ownKeys(target)
     }
 
@@ -154,7 +163,7 @@ export function signal(v) {
     if (!v) {
         v = {}
     }
-    if (v[SIGNAL]) { // there can be only one signal for any value
+    if (v[DEP.SIGNAL]) { // there can be only one signal for any value
         return v
     }
     if (!signals.has(v)) {

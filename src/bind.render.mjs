@@ -5,7 +5,7 @@
 import { signal as domSignal, trackDomField, trackDomList } from './dom.mjs'
 import { throttledEffect, effect, untracked, batch } from './state.mjs'
 import { getValueByPath } from './bind.mjs'
-import { TEMPLATE } from './symbols.mjs'
+import { DEP } from './symbols.mjs'
 
 /**
  * This function is used by default to render dom elements with the `data-flow-field` attribute.
@@ -183,9 +183,9 @@ export function arrayByTemplates(context)
                 return false
             })
             if (!needsReplacement) {
-                if (item[TEMPLATE]) {
+                if (item[DEP.TEMPLATE]) {
                     let newTemplate = this.findTemplate(context.templates, context.list[lastKey])
-                    if (newTemplate != item[TEMPLATE]){
+                    if (newTemplate != item[DEP.TEMPLATE]){
                         needsReplacement = true
                         if (!newTemplate) {
                             skipped++
@@ -257,7 +257,7 @@ export function objectByTemplates(context)
             }
         }
         let newTemplate = this.findTemplate(context.templates, context.list[context.index])
-        if (newTemplate != item[TEMPLATE]){
+        if (newTemplate != item[DEP.TEMPLATE]){
             let clone = this.applyTemplate(context)
             context.element.replaceChild(clone, item)
         }
@@ -280,7 +280,7 @@ export function fieldByTemplates(context)
     context.parent = getParentPath(context.element)
     if (rendered) {
         if (template) {
-            if (rendered?.[TEMPLATE] != template) {
+            if (rendered?.[DEP.TEMPLATE] != template) {
                 const clone = this.applyTemplate(context)
                 context.element.replaceChild(clone, rendered)
             }
