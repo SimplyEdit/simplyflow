@@ -1,4 +1,4 @@
-import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer, untracked } from '../src/state.mjs'
+import { signal, effect, batch, throttledEffect, clockEffect, trace, addTracer, untracked, destroy, clone } from '../src/state.mjs'
 import { signal as domSignal } from '../src/dom.mjs'
 import { DEP } from '../src/symbols.mjs'
 import { jest } from '@jest/globals'
@@ -636,5 +636,74 @@ describe('dom signals can', (done) => {
 			expect(currentFoo).toBe('bar')
 			done()
 		});
+	})
+})
+
+describe('destroy', () => {
+	it('stops an effect from receiving updates', () => {
+		const state = signal({
+			value: 1
+		})
+
+		let runs = 0
+
+		const result = effect(() => {
+			runs++
+			return state.value
+		})
+
+		expect(result.current).toBe(1)
+		expect(runs).toBe(1)
+
+		destroy(result)
+
+		state.value = 2
+
+		expect(result.current).toBe(1)
+		expect(runs).toBe(1)
+	})
+
+	it('does not throw when destroying an effect twice', () => {
+		const state = signal({
+			value: 1
+		})
+
+		const result = effect(() => state.value)
+
+		expect(() => {
+			destroy(result)
+			destroy(result)
+		}).not.toThrow()
+	})
+})
+
+describe('clone', () => {
+	it('deep clones arrays', () => {
+		const original = [
+			{
+				value: 1
+			}
+		]
+
+		const copy = clone(original, true)
+
+		expect(copy).toEqual(original)
+		expect(copy).not.toBe(original)
+		expect(copy[0]).not.toBe(original[0])
+
+		copy[0].value = 2
+
+		expect(original[0].value).toBe(1)
+	})
+
+	it('deep clones nested arrays', () => {
+		const original = [[1], [2]]
+
+		const copy = clone(original, true)
+
+		expect(copy).toEqual([[1], [2]])
+		expect(copy).not.toBe(original)
+		expect(copy[0]).not.toBe(original[0])
+		expect(copy[1]).not.toBe(original[1])
 	})
 })

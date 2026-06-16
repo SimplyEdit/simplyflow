@@ -159,9 +159,11 @@ export const signals = new WeakMap()
  * Creates a new signal proxy of the given object, that intercepts get/has and set/delete
  * to allow reactive functions to be triggered when signal values change.
  */
-export function signal(v) {
-    if (!v) {
-        v = {}
+export function signal(v = {}) {
+    if (v === null || typeof v !== 'object' && typeof v !== 'function') {
+        throw new TypeError(
+            `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof v}`
+        )
     }
     if (v[DEP.SIGNAL]) { // there can be only one signal for any value
         return v
@@ -190,21 +192,30 @@ let tracing = false
  * call the given function and then disable all tracers.
  * @return void
  */
-export function trace(signal, prop) {
-    if (typeof signal==='function') {
+export function trace(target, prop) {
+    if (typeof target==='function') {
         tracing = true
-        signal()
-        tracing = false
-    } else {
-        const listeners = getListeners(signal, prop)
-        return listeners.map(listener => {
-            return {
-                effect: listener.effectType,
-                fn: listener.effectFunction,
-                signal: signals.get(listener.effectFunction)
-            }
-        })
+        try {
+            return target()
+        } finally {
+            tracing = false
+        }
     }
+
+    if (!target || !target[DEP.SIGNAL]) {
+        throw new TypeError(
+            'simplyflow/state: trace() expects either a function or a signal'
+        )
+    }
+
+    const listeners = getListeners(target, prop)
+    return listeners.map(listener => {
+        return {
+            effect: listener.effectType,
+            fn: listener.effectFunction,
+            signal: signals.get(listener.effectFunction)
+        }
+    })
 }
 
 /**
@@ -217,6 +228,9 @@ export function trace(signal, prop) {
  * set: function(signal, context, listener)
  */
 export function addTracer(tracer) {
+    if (!tracer || typeof tracer !== 'object') {
+        throw new TypeError('simplyflow/state: addTracer() expects a tracer object')
+    }
     if (!tracer.get && !tracer.set) {
         throw new Error('simply.state: addTracer: missing "get" or "set" property in tracer', tracer)
     }
@@ -244,7 +258,14 @@ let batchMode = 0
  * Triggers any reactor function that depends on this signal
  * to re-compute its values
  */
-export function notifySet(self, context={}) {
+export function notifySet(self, context = new Map()) {
+    if (!self || !self[DEP.SIGNAL]) {
+        throw new TypeError('simplyflow/state: notifySet() expects a signal as first argument')
+    }
+    if (!(context instanceof Map)) {
+        throw new TypeError('simplyflow/state: notifySet() expects context to be a Map; use makeContext()')
+    }
+
     let listeners = []
     context.forEach((change, property) => {
         let propListeners = getListeners(self, property)
@@ -277,7 +298,13 @@ export function notifySet(self, context={}) {
 
 export function makeContext(property, change) {
     let context = new Map()
-    if (typeof property === 'object') {
+    if (property instanceof Map) {
+        property.forEach((change, prop) => {
+            context.set(prop, change)
+        })
+        return context
+    }
+    if (property !== null && typeof property === 'object') {
         for (const prop of Reflect.ownKeys(property)) {
             context.set(prop, property[prop])
         }
@@ -409,11 +436,17 @@ const effectMap = new WeakMap()
  */
 const signalStack = []
 
+function assertFunction(fn, name) {
+    if (typeof fn !== 'function') {
+        throw new TypeError(`simplyflow/state: ${name}() expects a function`)
+    }
+}
 /**
  * Runs the given function at once, and then whenever a signal changes that
  * is used by the given function (or at least signals used in the previous run).
  */
 export function effect(fn) {
+    assertFunction(fn, 'effect')
     if (effectStack.findIndex(f => fn==f)!==-1) {
         throw new Error('Recursive update() call', {cause:fn})
     }
@@ -469,8 +502,11 @@ export function effect(fn) {
 
 
 export function destroy(connectedSignal) {
+    if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
+        throw new TypeError('simplyflow/state: destroy() expects an effect signal')
+    }
     // find the computeEffect associated with this signal
-    const computeEffect = effectMap.get(connectedSignal)?.deref()
+    const computeEffect = effectMap.get(connectedSignal)
     if (!computeEffect) {
         return
     }
@@ -479,11 +515,11 @@ export function destroy(connectedSignal) {
     clearListeners(computeEffect)
 
     // remove all references to connectedSignal
-    let fn = computeEffect.fn
-    signals.remove(fn)
+    if (computeEffect.fn) {
+        signals.delete(computeEffect.fn)
+    }
 
     effectMap.delete(connectedSignal)
-
     // if no other references to connectedSignal exist, it will be garbage collected
 }
 
@@ -496,6 +532,7 @@ export function destroy(connectedSignal) {
  * @result mixed the result of the fn() function call
  */
 export function batch(fn) {
+    assertFunction(fn, 'batch')
     batchMode++
     let result
     try {
@@ -538,6 +575,12 @@ function runBatchedListeners() {
  * @returns signal with the result of the effect function fn
  */
 export function throttledEffect(fn, throttleTime) {
+    assertFunction(fn, 'throttledEffect')
+    if (!Number.isFinite(throttleTime) || throttleTime < 0) {
+        throw new TypeError(
+            `simplyflow/state: throttledEffect() expects throttleTime to be a non-negative number`
+        )
+    }
     if (effectStack.findIndex(f => fn==f)!==-1) {
         throw new Error('Recursive update() call', {cause:fn})
     }
@@ -626,6 +669,12 @@ export function throttledEffect(fn, throttleTime) {
 // on clock.tick() (or clock.time++) run only the clock.needsUpdate effects 
 // (first create a copy and reset clock.needsUpdate, then run effects)
 export function clockEffect(fn, clock) {
+    assertFunction(fn, 'clockEffect')
+    if (!clock || typeof clock !== 'object' || typeof clock.time !== 'number') {
+        throw new TypeError(
+            `simplyflow/state: clockEffect() expects a clock object with a numeric .time property`
+        )
+    }
     let connectedSignal = signals.get(fn)
     if (!connectedSignal) {
         connectedSignal = signal({
@@ -684,6 +733,7 @@ export function clockEffect(fn, clock) {
  * @result mixed
  */
 export function untracked(fn) {
+    assertFunction(fn, 'untracked')
     const pos = computeStack.length-1
     const remember = computeStack[pos]
     computeStack[pos] = false
@@ -696,7 +746,6 @@ export function untracked(fn) {
 
 /**
  * This function will created a copy of the input, recursive if deep==true
- * It will replace any non-clonable values with null
  * It will replace signals with a clone of their target
  * It will keep cyclical references intact
  * @param value Object
@@ -716,16 +765,16 @@ export function clone(value, deep=false)
                     return value
                 }
                 if (Array.isArray(value)) {
-                    let result = []
+                    const result = []
                     if (!deep) {
-                        result = value.slice()
-                        seen.set(value, result)
-                        return result
+                        return value.slice()
                     }
+
                     seen.set(value, result)
-                    for (const key of value) {
-                        result[key] = innerClone(value[key])
+                    for (let i=0; i<value.length; i++) {
+                        result[i] = innerClone(value[i])
                     }
+                    return result
                 } else if (!value.constructor || value.constructor===Object) {
                     let result = {}
                     if (!value.constructor) {
@@ -742,7 +791,7 @@ export function clone(value, deep=false)
                 }
             break
             default:
-                return null // ignore non-cloneable values
+                return value // primitive
             break
         }
     }
