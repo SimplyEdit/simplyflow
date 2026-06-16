@@ -27,7 +27,37 @@ const signalHandler = {
                     }
                     return result
                 }
-            } else if (target instanceof Set || target instanceof Map) {
+            } else if (target instanceof Map) {
+                return (...args) => {
+                    if (property === 'get' || property === 'has') {
+                        notifyGet(receiver, args[0])
+                    }
+                    if (property in ['keys', 'values', 'entries', 'forEach', Symbol.iterator]) {
+                        notifyGet(receiver, ITERATE)
+                    }
+
+                    const oldSize = target.size
+                    const result = value.apply(target, args)
+
+                    if (property === 'set') {
+                        notifySet(receiver, makeContext(args[0], { now: args[1] }))
+                    }
+
+                    if (property === 'delete') {
+                        notifySet(receiver, makeContext(args[0], { delete: true}))
+                    }
+
+                    if (oldSize !== target.size) {
+                        notifySet(receiver, makeContext('size', {}))
+                    }
+
+                    if (property in ['set','delete','clear'] || oldSize!==target.size) {
+                        notifySet(receiver, makeContext(ITERATE, {}))
+                    }
+
+                    return result
+                }
+            } else if (target instanceof Set) {
                 return (...args) => {
                     // node doesn't allow you to call set/map functions
                     // bound to the receiver.. so using target instead
@@ -239,7 +269,7 @@ export function notifySet(self, context={}) {
 export function makeContext(property, change) {
     let context = new Map()
     if (typeof property === 'object') {
-        for (let prop in property) {
+        for (const prop of Reflect.ownKeys(property)) {
             context.set(prop, property[prop])
         }
     } else {
