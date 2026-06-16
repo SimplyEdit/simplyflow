@@ -23,47 +23,83 @@
     trace: () => trace,
     untracked: () => untracked
   });
-  if (!Symbol.iterate) {
-    Symbol.iterate = Symbol("iterate");
+
+  // src/symbols.mjs
+  var DEP = {
+    ITERATE: Symbol.for("@simplyedit/simplyflow.iterate"),
+    XRAY: Symbol.for("@simplyedit/simplyflow.xRay"),
+    SIGNAL: Symbol.for("@simplyedit/simplyflow.Signal"),
+    TEMPLATE: Symbol.for("@simplyedit/simplyflow.bindTemplate"),
+    LENGTH: "length",
+    SIZE: "size"
+  };
+
+  // src/state.mjs
+  function wrapMapMethod(target, property, receiver, value) {
+    return (...args) => {
+      if (property === "get" || property === "has") {
+        notifyGet(receiver, args[0]);
+      }
+      if (["keys", "values", "entries", "forEach", Symbol.iterator].includes(property)) {
+        notifyGet(receiver, DEP.ITERATE);
+      }
+      const oldSize = target.size;
+      const result = value.apply(target, args);
+      if (property === "set") {
+        notifySet(receiver, makeContext(args[0], { now: args[1] }));
+      }
+      if (property === "delete") {
+        notifySet(receiver, makeContext(args[0], { delete: true }));
+      }
+      if (oldSize !== target.size) {
+        notifySet(receiver, makeContext(DEP.SIZE, {}));
+      }
+      if (["set", "delete", "clear"].includes(property) || oldSize !== target.size) {
+        notifySet(receiver, makeContext(DEP.ITERATE, {}));
+      }
+      return result;
+    };
   }
-  if (!Symbol.xRay) {
-    Symbol.xRay = Symbol("xRay");
+  function wrapArrayMethod(target, property, receiver, value) {
+    return (...args) => {
+      let l = target.length;
+      let result = value.apply(receiver, args);
+      if (l != target.length) {
+        notifySet(receiver, makeContext(DEP.LENGTH, { was: l, now: target.length }));
+      }
+      return result;
+    };
   }
-  if (!Symbol.Signal) {
-    Symbol.Signal = Symbol("Signal");
+  function wrapSetMethod(target, property, receiver, value) {
+    return (...args) => {
+      let s = target.size;
+      let result = value.apply(target, args);
+      if (s != target.size) {
+        notifySet(receiver, makeContext(DEP.SIZE, { was: s, now: target.size }));
+      }
+      if (["set", "add", "clear", "delete"].includes(property)) {
+        notifySet(receiver, makeContext({ entries: {}, forEach: {}, has: {}, keys: {}, values: {}, [Symbol.iterator]: {} }));
+      }
+      return result;
+    };
   }
   var signalHandler = {
     get: (target, property, receiver) => {
-      if (property === Symbol.xRay) {
+      if (property === DEP.XRAY) {
         return target;
       }
-      if (property === Symbol.Signal) {
+      if (property === DEP.SIGNAL) {
         return true;
       }
       const value = target?.[property];
       notifyGet(receiver, property);
       if (typeof value === "function") {
         if (Array.isArray(target)) {
-          return (...args) => {
-            let l = target.length;
-            let result = value.apply(receiver, args);
-            if (l != target.length) {
-              notifySet(receiver, makeContext("length", { was: l, now: target.length }));
-            }
-            return result;
-          };
-        } else if (target instanceof Set || target instanceof Map) {
-          return (...args) => {
-            let s = target.size;
-            let result = value.apply(target, args);
-            if (s != target.size) {
-              notifySet(receiver, makeContext("size", { was: s, now: target.size }));
-            }
-            if (["set", "add", "clear", "delete"].includes(property)) {
-              notifySet(receiver, makeContext({ entries: {}, forEach: {}, has: {}, keys: {}, values: {}, [Symbol.iterator]: {} }));
-            }
-            return result;
-          };
+          return wrapArrayMethod(target, property, receiver, value);
+        } else if (target instanceof Map) {
+          return wrapMapMethod(target, property, receiver, value);
+        } else if (target instanceof Set) {
+          return wrapSetMethod(target, property, receiver, value);
         } else if (target instanceof HTMLElement || target instanceof Number || target instanceof String || target instanceof Boolean) {
           return value.bind(target);
         } else {
@@ -82,8 +118,8 @@
         notifySet(receiver, makeContext(property, { was: current, now: value }));
       }
       if (typeof current === "undefined") {
-        notifySet(receiver, makeContext(Symbol.iterate, {}));
-        notifySet(receiver, makeContext("length", {}));
+        notifySet(receiver, makeContext(DEP.ITERATE, {}));
+        notifySet(receiver, makeContext(DEP.LENGTH, {}));
       }
       return true;
     },
@@ -100,28 +136,34 @@
         delete target[property];
         let receiver = signals.get(target);
         notifySet(receiver, makeContext(property, { delete: true, was: current }));
+        notifySet(
+          receiver,
+          makeContext(DEP.ITERATE, { delete: true, property })
+        );
       }
       return true;
     },
     defineProperty: (target, property, descriptor) => {
       if (typeof target[property] === "undefined") {
         let receiver = signals.get(target);
-        notifySet(receiver, makeContext(Symbol.iterate, {}));
+        notifySet(receiver, makeContext(DEP.ITERATE, {}));
       }
       return Object.defineProperty(target, property, descriptor);
     },
     ownKeys: (target) => {
       let receiver = signals.get(target);
-      notifyGet(receiver, Symbol.iterate);
+      notifyGet(receiver, DEP.ITERATE);
       return Reflect.ownKeys(target);
     }
   };
   var signals = /* @__PURE__ */ new WeakMap();
-  function signal(v) {
-    if (!v) {
-      v = {};
+  function signal(v = {}) {
+    if (v === null || typeof v !== "object" && typeof v !== "function") {
+      throw new TypeError(
+        `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof v}`
+      );
     }
-    if (v[Symbol.Signal]) {
+    if (v[DEP.SIGNAL]) {
       return v;
     }
     if (!signals.has(v)) {
@@ -131,23 +173,33 @@
   }
   var tracers = [];
   var tracing = false;
-  function trace(signal3, prop) {
-    if (typeof signal3 === "function") {
+  function trace(target, prop) {
+    if (typeof target === "function") {
       tracing = true;
-      signal3();
-      tracing = false;
-    } else {
-      const listeners = getListeners(signal3, prop);
-      return listeners.map((listener) => {
-        return {
-          effect: listener.effectType,
-          fn: listener.effectFunction,
-          signal: signals.get(listener.effectFunction)
-        };
-      });
+      try {
+        return target();
+      } finally {
+        tracing = false;
+      }
     }
+    if (!target || !target[DEP.SIGNAL]) {
+      throw new TypeError(
+        "simplyflow/state: trace() expects either a function or a signal"
+      );
+    }
+    const listeners = getListeners(target, prop);
+    return listeners.map((listener) => {
+      return {
+        effect: listener.effectType,
+        fn: listener.effectFunction,
+        signal: signals.get(listener.effectFunction)
+      };
+    });
   }
   function addTracer(tracer) {
+    if (!tracer || typeof tracer !== "object") {
+      throw new TypeError("simplyflow/state: addTracer() expects a tracer object");
+    }
     if (!tracer.get && !tracer.set) {
       throw new Error('simply.state: addTracer: missing "get" or "set" property in tracer', tracer);
     }
@@ -168,7 +220,13 @@
   }
   var batchedListeners = /* @__PURE__ */ new Set();
   var batchMode = 0;
-  function notifySet(self, context = {}) {
+  function notifySet(self, context = /* @__PURE__ */ new Map()) {
+    if (!self || !self[DEP.SIGNAL]) {
+      throw new TypeError("simplyflow/state: notifySet() expects a signal as first argument");
+    }
+    if (!(context instanceof Map)) {
+      throw new TypeError("simplyflow/state: notifySet() expects context to be a Map; use makeContext()");
+    }
     let listeners = [];
     context.forEach((change, property) => {
       let propListeners = getListeners(self, property);
@@ -199,8 +257,14 @@
   }
   function makeContext(property, change) {
     let context = /* @__PURE__ */ new Map();
-    if (typeof property === "object") {
-      for (let prop in property) {
+    if (property instanceof Map) {
+      property.forEach((change2, prop) => {
+        context.set(prop, change2);
+      });
+      return context;
+    }
+    if (property !== null && typeof property === "object") {
+      for (const prop of Reflect.ownKeys(property)) {
         context.set(prop, property[prop]);
       }
     } else {
@@ -256,23 +320,31 @@
     connectedSignals.get(property).add(self);
   }
   function clearListeners(compute) {
-    let connectedSignals = computeMap.get(compute);
-    if (connectedSignals) {
-      connectedSignals.forEach((property) => {
-        property.forEach((s) => {
-          let listeners = listenersMap.get(s);
-          if (listeners.has(property)) {
-            listeners.get(property).delete(compute);
-          }
-        });
-      });
+    const connectedSignals = computeMap.get(compute);
+    if (!connectedSignals) {
+      return;
     }
+    connectedSignals.forEach((signals2, property) => {
+      signals2.forEach((signal3) => {
+        const listeners = listenersMap.get(signal3);
+        if (listeners?.has(property)) {
+          listeners.get(property).delete(compute);
+        }
+      });
+    });
+    computeMap.delete(compute);
   }
   var computeStack = [];
   var effectStack = [];
   var effectMap = /* @__PURE__ */ new WeakMap();
   var signalStack = [];
+  function assertFunction(fn, name) {
+    if (typeof fn !== "function") {
+      throw new TypeError(`simplyflow/state: ${name}() expects a function`);
+    }
+  }
   function effect(fn) {
+    assertFunction(fn, "effect");
     if (effectStack.findIndex((f) => fn == f) !== -1) {
       throw new Error("Recursive update() call", { cause: fn });
     }
@@ -314,16 +386,21 @@
     return connectedSignal;
   }
   function destroy(connectedSignal) {
-    const computeEffect = effectMap.get(connectedSignal)?.deref();
+    if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
+      throw new TypeError("simplyflow/state: destroy() expects an effect signal");
+    }
+    const computeEffect = effectMap.get(connectedSignal);
     if (!computeEffect) {
       return;
     }
     clearListeners(computeEffect);
-    let fn = computeEffect.fn;
-    signals.remove(fn);
+    if (computeEffect.fn) {
+      signals.delete(computeEffect.fn);
+    }
     effectMap.delete(connectedSignal);
   }
   function batch(fn) {
+    assertFunction(fn, "batch");
     batchMode++;
     let result;
     try {
@@ -357,6 +434,12 @@
     }
   }
   function throttledEffect(fn, throttleTime) {
+    assertFunction(fn, "throttledEffect");
+    if (!Number.isFinite(throttleTime) || throttleTime < 0) {
+      throw new TypeError(
+        `simplyflow/state: throttledEffect() expects throttleTime to be a non-negative number`
+      );
+    }
     if (effectStack.findIndex((f) => fn == f) !== -1) {
       throw new Error("Recursive update() call", { cause: fn });
     }
@@ -368,15 +451,30 @@
       });
       signals.set(fn, connectedSignal);
     }
-    let throttled = false;
+    let throttledUntil = 0;
     let hasChange = true;
+    let timeout = null;
+    function schedule() {
+      if (timeout) {
+        return;
+      }
+      const delay = Math.max(0, throttledUntil - Date.now());
+      timeout = globalThis.setTimeout(() => {
+        timeout = null;
+        if (hasChange) {
+          computeEffect();
+        }
+      }, delay);
+    }
     const computeEffect = function computeEffect2() {
+      const now = Date.now();
+      if (throttledUntil > now) {
+        hasChange = true;
+        schedule();
+        return;
+      }
       if (signalStack.findIndex((s) => s == connectedSignal) !== -1) {
         throw new Error("Cyclical dependency in update() call", { cause: fn });
-      }
-      if (throttled && throttled > Date.now()) {
-        hasChange = true;
-        return;
       }
       clearListeners(computeEffect2);
       computeEffect2.effectFunction = fn;
@@ -398,17 +496,19 @@
           connectedSignal.current = result;
         }
       }
-      throttled = Date.now() + throttleTime;
-      globalThis.setTimeout(() => {
-        if (hasChange) {
-          computeEffect2();
-        }
-      }, throttleTime);
+      throttledUntil = Date.now() + throttleTime;
+      schedule();
     };
     computeEffect();
     return connectedSignal;
   }
   function clockEffect(fn, clock) {
+    assertFunction(fn, "clockEffect");
+    if (!clock || typeof clock !== "object" || typeof clock.time !== "number") {
+      throw new TypeError(
+        `simplyflow/state: clockEffect() expects a clock object with a numeric .time property`
+      );
+    }
     let connectedSignal = signals.get(fn);
     if (!connectedSignal) {
       connectedSignal = signal({
@@ -451,6 +551,7 @@
     return connectedSignal;
   }
   function untracked(fn) {
+    assertFunction(fn, "untracked");
     const pos = computeStack.length - 1;
     const remember = computeStack[pos];
     computeStack[pos] = false;
@@ -472,16 +573,15 @@
             return value2;
           }
           if (Array.isArray(value2)) {
-            let result = [];
+            const result = [];
             if (!deep) {
-              result = value2.slice();
-              seen.set(value2, result);
-              return result;
+              return value2.slice();
             }
             seen.set(value2, result);
-            for (const key of value2) {
-              result[key] = innerClone(value2[key]);
+            for (let i = 0; i < value2.length; i++) {
+              result[i] = innerClone(value2[i]);
             }
+            return result;
           } else if (!value2.constructor || value2.constructor === Object) {
             let result = {};
             if (!value2.constructor) {
@@ -497,7 +597,7 @@
           }
           break;
         default:
-          return null;
+          return value2;
           break;
       }
     };
@@ -537,10 +637,10 @@
   var observers = /* @__PURE__ */ new WeakMap();
   var domSignalHandler = {
     get: (target, property, receiver) => {
-      if (property === Symbol.xRay) {
+      if (property === DEP.XRAY) {
         return target;
       }
-      if (property === Symbol.Signal) {
+      if (property === DEP.SIGNAL) {
         return true;
       }
       const value = target?.[property];
@@ -569,7 +669,7 @@
     }
   };
   function signal2(el, options) {
-    if (el[Symbol.xRay]) {
+    if (el[DEP.XRAY]) {
       return el;
     }
     if (!signals.has(el)) {
@@ -796,6 +896,8 @@
   }
   function arrayByTemplates(context) {
     const attribute = this.options.attribute;
+    const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
+    const attrQuery = "[" + attributes.join("],[") + "]";
     let items = context.element.querySelectorAll(":scope > [" + attribute + "-key]");
     let lastKey = 0;
     let skipped = 0;
@@ -808,18 +910,23 @@
       } else if (currentKey < lastKey) {
         item.remove();
       } else {
-        let bindings = Array.from(item.querySelectorAll(`[${attribute}]`));
-        if (item.matches(`[${attribute}]`)) {
+        let bindings = Array.from(item.querySelectorAll(attrQuery));
+        if (item.matches(attrQuery)) {
           bindings.unshift(item);
         }
         let needsReplacement = bindings.find((b) => {
-          let databind = b.getAttribute(attribute);
-          return databind.substr(0, 5) !== ":root" && databind.substr(0, context.path.length) !== context.path;
+          for (let attr of attributes) {
+            let databind = b.getAttribute(attr);
+            if (databind && databind.substr(0, 5) !== ":root" && databind.substr(0, context.path.length) !== context.path) {
+              return true;
+            }
+          }
+          return false;
         });
         if (!needsReplacement) {
-          if (item[Symbol.bindTemplate]) {
+          if (item[DEP.TEMPLATE]) {
             let newTemplate = this.findTemplate(context.templates, context.list[lastKey]);
-            if (newTemplate != item[Symbol.bindTemplate]) {
+            if (newTemplate != item[DEP.TEMPLATE]) {
               needsReplacement = true;
               if (!newTemplate) {
                 skipped++;
@@ -882,7 +989,7 @@
         }
       }
       let newTemplate = this.findTemplate(context.templates, context.list[context.index]);
-      if (newTemplate != item[Symbol.bindTemplate]) {
+      if (newTemplate != item[DEP.TEMPLATE]) {
         let clone2 = this.applyTemplate(context);
         context.element.replaceChild(clone2, item);
       }
@@ -898,7 +1005,7 @@
     context.parent = getParentPath(context.element);
     if (rendered) {
       if (template) {
-        if (rendered?.[Symbol.bindTemplate] != template) {
+        if (rendered?.[DEP.TEMPLATE] != template) {
           const clone2 = this.applyTemplate(context);
           context.element.replaceChild(clone2, rendered);
         }
@@ -1090,9 +1197,6 @@
   }
 
   // src/bind.mjs
-  if (!Symbol.bindTemplate) {
-    Symbol.bindTemplate = Symbol("bindTemplate");
-  }
   var SimplyBind = class {
     /**
      * @param Object options - a set of options for this instance, options may include:
@@ -1119,6 +1223,7 @@
         },
         renderers: {
           "INPUT": input,
+          "TEXTAREA": input,
           "BUTTON": button,
           "SELECT": select,
           "A": anchor,
@@ -1288,7 +1393,7 @@
       if (typeof index !== "undefined") {
         clone2.children[0].setAttribute(attribute + "-key", index);
       }
-      clone2.children[0][Symbol.bindTemplate] = template;
+      clone2.children[0][DEP.TEMPLATE] = template;
       return clone2;
     }
     parseLinks(links) {
@@ -1475,7 +1580,7 @@
       }
       const dataSignal = this.effects[this.effects.length - 1];
       const connectedSignal = fn.call(this, dataSignal);
-      if (!connectedSignal || !connectedSignal[Symbol.Signal]) {
+      if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
         throw new Error("addEffect function parameter must return a Signal", { cause: fn });
       }
       this.view = connectedSignal;
