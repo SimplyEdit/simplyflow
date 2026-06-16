@@ -32,7 +32,7 @@ const signalHandler = {
                     if (property === 'get' || property === 'has') {
                         notifyGet(receiver, args[0])
                     }
-                    if (property in ['keys', 'values', 'entries', 'forEach', Symbol.iterator]) {
+                    if (['keys', 'values', 'entries', 'forEach', Symbol.iterator].includes(property)) {
                         notifyGet(receiver, ITERATE)
                     }
 
@@ -51,7 +51,7 @@ const signalHandler = {
                         notifySet(receiver, makeContext('size', {}))
                     }
 
-                    if (property in ['set','delete','clear'] || oldSize!==target.size) {
+                    if (['set','delete','clear'].includes(property) || oldSize!==target.size) {
                         notifySet(receiver, makeContext(ITERATE, {}))
                     }
 
