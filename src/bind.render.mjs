@@ -179,7 +179,7 @@ export function arrayByTemplates(context)
                 context.element.replaceChild(this.applyTemplate(context), reusableItem)
             } else {
                 context.element.insertBefore(reusableItem, item)
-                updateItemIndex(reusableItem, index, context.path, keyAttribute, attributes, attrQuery)
+                updateItemKey(reusableItem, index, context.path, keyAttribute, attributes, attrQuery)
                 reusableItem[DEP.VALUE] = value
             }
             usedItems.add(reusableItem)
@@ -224,19 +224,20 @@ function findReusableItem(items, usedItems, value, template, start)
     }
 }
 
-function updateItemIndex(item, index, path, keyAttribute, attributes, attrQuery)
-{
-    const oldIndex = item.getAttribute(keyAttribute)
-    const newIndex = ''+index
 
-    if (oldIndex === newIndex) {
+function updateItemKey(item, key, path, keyAttribute, attributes, attrQuery)
+{
+    const oldKey = item.getAttribute(keyAttribute)
+    const newKey = ''+key
+
+    if (oldKey === newKey) {
         return
     }
 
-    item.setAttribute(keyAttribute, newIndex)
+    item.setAttribute(keyAttribute, newKey)
 
-    const oldPrefix = path+'.'+oldIndex
-    const newPrefix = path+'.'+newIndex
+    const oldPrefix = path+'.'+oldKey
+    const newPrefix = path+'.'+newKey
     const bindings = Array.from(item.querySelectorAll(attrQuery))
     if (item.matches(attrQuery)) {
         bindings.unshift(item)
@@ -264,42 +265,68 @@ function updateItemIndex(item, index, path, keyAttribute, attributes, attrQuery)
  */
 export function objectByTemplates(context)
 {
-    const attribute = this.options.attribute
+    const attribute      = this.options.attribute
+    const attributes     = [attribute+'-field',attribute+'-list',attribute+'-map']
+    const attrQuery      = '['+attributes.join('],[')+']'
+    const keyAttribute   = attribute+'-key'
+    const items          = Array.from(context.element.querySelectorAll(':scope > ['+keyAttribute+']'))
+    const usedItems      = new Set()
+    let cursor           = 0
+
     context.list = context.value
 
-    let items = Array.from(context.element.querySelectorAll(':scope > ['+attribute+'-key]'))
     for (let key in context.list) {
         context.index = key
-        let item = items.shift()
-        if (!item) { // more properties than rendered items
-            let clone = this.applyTemplate(context)
-            context.element.appendChild(clone)
+        const value = context.list[key]
+        let item = nextUnusedItem(items, usedItems, cursor)
+
+        if (!item) {
+            context.element.appendChild(this.applyTemplate(context))
             continue
         }
-        if (item.getAttribute(attribute+'-key')!=key) { 
-            // next item doesn't match key
-            items.unshift(item) // put item back for next cycle
-            let outOfOrderItem = context.element.querySelector(':scope > ['+attribute+'-key="'+key+'"]') //FIXME: escape key
-            if (!outOfOrderItem) {
-                let clone = this.applyTemplate(context)
-                context.element.insertBefore(clone, item)
-                continue // new template doesn't need replacement, so continue 
-            } else {
-                context.element.insertBefore(outOfOrderItem, item)
-                item = outOfOrderItem // check needsreplacement next
-                items = items.filter(i => i!=outOfOrderItem)
-            }
+
+        const newTemplate = this.findTemplate(context.templates, value)
+        let reusableItem
+
+        if (item.getAttribute(keyAttribute) === key) {
+            reusableItem = item
+        } else {
+            reusableItem = findItemByKey(items, usedItems, key, keyAttribute)
+                || findReusableItem(items, usedItems, value, newTemplate, cursor)
         }
-        let newTemplate = this.findTemplate(context.templates, context.list[context.index])
-        if (newTemplate != item[DEP.TEMPLATE]){
-            let clone = this.applyTemplate(context)
-            context.element.replaceChild(clone, item)
+
+        if (reusableItem) {
+            if (newTemplate != reusableItem[DEP.TEMPLATE]) {
+                context.element.replaceChild(this.applyTemplate(context), reusableItem)
+            } else {
+                context.element.insertBefore(reusableItem, item)
+                updateItemKey(reusableItem, key, context.path, keyAttribute, attributes, attrQuery)
+                reusableItem[DEP.VALUE] = value
+            }
+            usedItems.add(reusableItem)
+            if (reusableItem === item) {
+                cursor++
+            }
+            continue
+        }
+
+        context.element.insertBefore(this.applyTemplate(context), item)
+    }
+
+    for (let item of items) {
+        if (!usedItems.has(item)) {
+            item.remove()
         }
     }
-    // clean up remaining items
-    while (items.length) {
-        let item = items.shift()
-        item.remove()
+}
+
+function findItemByKey(items, usedItems, key, keyAttribute)
+{
+    const stringKey = ''+key
+    for (let item of items) {
+        if (!usedItems.has(item) && item.getAttribute(keyAttribute) === stringKey) {
+            return item
+        }
     }
 }
 

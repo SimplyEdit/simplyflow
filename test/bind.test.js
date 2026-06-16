@@ -329,5 +329,48 @@ describe('bind can', () => {
       }
     }, 10)
   })
+
+  it('reuse map item when key changes but value reference stays the same', (done) => {
+    const source = `<div data-flow-map="people">
+<template>
+  <span data-flow-field="name"></span>
+</template>
+</div>`
+    document.body.innerHTML = source
+
+    const ada = { name: 'Ada' }
+    const data = signal({
+      people: {
+        ada
+      }
+    })
+    const databind = bind({
+      container: document.body,
+      root: data
+    })
+
+    setTimeout(() => {
+      try {
+        const renderedItem = document.querySelector('[data-flow-key="ada"]')
+        data.people = { lovelace: ada }
+        setTimeout(() => {
+          try {
+            expect(document.querySelector('[data-flow-key="lovelace"]')).toBe(renderedItem)
+            expect(renderedItem.getAttribute('data-flow-field')).toBe('people.lovelace.name')
+            expect(renderedItem.innerHTML).toBe('Ada')
+            done()
+          } catch(error) {
+            done(error)
+          } finally {
+            databind.destroy()
+          }
+        }, 100)
+      } catch(error) {
+        databind.destroy()
+        done(error)
+      }
+    }, 100)
+  })
+
 })
 
