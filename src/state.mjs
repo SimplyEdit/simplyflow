@@ -551,25 +551,41 @@ export function throttledEffect(fn, throttleTime) {
         signals.set(fn, connectedSignal)
     }
 
-    let throttled = false
+    let throttledUntil = 0
     let hasChange = true
+    let timeout = null
+
+    function schedule() {
+        if (timeout) {
+            return
+        }
+
+        const delay = Math.max(0, throttledUntil - Date.now())
+
+        timeout = globalThis.setTimeout(() => {
+            timeout = null
+
+            if (hasChange) {
+                computeEffect()
+            }
+        }, delay)
+    }
+
     // this is the function that is called automatically
     // whenever a signal dependency changes
     const computeEffect = function computeEffect() {
+        const now = Date.now()
+
+        if (throttledUntil > now) {
+            hasChange = true
+            schedule()
+            return
+        }
+
         if (signalStack.findIndex(s => s==connectedSignal)!==-1) {
             throw new Error('Cyclical dependency in update() call', { cause: fn})
         }
-        if (throttled && throttled>Date.now()) {
-            hasChange = true
 
-            globalThis.setTimeout(() => {
-                if (hasChange) {
-                    computeEffect()
-                }
-            }, throttled - Date.now())
-
-            return
-        }
         // remove all dependencies (signals) from previous runs 
         clearListeners(computeEffect)
         // record new dependencies on this run
@@ -596,12 +612,8 @@ export function throttledEffect(fn, throttleTime) {
                 connectedSignal.current = result
             }
         }
-        throttled = Date.now()+throttleTime
-        globalThis.setTimeout(() => {
-            if (hasChange) {
-                computeEffect()
-            }
-        }, throttleTime)
+        throttledUntil = Date.now()+throttleTime
+        schedule()
     }
     // run the computEffect immediately upon creation
     computeEffect()
