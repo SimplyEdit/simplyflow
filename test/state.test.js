@@ -217,6 +217,131 @@ describe('basic signals can', () => {
 		expect(bar.current).toBe('"baz"')
 	})
 
+	it('tracks only dependencies from the latest effect run', () => {
+		const state = signal({
+			useA: true,
+			a: 1,
+			b: 10
+		})
+		let runs = 0
+		const result = effect(() => {
+			runs++
+			return state.useA ? state.a : state.b
+		})
+		expect(result.current).toBe(1)
+		expect(runs).toBe(1)
+
+		state.useA = false
+		expect(result.current).toBe(10)
+		expect(runs).toBe(2)
+
+		state.a = 2
+		// changing a should no longer trigger the effect
+		expect(result.current).toBe(10)
+		expect(runs).toBe(2)
+
+		state.b = 20
+		expect(result.current).toBe(20)
+		expect(runs).toBe(3)
+	})
+
+	it('tracks the in operator', () => {
+		const state = signal({
+			foo: 1
+		})
+		const result = effect(() => {
+			return 'foo' in state
+		})
+		expect(result.current).toBe(true)
+
+		delete state.foo
+		expect(result.current).toBe(false)
+	})
+
+	it('updates object key iteration when a property is deleted', () => {
+		const state = signal({
+			a: 1,
+			b: 2
+		})
+		const result = effect(() => {
+			return Object.keys(state).join(',')
+		})
+		expect(result.current).toBe('a,b')
+
+		delete state.b
+		expect(result.current).toBe('a')
+	})
+
+	it('updates effects on direct array index assignment', () => {
+		const state = signal(['a'])
+		const result = effect(() => {
+			return state[0]
+		})
+		expect(result.current).toBe('a')
+
+		state[0] = 'b'
+		expect(result.current).toBe('b')
+	})
+
+	it('tracks nested properties after replacing a parent object', () => {
+		const state = signal({
+			user: {
+				name: 'Alice'
+			}
+		})
+		const result = effect(() => {
+			return state.user.name
+		})
+		expect(result.current).toBe('Alice')
+
+		state.user = {
+			name: 'Bob'
+		}
+		expect(result.current).toBe('Bob')
+
+		state.user.name = 'Carol'
+		expect(result.current).toBe('Carol')
+	})
+
+	it('updates effects that read a Map entry', () => {
+		const map = signal(
+			new Map([
+				['a', 1]
+			])
+		)
+		const result = effect(() => {
+			return map.get('a')
+		})
+		expect(result.current).toBe(1)
+
+		map.set('a', 2)
+		expect(result.current).toBe(2)
+	})
+
+	it('tracks Map.has()', () => {
+		const map = signal(new Map())
+		const result = effect(() => {
+			return map.has('foo')
+		})
+		expect(result.current).toBe(false)
+
+		map.set('foo', 1)
+		expect(result.current).toBe(true)
+
+		map.delete('foo')
+		expect(result.current).toBe(false)
+	})
+
+	it('updates effects that iterate a Set directly', () => {
+		const set = signal(new Set([1]))
+		const result = effect(() => {
+			return [...set].join(',')
+		})
+		expect(result.current).toBe('1')
+
+		set.add(2)
+		expect(result.current).toBe('1,2')
+	})
 })
 
 describe('signals and effects', () => {
@@ -428,6 +553,49 @@ describe('effects', () => {
 		let bar = signal({bar: foo})
 		expect(bar.bar[Symbol.xRay][Symbol.xRay]).toBe(undefined)
 		expect(bar.bar).toBe(foo)
+	})
+
+	it('does not track async dependencies read after await', (done) => {
+		const before = signal({
+			value: 1
+		})
+		const after = signal({
+			value: 10
+		})
+
+		const result = effect(async () => {
+			const x = before.value
+			await Promise.resolve()
+			return x + after.value
+		})
+
+		setTimeout(() => {
+			try {
+				expect(result.current).toBe(11)
+
+				after.value = 20
+				setTimeout(() => {
+					try {
+						// dependency read after await should not retrigger
+						expect(result.current).toBe(11)
+
+						before.value = 2
+						setTimeout(() => {
+							try {
+								expect(result.current).toBe(22)
+								done()
+							} catch (e) {
+								done(e)
+							}
+						}, 10)
+					} catch (e) {
+						done(e)
+					}
+				}, 10)
+			} catch (e) {
+				done(e)
+			}
+		}, 10)
 	})
 })
 
