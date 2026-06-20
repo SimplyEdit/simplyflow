@@ -123,7 +123,7 @@ git clone https://github.com/SimplyEdit/simplyflow.git
 <script src="https://cdn.jsdelivr.net/npm/simplyflow/dist/simply.flow.js"></script>
 ```
 
-Then use the global `simply` object:
+Then use the beginner-facing `simply.app()` API:
 
 ```javascript
 const counter = simply.app({
@@ -136,9 +136,17 @@ const counter = simply.app({
 })
 ```
 
-## Lower-level APIs
+The tutorials focus on `simply.app()`, but the browser global also exposes the lower-level APIs directly for projects that use script tags and do not want a build step:
 
-The app API is built on smaller modules that can also be used directly:
+```javascript
+const data = simply.signal({ title: 'Hello' })
+simply.bind({ root: data })
+
+const table = simply.model({ data: [] })
+table.addEffect(simply.model.sort({ property: 'title' }))
+```
+
+Module imports are still available when you prefer explicit imports:
 
 ```javascript
 import { signal, effect, batch } from 'simplyflow/src/state.mjs'
@@ -148,6 +156,7 @@ import { model, paging, sort, filter, columns } from 'simplyflow/src/model.mjs'
 const data = signal({ title: 'Hello' })
 bind({ root: data })
 ```
+
 
 ## Documentation
 

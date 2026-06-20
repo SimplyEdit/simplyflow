@@ -2430,9 +2430,6 @@
       if (options.routes) {
         this.load(options.routes);
       }
-      if (globalThis.simply) {
-        globalThis.simply.route = this;
-      }
     }
     load(routes2) {
       parseRoutes(routes2, this.routeInfo, this.matchExact);
@@ -3745,24 +3742,41 @@
   if (!globalThis.simply) {
     globalThis.simply = {};
   }
+  var modelApi = Object.assign(model, {
+    model,
+    sort,
+    paging,
+    filter,
+    columns,
+    scroll
+  });
   Object.assign(globalThis.simply, {
     app,
     bind,
-    flow: model_exports,
+    model: modelApi,
     state: state_exports,
+    signal,
+    effect,
+    batch,
+    clone,
+    destroy,
+    untracked,
+    throttledEffect,
+    clockEffect,
+    createSignal,
+    isSignal,
+    raw,
     dom: dom_exports,
     behaviors,
     actions,
-    action: actions,
     commands,
-    command: commands,
     include,
     includes,
     shortcuts,
     path: path_default,
     routes,
-    route: new SimplyRoute(),
     findAttribute
   });
+  delete globalThis.simply.advanced;
   var flow_default = globalThis.simply;
 })();

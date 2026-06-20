@@ -17,25 +17,44 @@ if (!globalThis.simply) {
     globalThis.simply = {}
 }
 
+const modelApi = Object.assign(model.model, {
+    model: model.model,
+    sort: model.sort,
+    paging: model.paging,
+    filter: model.filter,
+    columns: model.columns,
+    scroll: model.scroll
+})
+
 Object.assign(globalThis.simply, {
     app,
     bind,
-    flow: model,
+    model: modelApi,
     state,
+    signal: state.signal,
+    effect: state.effect,
+    batch: state.batch,
+    clone: state.clone,
+    destroy: state.destroy,
+    untracked: state.untracked,
+    throttledEffect: state.throttledEffect,
+    clockEffect: state.clockEffect,
+    createSignal: state.createSignal,
+    isSignal: state.isSignal,
+    raw: state.raw,
     dom,
     behaviors,
     actions,
-    action: actions,
     commands,
-    command: commands,
     include,
     includes,
     shortcuts,
     path,
     routes,
-    route: new SimplyRoute(),
     findAttribute
 })
+
+delete globalThis.simply.advanced
 
 export {
     app,

@@ -18,9 +18,6 @@ export class SimplyRoute
         if (options.routes) {
             this.load(options.routes)
         }
-        if (globalThis.simply) { // backwards compatibility feature
-            globalThis.simply.route = this
-        }
     }
 
     load(routes)
