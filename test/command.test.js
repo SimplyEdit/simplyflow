@@ -162,6 +162,25 @@ describe('command API', () => {
     ])
   })
 
+
+  it('warns once for unknown commands without a useful suggestion', () => {
+    document.body.innerHTML = `<div id="app"><button data-simply-command="loadRemoteContacts">Load</button></div>`
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const container = document.getElementById('app')
+    commands({
+      app: { container },
+      commands: {
+        save() {}
+      }
+    })
+
+    const button = container.querySelector('button')
+    expect(() => button.click()).not.toThrow()
+    expect(() => button.click()).not.toThrow()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('simplyflow/command: unknown command "loadRemoteContacts"', { cause: button })
+  })
+
   it('warns once for unknown commands and suggests close command names', () => {
     document.body.innerHTML = `<div id="app"><button data-simply-command="svae">Save</button></div>`
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})

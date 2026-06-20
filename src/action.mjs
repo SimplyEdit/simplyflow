@@ -1,3 +1,7 @@
+import { closest } from './suggest.mjs'
+
+const warnedUnknownActions = new WeakMap()
+
 export function actions(options) 
 {
 	if (options.app) {
@@ -21,7 +25,8 @@ export function actions(options)
 		const actionHandler = {
 			get(target, property)
 			{
-				if (!target[property]) {
+				if (!Object.hasOwn(target, property)) {
+					warnUnknownAction(target, property)
 					return undefined
 				}
 				if (options.app.onError) {
@@ -35,4 +40,25 @@ export function actions(options)
 	} else {
 		return options
 	}
+}
+
+function warnUnknownAction(actions, property)
+{
+	if (typeof property !== 'string') {
+		return
+	}
+
+	let warned = warnedUnknownActions.get(actions)
+	if (!warned) {
+		warned = new Set()
+		warnedUnknownActions.set(actions, warned)
+	}
+	if (warned.has(property)) {
+		return
+	}
+	warned.add(property)
+
+	const suggestion = closest(property, Object.keys(actions))
+	const suffix = suggestion ? `. Did you mean "${suggestion}"?` : ''
+	console.warn(`simplyflow/action: unknown action "${property}"${suffix}`)
 }

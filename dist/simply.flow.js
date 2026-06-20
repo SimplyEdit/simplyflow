@@ -3013,6 +3013,7 @@
   }
 
   // src/action.mjs
+  var warnedUnknownActions = /* @__PURE__ */ new WeakMap();
   function actions(options) {
     if (options.app) {
       const functionHandler = {
@@ -3032,7 +3033,8 @@
       };
       const actionHandler = {
         get(target, property) {
-          if (!target[property]) {
+          if (!Object.hasOwn(target, property)) {
+            warnUnknownAction(target, property);
             return void 0;
           }
           if (options.app.onError) {
@@ -3046,6 +3048,23 @@
     } else {
       return options;
     }
+  }
+  function warnUnknownAction(actions2, property) {
+    if (typeof property !== "string") {
+      return;
+    }
+    let warned = warnedUnknownActions.get(actions2);
+    if (!warned) {
+      warned = /* @__PURE__ */ new Set();
+      warnedUnknownActions.set(actions2, warned);
+    }
+    if (warned.has(property)) {
+      return;
+    }
+    warned.add(property);
+    const suggestion = closest(property, Object.keys(actions2));
+    const suffix = suggestion ? `. Did you mean "${suggestion}"?` : "";
+    console.warn(`simplyflow/action: unknown action "${property}"${suffix}`);
   }
 
   // src/shortcut.mjs
