@@ -3101,74 +3101,57 @@
     return url.href;
   }
   var observer2;
-  var loaded = {};
   var head = globalThis.document.querySelector("head");
-  var currentScript = globalThis.document.currentScript;
-  var getScriptURL;
-  var currentScriptURL;
-  if (!currentScript) {
-    getScriptURL = (() => {
-      var scripts = document.getElementsByTagName("script");
-      var index = scripts.length - 1;
-      var myScript = scripts[index];
-      return () => myScript?.src;
-    })();
-    currentScriptURL = getScriptURL();
-  } else {
-    currentScriptURL = currentScript.src;
-  }
-  var waitForPreviousScripts = async () => {
-    return new Promise(function(resolve) {
-      var next = globalThis.document.createElement("script");
-      next.textContent = "document.dispatchEvent(new CustomEvent('simply-include-next'))";
-      next.async = false;
-      globalThis.document.addEventListener("simply-include-next", () => {
-        head.removeChild(next);
-        resolve();
-      }, { once: true, passive: true });
-      head.appendChild(next);
-    });
-  };
   var scriptLocations = [];
+  function cloneScript(script, base) {
+    const clone2 = globalThis.document.createElement("script");
+    for (const attr of script.attributes) {
+      clone2.setAttribute(attr.name, attr.value);
+    }
+    clone2.removeAttribute("data-simply-location");
+    if (clone2.hasAttribute("src")) {
+      clone2.src = rebaseHref(clone2.getAttribute("src"), base);
+    } else {
+      clone2.textContent = script.textContent;
+    }
+    return clone2;
+  }
+  function insertScript(script, placeholder) {
+    placeholder.parentNode.insertBefore(script, placeholder);
+    placeholder.parentNode.removeChild(placeholder);
+  }
+  function shouldWaitForScript(script) {
+    return script.hasAttribute("src") && !script.hasAttribute("async");
+  }
+  function insertAndWaitForScript(script, placeholder) {
+    return new Promise((resolve) => {
+      const done = () => {
+        script.removeEventListener("load", done);
+        script.removeEventListener("error", done);
+        resolve();
+      };
+      script.addEventListener("load", done);
+      script.addEventListener("error", done);
+      insertScript(script, placeholder);
+    });
+  }
   var include = {
     cacheBuster: null,
-    scripts: (scripts, base) => {
-      let arr = scripts.slice();
-      const importScript = () => {
-        const script = arr.shift();
-        if (!script) {
-          return;
+    scripts: async (scripts, base) => {
+      const arr = scripts.slice();
+      for (const script of arr) {
+        const clone2 = cloneScript(script, base);
+        const node = scriptLocations[script.dataset.simplyLocation];
+        if (!node?.parentNode) {
+          continue;
         }
-        const attrs = [].map.call(script.attributes, (attr) => {
-          return attr.name;
-        });
-        let clone2 = globalThis.document.createElement("script");
-        for (const attr of attrs) {
-          clone2.setAttribute(attr, script.getAttribute(attr));
-        }
-        clone2.removeAttribute("data-simply-location");
-        if (!clone2.src) {
-          clone2.innerHTML = script.innerHTML;
-          waitForPreviousScripts().then(() => {
-            const node = scriptLocations[script.dataset.simplyLocation];
-            node.parentNode.insertBefore(clone2, node);
-            node.parentNode.removeChild(node);
-            importScript();
-          });
+        const waitForLoad = shouldWaitForScript(clone2);
+        if (waitForLoad) {
+          clone2.async = false;
+          await insertAndWaitForScript(clone2, node);
         } else {
-          clone2.src = rebaseHref(clone2.getAttribute("src"), base);
-          if (!clone2.hasAttribute("async") && !clone2.hasAttribute("defer")) {
-            clone2.async = false;
-          }
-          const node = scriptLocations[script.dataset.simplyLocation];
-          node.parentNode.insertBefore(clone2, node);
-          node.parentNode.removeChild(node);
-          loaded[clone2.src] = true;
-          importScript();
+          insertScript(clone2, node);
         }
-      };
-      if (arr.length) {
-        importScript();
       }
     },
     html: (html2, link) => {

@@ -48,5 +48,52 @@ describe('include API', () => {
     expect(document.body.textContent).toContain('Loaded')
     include.cacheBuster = null
   })
+  it('waits for blocking external scripts before inserting following scripts', async () => {
+    const link = document.createElement('link')
+    link.rel = 'test-include'
+    link.href = 'https://example.com/app/page.html'
+    document.body.append(link)
+
+    include.html(`
+      <script src="one.js"></script>
+      <script>window.afterOne = true</script>
+      <script src="two.js"></script>
+      <section>Loaded</section>
+    `, link)
+
+    await wait(20)
+    let scripts = Array.from(document.body.querySelectorAll('script'))
+    expect(scripts.map(script => script.src)).toEqual(['https://example.com/app/one.js'])
+
+    scripts[0].dispatchEvent(new Event('load'))
+    await wait(0)
+
+    scripts = Array.from(document.body.querySelectorAll('script'))
+    expect(scripts).toHaveLength(3)
+    expect(scripts[0].src).toBe('https://example.com/app/one.js')
+    expect(scripts[1].textContent).toContain('window.afterOne = true')
+    expect(scripts[2].src).toBe('https://example.com/app/two.js')
+  })
+
+  it('does not let async scripts block following scripts', async () => {
+    const link = document.createElement('link')
+    link.rel = 'test-include'
+    link.href = 'https://example.com/app/page.html'
+    document.body.append(link)
+
+    include.html(`
+      <script async src="optional.js"></script>
+      <script>window.afterAsync = true</script>
+      <section>Loaded</section>
+    `, link)
+
+    await wait(20)
+    const scripts = Array.from(document.body.querySelectorAll('script'))
+    expect(scripts).toHaveLength(2)
+    expect(scripts[0].src).toBe('https://example.com/app/optional.js')
+    expect(scripts[0].hasAttribute('async')).toBe(true)
+    expect(scripts[1].textContent).toContain('window.afterAsync = true')
+  })
+
 })
 

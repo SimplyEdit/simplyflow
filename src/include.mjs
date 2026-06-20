@@ -30,82 +30,72 @@ function rebaseHref(relative, base) {
     return url.href
 }
 
-let observer, loaded = {}
+let observer
 let head = globalThis.document.querySelector('head')
-let currentScript = globalThis.document.currentScript
-let getScriptURL, currentScriptURL
-if (!currentScript) {
-    getScriptURL = (() => {
-        var scripts = document.getElementsByTagName('script')
-        var index = scripts.length - 1
-        var myScript = scripts[index]
-        return () => myScript?.src
-    })()
-    currentScriptURL = getScriptURL()
-} else {
-    currentScriptURL = currentScript.src
+let scriptLocations = []
+
+function cloneScript(script, base) {
+    const clone = globalThis.document.createElement('script')
+    for (const attr of script.attributes) {
+        clone.setAttribute(attr.name, attr.value)
+    }
+    clone.removeAttribute('data-simply-location')
+
+    if (clone.hasAttribute('src')) {
+        clone.src = rebaseHref(clone.getAttribute('src'), base)
+    } else {
+        clone.textContent = script.textContent
+    }
+    return clone
 }
 
-const waitForPreviousScripts = async () => {
-    // because of the async=false attribute, this script will run after
-    // the previous scripts have been loaded and run
-    // simply.include.next.js only fires the simply-next-script event
-    // that triggers the Promise.resolve method
-    return new Promise(function(resolve) {
-        var next = globalThis.document.createElement('script')
-        next.textContent = "document.dispatchEvent(new CustomEvent('simply-include-next'))"
-        next.async = false
-        globalThis.document.addEventListener('simply-include-next', () => {
-            head.removeChild(next)
+function insertScript(script, placeholder) {
+    placeholder.parentNode.insertBefore(script, placeholder)
+    placeholder.parentNode.removeChild(placeholder)
+}
+
+function shouldWaitForScript(script) {
+    // Async scripts are explicitly independent. Every other external script from
+    // an include is treated as ordered, including scripts that used `defer`;
+    // dynamically inserted `defer` scripts do not reliably model parser defer.
+    return script.hasAttribute('src') && !script.hasAttribute('async')
+}
+
+function insertAndWaitForScript(script, placeholder) {
+    return new Promise((resolve) => {
+        const done = () => {
+            script.removeEventListener('load', done)
+            script.removeEventListener('error', done)
             resolve()
-        }, { once: true, passive: true})
-        head.appendChild(next)
+        }
+        script.addEventListener('load', done)
+        script.addEventListener('error', done)
+        insertScript(script, placeholder)
     })
 }
 
-let scriptLocations = []
-
 export const include = {
     cacheBuster: null,
-    scripts: (scripts, base) => {
-        let arr = scripts.slice()
-        const importScript = () => {
-            const script = arr.shift()
-            if (!script) {
-                return
+    scripts: async (scripts, base) => {
+        const arr = scripts.slice()
+        for (const script of arr) {
+            const clone = cloneScript(script, base)
+            const node = scriptLocations[script.dataset.simplyLocation]
+            if (!node?.parentNode) {
+                continue
             }
-            const attrs  = [].map.call(script.attributes, (attr) => {
-                return attr.name
-            })
-            let clone  = globalThis.document.createElement('script')
-            for (const attr of attrs) {
-                clone.setAttribute(attr, script.getAttribute(attr))
-            }
-            clone.removeAttribute('data-simply-location')
-            if (!clone.src) {
-                // this is an inline script, so copy the content and wait for previous scripts to run
-                clone.innerHTML = script.innerHTML
-                waitForPreviousScripts()
-                    .then(() => {
-                        const node = scriptLocations[script.dataset.simplyLocation]
-                        node.parentNode.insertBefore(clone, node)
-                        node.parentNode.removeChild(node)
-                        importScript()
-                    })
+
+            // Included scripts should behave like normal document-order scripts by default:
+            // each blocking external script must finish loading and running before the next
+            // script from the include is inserted. Dynamically inserted scripts are async by
+            // default, so async=false and waiting for load are both needed here.
+            const waitForLoad = shouldWaitForScript(clone)
+            if (waitForLoad) {
+                clone.async = false // important: set the property, not the boolean attribute
+                await insertAndWaitForScript(clone, node)
             } else {
-                clone.src = rebaseHref(clone.getAttribute('src'), base)
-                if (!clone.hasAttribute('async') && !clone.hasAttribute('defer')) {
-                    clone.async = false //important! do not use clone.setAttribute('async', false) - it has no effect
-                }
-                const node = scriptLocations[script.dataset.simplyLocation]
-                node.parentNode.insertBefore(clone, node)
-                node.parentNode.removeChild(node)
-                loaded[clone.src]=true
-                importScript()
+                insertScript(clone, node)
             }
-        }
-        if (arr.length) {
-            importScript()
         }
     },
     html: (html, link) => {
