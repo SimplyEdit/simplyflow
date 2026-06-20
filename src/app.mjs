@@ -10,8 +10,8 @@ import { findAttribute } from './dom.mjs'
 const APP_OPTIONS = [
     'container',
     'data',
-    'html',
-    'css',
+    'templates',
+    'styles',
     'start',
     'onError',
     'components',
@@ -43,15 +43,15 @@ class SimplyApp
         this.components = options.components
         this.baseURL = options.baseURL || options.root
 
-        installHtml(this.container, options.html)
-        installCss(this.container, options.css)
+        installTemplates(this.container, options.templates)
+        installStyles(this.container, options.styles)
 
         for (const key of Object.keys(options)) {
             switch(key) {
                 case 'container':
                 case 'data':
-                case 'html':
-                case 'css':
+                case 'templates':
+                case 'styles':
                 case 'start':
                 case 'onError':
                 case 'components':
@@ -122,7 +122,7 @@ class SimplyApp
     }
 }
 
-function installHtml(container, templates)
+function installTemplates(container, templates)
 {
     if (!templates) {
         return
@@ -142,7 +142,7 @@ function installHtml(container, templates)
     }
 }
 
-function installCss(container, styles)
+function installStyles(container, styles)
 {
     if (!styles) {
         return

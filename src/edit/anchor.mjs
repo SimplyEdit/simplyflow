@@ -1,10 +1,10 @@
 import '../flow.mjs'
 
 export default {
-	html: {
+	templates: {
 		anchor: html`<div class="anchor"></div>`
 	},
-	css: {
+	styles: {
 		anchor: css`
 .anchor {
 	anchor-name: --cursor-anchor;

@@ -1,7 +1,7 @@
 # SimplyFlow app API
 
 `app()` is the beginner-facing API for building a small reactive web application.
-It combines reactive `data`, DOM binding, commands, actions, routes, keyboard shortcuts and optional inline HTML/CSS setup.
+It combines reactive `data`, DOM binding, commands, actions, routes, keyboard shortcuts and optional inline templates/styles setup.
 
 ```javascript
 import { app } from '../src/flow.mjs'
@@ -131,19 +131,25 @@ keys: {
 }
 ```
 
-### `html`
+### `templates`
 
 A map of template names to HTML strings. Each entry is installed as a `<template>` in the app container.
 
 ```javascript
-html: {
+templates: {
   item: `<li><span data-simply-field=":value.text"></span></li>`
 }
 ```
 
-### `css`
+### `styles`
 
 A map of style names to CSS strings. Each entry is installed as a `<style>` element in the app container.
+
+```javascript
+styles: {
+  app: `.selected { font-weight: bold; }`
+}
+```
 
 ### Custom app properties
 

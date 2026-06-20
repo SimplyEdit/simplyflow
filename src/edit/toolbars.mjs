@@ -176,7 +176,7 @@ const simplyToolbarContents = html`
 	</div>`
 
 export default {
-	css: {
+	styles: {
 		simplyToolbarFloat: css`
 :root {
 	--ds-shadow-light: rgba(0,0,0,0.07);
@@ -204,7 +204,7 @@ export default {
 	box-shadow: var(--ds-shadow-small);
 }`
 	},
-	html: {
+	templates: {
 	'simply-toolbar': 
 html`<button class="ds-button simply-button" data-flow-field=":value" data-flow-transform="simplyToolbarButton">
 	<svg class="ds-icon ds-icon-feather">

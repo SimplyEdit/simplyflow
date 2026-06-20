@@ -164,16 +164,16 @@ describe('app API', () => {
 
 
 describe('app integration details', () => {
-  it('installs inline html and css templates', () => {
+  it('installs inline templates and styles', () => {
     const container = document.createElement('div')
     document.body.append(container)
 
     const testApp = app({
       container,
-      html: {
+      templates: {
         greeting: '<span>Hello</span>'
       },
-      css: {
+      styles: {
         base: '.greeting { color: black; }'
       }
     })
