@@ -8,6 +8,12 @@ const myApp = simply.app(options)
 
 `app()` is the main beginner-facing API. It creates a reactive application from ordinary JavaScript data and declarative HTML attributes.
 
+Some examples below use Metro for API calls. In a browser page, load it before using `metro.jsonApi()`:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@muze-nl/metro/dist/everything.js"></script>
+```
+
 ## `app(options)`
 
 Creates and starts an application.

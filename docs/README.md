@@ -22,6 +22,12 @@ The tutorials use the browser bundle from a CDN. Put this line in the `<head>` o
 
 After that, `simply.app()` is available in your page scripts.
 
+Chapter 7 uses Metro to keep the API examples short. Pages that use `metro.jsonApi()` should add Metro too:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@muze-nl/metro/dist/everything.js"></script>
+```
+
 ## Start here
 
 1. [Meet your first app](01-meet-your-app.md)
