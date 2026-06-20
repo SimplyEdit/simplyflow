@@ -72,6 +72,26 @@ describe('model API contract coverage', () => {
     expect(m.view.current.map(row => row.id)).toEqual(['a', 'b', 'c', 'missing'])
   })
 
+  it('keeps filters disabled by default', async () => {
+    const m = model({
+      data: [
+        { id: 1, group: 'a' },
+        { id: 2, group: 'b' }
+      ]
+    })
+
+    m.addEffect(filter({
+      name: 'groupFilter',
+      matches(row) {
+        return row.group === 'a'
+      }
+    }))
+
+    await wait()
+
+    expect(m.view.current.map(row => row.id)).toEqual([1, 2])
+  })
+
   it('filters only when enabled and binds the predicate to the model', async () => {
     const m = model({
       data: [
