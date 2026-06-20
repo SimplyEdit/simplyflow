@@ -1,11 +1,107 @@
 import { DEP } from './symbols.mjs'
 
+const MAP_READS_KEY = new Set(['get', 'has'])
+const MAP_READS_ITERATION = new Set(['keys', 'values', 'entries', 'forEach', Symbol.iterator])
+const MAP_WRITES = new Set(['set', 'delete', 'clear'])
+const SET_WRITES = new Set(['add', 'delete', 'clear'])
+const SET_ITERATION_PROPERTIES = {
+    entries: {},
+    forEach: {},
+    has: {},
+    keys: {},
+    values: {},
+    [Symbol.iterator]: {}
+}
+
+function isObjectLike(value) {
+    return value !== null && (typeof value === 'object' || typeof value === 'function')
+}
+
+function isSignal(value) {
+    return Boolean(isObjectLike(value) && value[DEP.SIGNAL])
+}
+
+function targetSignal(target) {
+    return signals.get(target)
+}
+
+function readTarget(target, property) {
+    // Reflect.get() uses the proxy as the receiver for accessors. That breaks
+    // native Map/Set size getters and class getters that rely on private fields.
+    return target?.[property]
+}
+
+function bindMethod(target, receiver, value) {
+    if (
+        target instanceof HTMLElement
+        || target instanceof Number
+        || target instanceof String
+        || target instanceof Boolean
+    ) {
+        return value.bind(target)
+    }
+
+    // For user-defined classes, bind to the signal so method bodies remain
+    // reactive when they read or write public properties through `this`.
+    return value.bind(receiver)
+}
+
+function collectRemovedArrayValues(target, nextLength) {
+    const values = new Map()
+    if (!Array.isArray(target) || nextLength >= target.length) {
+        return values
+    }
+
+    for (let index = nextLength; index < target.length; index++) {
+        if (Object.hasOwn(target, index)) {
+            values.set(index, target[index])
+        }
+    }
+    return values
+}
+
+function addArrayLengthChanges(context, target, oldLength, removedValues = new Map()) {
+    if (!Array.isArray(target) || oldLength === target.length) {
+        return
+    }
+
+    context.set(DEP.LENGTH, { was: oldLength, now: target.length })
+    context.set(DEP.ITERATE, {})
+
+    // Directly shrinking .length deletes indexes without going through the
+    // proxy's delete trap. Notify listeners of those indexes explicitly.
+    for (const [index, oldValue] of removedValues) {
+        context.set(String(index), { delete: true, was: oldValue, now: undefined })
+    }
+}
+
+function notifyContext(receiver, context) {
+    if (context.size) {
+        notifySet(receiver, context)
+    }
+}
+
+function wrapArrayMethod(target, property, receiver, value) {
+    return (...args) => {
+        const oldLength = target.length
+
+        // Native array methods must run with the proxy as `this`. That lets
+        // their internal get/set/delete operations pass through the proxy traps.
+        const result = value.apply(receiver, args)
+
+        if (oldLength !== target.length) {
+            notifySet(receiver, makeContext(DEP.LENGTH, { was: oldLength, now: target.length }))
+        }
+        return result
+    }
+}
+
 function wrapMapMethod(target, property, receiver, value) {
     return (...args) => {
-        if (property === 'get' || property === 'has') {
+        if (MAP_READS_KEY.has(property)) {
             notifyGet(receiver, args[0])
         }
-        if (['keys', 'values', 'entries', 'forEach', Symbol.iterator].includes(property)) {
+        if (MAP_READS_ITERATION.has(property)) {
             notifyGet(receiver, DEP.ITERATE)
         }
 
@@ -17,188 +113,144 @@ function wrapMapMethod(target, property, receiver, value) {
         if (property === 'set') {
             context.set(args[0], { now: args[1] })
         }
-
         if (property === 'delete') {
             context.set(args[0], { delete: true })
         }
-
         if (property === 'clear') {
             for (const [key, oldValue] of clearedEntries) {
                 context.set(key, { delete: true, was: oldValue, now: undefined })
             }
         }
-
         if (oldSize !== target.size) {
             context.set(DEP.SIZE, { was: oldSize, now: target.size })
         }
-
-        if (['set','delete','clear'].includes(property) || oldSize!==target.size) {
+        if (MAP_WRITES.has(property) || oldSize !== target.size) {
             context.set(DEP.ITERATE, {})
         }
 
-        if (context.size) {
-            notifySet(receiver, context)
-        }
-
-        return result
-    }
-
-}
-
-function wrapArrayMethod(target, property, receiver, value) {
-    return (...args) => {
-        let l = target.length
-        // by binding the function to the receiver
-        // all accesses in the function will be trapped
-        // by the Proxy, so get/set/delete is all handled
-        let result = value.apply(receiver, args)
-        if (l != target.length) {
-            notifySet(receiver,  makeContext(DEP.LENGTH, { was: l, now: target.length }) )
-        }
+        notifyContext(receiver, context)
         return result
     }
 }
 
 function wrapSetMethod(target, property, receiver, value) {
     return (...args) => {
-        // node doesn't allow you to call set/map functions
-        // bound to the receiver.. so using target instead
-        // there are no properties to update anyway, except for size
-        let s = target.size
-        let result = value.apply(target, args)
-        if (s != target.size) {
-            notifySet(receiver, makeContext( DEP.SIZE, { was: s, now: target.size }) )
+        const oldSize = target.size
+        const result = value.apply(target, args)
+
+        if (oldSize !== target.size) {
+            notifySet(receiver, makeContext(DEP.SIZE, { was: oldSize, now: target.size }))
         }
-        // there is no efficient way to see if the function called
-        // has actually changed the Set/Map, but by assuming the
-        // 'setter' functions will change the results of the
-        // 'getter' functions, effects should update correctly
-        if (['set','add','clear','delete'].includes(property)) {
-            notifySet(receiver, makeContext( { entries: {}, forEach: {}, has: {}, keys: {}, values: {}, [Symbol.iterator]: {} } ) )
+
+        // Set.has(value) currently tracks at method level rather than per value.
+        // Notify all Set read methods after writes so this remains correct.
+        if (SET_WRITES.has(property)) {
+            notifySet(receiver, makeContext(SET_ITERATION_PROPERTIES))
         }
         return result
     }
 }
 
-
-function addArrayLengthChanges(context, target, oldLength, removedValues = new Map()) {
-    if (!Array.isArray(target) || oldLength === target.length) {
-        return
-    }
-    context.set(DEP.LENGTH, { was: oldLength, now: target.length })
-    context.set(DEP.ITERATE, {})
-    for (const [index, oldValue] of removedValues) {
-        context.set(String(index), { delete: true, was: oldValue, now: undefined })
-    }
-}
-
-function removedArrayValues(target, nextLength) {
-    const result = new Map()
-    if (!Array.isArray(target) || nextLength >= target.length) {
-        return result
-    }
-    for (let index = nextLength; index < target.length; index++) {
-        if (Object.hasOwn(target, index)) {
-            result.set(index, target[index])
-        }
-    }
-    return result
+function propertyValueChanged(descriptor, oldDescriptor, oldValue, newDescriptor, newValue) {
+    return (
+        (Object.hasOwn(descriptor, 'value') && !Object.is(oldValue, newValue))
+        || (Object.hasOwn(descriptor, 'get') && oldDescriptor?.get !== newDescriptor?.get)
+        || (Object.hasOwn(descriptor, 'set') && oldDescriptor?.set !== newDescriptor?.set)
+    )
 }
 
 const signalHandler = {
-    get: (target, property, receiver) => {
-        if (property===DEP.XRAY) {
-            return target // don't notifyGet here, this is only called by set
+    get(target, property, receiver) {
+        if (property === DEP.XRAY) {
+            return target
         }
-        if (property===DEP.SIGNAL) {
+        if (property === DEP.SIGNAL) {
             return true
         }
-        const value = target?.[property] // Reflect.get fails on a Set.
+
+        const value = readTarget(target, property)
         notifyGet(receiver, property)
+
         if (typeof value === 'function') {
             if (Array.isArray(target)) {
                 return wrapArrayMethod(target, property, receiver, value)
-            } else if (target instanceof Map) {
-                return wrapMapMethod(target, property, receiver, value)
-            } else if (target instanceof Set) {
-                return wrapSetMethod(target, property, receiver, value)
-            } else if (
-                target instanceof HTMLElement
-                || target instanceof Number
-                || target instanceof String
-                || target instanceof Boolean
-            ) {
-                return value.bind(target)
-            } else {
-                // support custom classes, hopefully
-                return value.bind(receiver)
             }
+            if (target instanceof Map) {
+                return wrapMapMethod(target, property, receiver, value)
+            }
+            if (target instanceof Set) {
+                return wrapSetMethod(target, property, receiver, value)
+            }
+            return bindMethod(target, receiver, value)
         }
-        if (value && typeof value == 'object') {
-            return signal(value)
-        }
-        return value
+
+        return isObjectLike(value) ? signal(value) : value
     },
-    set: (target, property, value, receiver) => {
+
+    set(target, property, value, receiver) {
         const hadOwn = Object.hasOwn(target, property)
         const oldLength = Array.isArray(target) ? target.length : undefined
-        const removedValues = property === 'length'
-            ? removedArrayValues(target, Number(value))
+        const removedValues = property === DEP.LENGTH
+            ? collectRemovedArrayValues(target, Number(value))
             : new Map()
-        const current = target[property]
+        const oldValue = target[property]
 
         target[property] = value
 
-        const hasOwnNow = Object.hasOwn(target, property)
-        const now = target[property]
+        const hasOwn = Object.hasOwn(target, property)
+        const newValue = target[property]
         const context = new Map()
 
-        if (!Object.is(current, now) || (!hadOwn && hasOwnNow)) {
-            context.set(property, { was: current, now })
+        if (!Object.is(oldValue, newValue) || (!hadOwn && hasOwn)) {
+            context.set(property, { was: oldValue, now: newValue })
         }
-
-        if (!hadOwn && hasOwnNow) {
+        if (!hadOwn && hasOwn) {
             context.set(DEP.ITERATE, {})
         }
 
         addArrayLengthChanges(context, target, oldLength, removedValues)
-
-        if (context.size) {
-            notifySet(receiver, context)
-        }
+        notifyContext(receiver, context)
         return true
     },
-    has: (target, property) => { // receiver is not part of the has() call
-        let receiver = signals.get(target) // so retrieve it here
+
+    has(target, property) {
+        // The has trap has no receiver argument. Look up the stable proxy so
+        // `property in signal` can still be tracked reactively.
+        const receiver = targetSignal(target)
         if (receiver) {
             notifyGet(receiver, property)
         }
         return Reflect.has(target, property)
     },
-    deleteProperty: (target, property) => {
+
+    deleteProperty(target, property) {
         const hadOwn = Object.hasOwn(target, property)
         if (!hadOwn) {
             return true
         }
-        const current = target[property]
+
+        const oldValue = target[property]
         const oldLength = Array.isArray(target) ? target.length : undefined
         const result = Reflect.deleteProperty(target, property)
-        if (result) {
-            const receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-            const context = makeContext(property, { delete: true, was: current, now: undefined })
-            context.set(DEP.ITERATE, { delete: true, property })
-            addArrayLengthChanges(context, target, oldLength)
-            notifySet(receiver, context)
+        if (!result) {
+            return result
         }
+
+        const receiver = targetSignal(target)
+        const context = makeContext(property, { delete: true, was: oldValue, now: undefined })
+        context.set(DEP.ITERATE, { delete: true, property })
+        addArrayLengthChanges(context, target, oldLength)
+        notifySet(receiver, context)
         return result
     },
-    defineProperty: (target, property, descriptor) => {
+
+    defineProperty(target, property, descriptor) {
         const hadOwn = Object.hasOwn(target, property)
         const oldDescriptor = Object.getOwnPropertyDescriptor(target, property)
         const oldValue = target[property]
         const oldLength = Array.isArray(target) ? target.length : undefined
-        const removedValues = property === 'length' && Object.hasOwn(descriptor, 'value')
-            ? removedArrayValues(target, Number(descriptor.value))
+        const removedValues = property === DEP.LENGTH && Object.hasOwn(descriptor, 'value')
+            ? collectRemovedArrayValues(target, Number(descriptor.value))
             : new Map()
 
         const result = Reflect.defineProperty(target, property, descriptor)
@@ -206,22 +258,16 @@ const signalHandler = {
             return result
         }
 
-        const receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
-        const hasOwnNow = Object.hasOwn(target, property)
+        const hasOwn = Object.hasOwn(target, property)
         const newDescriptor = Object.getOwnPropertyDescriptor(target, property)
         const newValue = target[property]
         const context = new Map()
 
-        if (!hadOwn && hasOwnNow) {
+        if (!hadOwn && hasOwn) {
             context.set(property, { was: oldValue, now: newValue })
             context.set(DEP.ITERATE, {})
-        } else if (hadOwn && hasOwnNow) {
-            const descriptorChangesValue =
-                (Object.hasOwn(descriptor, 'value') && !Object.is(oldValue, newValue))
-                || (Object.hasOwn(descriptor, 'get') && oldDescriptor?.get !== newDescriptor?.get)
-                || (Object.hasOwn(descriptor, 'set') && oldDescriptor?.set !== newDescriptor?.set)
-
-            if (descriptorChangesValue) {
+        } else if (hadOwn && hasOwn) {
+            if (propertyValueChanged(descriptor, oldDescriptor, oldValue, newDescriptor, newValue)) {
                 context.set(property, { was: oldValue, now: newValue })
             }
             if (oldDescriptor?.enumerable !== newDescriptor?.enumerable) {
@@ -230,67 +276,57 @@ const signalHandler = {
         }
 
         addArrayLengthChanges(context, target, oldLength, removedValues)
-
-        if (context.size) {
-            notifySet(receiver, context)
-        }
+        notifyContext(targetSignal(target), context)
         return result
     },
-    ownKeys: (target) => {
-        let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
+
+    ownKeys(target) {
+        const receiver = targetSignal(target)
         notifyGet(receiver, DEP.ITERATE)
         return Reflect.ownKeys(target)
     }
-
 }
 
 /**
- * Keeps track of the return signal for an update function, as well
- * as signals connected to other objects. 
- * Makes sure that a given object or function always uses the same
- * signal
+ * Stable proxy/effect lookup.
+ *
+ * - raw object/function -> signal proxy
+ * - user effect function -> computed signal returned by effect()
+ *
+ * Keeping this exported preserves the existing API. New code should normally
+ * use signal(), trace() and destroy() instead of reading this map directly.
  */
 export const signals = new WeakMap()
 
 /**
- * Creates a new signal proxy of the given object, that intercepts get/has and set/delete
- * to allow reactive functions to be triggered when signal values change.
+ * Creates a transparent reactive proxy for an object, array, Map, Set, DOM
+ * element, class instance or function. Primitive values are intentionally not
+ * supported because reactivity is tracked through property access.
  */
-export function signal(v = {}) {
-    if (v === null || typeof v !== 'object' && typeof v !== 'function') {
+export function signal(value = {}) {
+    if (!isObjectLike(value)) {
         throw new TypeError(
-            `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof v}`
+            `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof value}`
         )
     }
-    if (v[DEP.SIGNAL]) { // there can be only one signal for any value
-        return v
+    if (isSignal(value)) {
+        return value
     }
-    if (!signals.has(v)) {
-        signals.set(v, new Proxy(v, signalHandler))
+    if (!signals.has(value)) {
+        signals.set(value, new Proxy(value, signalHandler))
     }
-    return signals.get(v)
+    return signals.get(value)
 }
-
 
 let tracers = []
 let tracing = false
+
 /**
- * @param Signal|Function signal
- * If given a singal and property, this function lists all effects 
- * that are currently listening to changes to that signal and property
- * returns a list with 
- * - effect: the effect function (effect, throttledEffect, clockEffect)
- * - fn: the user provided function to this effect function
- * - signal: the connectedSignal to this user provided function
- * @param string prop 
- * @return array of { effect, fn, signal }
- * 
- * If given a function, it will enable any tracers added with addTracer
- * call the given function and then disable all tracers.
- * @return void
+ * trace(fn) enables registered tracers while fn runs.
+ * trace(signal, property) returns the effects currently depending on property.
  */
 export function trace(target, prop) {
-    if (typeof target==='function') {
+    if (typeof target === 'function') {
         tracing = true
         try {
             return target()
@@ -299,108 +335,87 @@ export function trace(target, prop) {
         }
     }
 
-    if (!target || !target[DEP.SIGNAL]) {
-        throw new TypeError(
-            'simplyflow/state: trace() expects either a function or a signal'
-        )
+    if (!isSignal(target)) {
+        throw new TypeError('simplyflow/state: trace() expects either a function or a signal')
     }
 
-    const listeners = getListeners(target, prop)
-    return listeners.map(listener => {
-        return {
-            effect: listener.effectType,
-            fn: listener.effectFunction,
-            signal: signals.get(listener.effectFunction)
-        }
-    })
+    return getListeners(target, prop).map(listener => ({
+        effect: listener.effectType,
+        fn: listener.effectFunction,
+        signal: signals.get(listener.effectFunction)
+    }))
 }
 
 /**
- * Adds a tracer. This is an object with a 'set' and/or 'get' function.
- * If enabled (with the trace() method) each access to notifyGet will 
- * call the 'get' function. Each access to notifySet will call the 'set'
- * function.
- * @param tracer { get: fn, set: fn }
- * get: function(signal, property)
- * set: function(signal, context, listener)
+ * Adds an observer for dependency tracking. Tracers only run inside trace(fn),
+ * which keeps normal signal access fast and avoids accidental global logging.
  */
 export function addTracer(tracer) {
     if (!tracer || typeof tracer !== 'object') {
         throw new TypeError('simplyflow/state: addTracer() expects a tracer object')
     }
     if (!tracer.get && !tracer.set) {
-        throw new Error('simply.state: addTracer: missing "get" or "set" property in tracer', tracer)
+        throw new Error('simplyflow/state: addTracer: missing "get" or "set" property in tracer')
     }
-    if (tracer.get && typeof tracer.get!=='function') {
-        throw new Error('simply.state: addTracer: "get" is not a function', tracer)
+    if (tracer.get && typeof tracer.get !== 'function') {
+        throw new Error('simplyflow/state: addTracer: "get" is not a function')
     }
-    if (tracer.set && typeof tracer.set!=='function') {
-        throw new Error('simply.state: addTracer: "set" is not a function', tracer)
+    if (tracer.set && typeof tracer.set !== 'function') {
+        throw new Error('simplyflow/state: addTracer: "set" is not a function')
     }
     tracers.push(tracer)
 }
 
-function callTracers(getset, ...params) {
+function callTracers(kind, ...params) {
     for (const tracer of tracers) {
-        if (tracer[getset]) {
-            tracer[getset](...params)
-        }
+        tracer[kind]?.(...params)
     }
 }
 
 let batchedListeners = new Set()
-let batchMode = 0
+let batchDepth = 0
+
 /**
- * Called when a signal changes a property (set/delete)
- * Triggers any reactor function that depends on this signal
- * to re-compute its values
+ * Triggers effects that depend on the changed signal properties in context.
  */
 export function notifySet(self, context = new Map()) {
-    if (!self || !self[DEP.SIGNAL]) {
+    if (!isSignal(self)) {
         throw new TypeError('simplyflow/state: notifySet() expects a signal as first argument')
     }
     if (!(context instanceof Map)) {
         throw new TypeError('simplyflow/state: notifySet() expects context to be a Map; use makeContext()')
     }
 
-    let listeners = []
+    const listeners = new Set()
     context.forEach((change, property) => {
-        let propListeners = getListeners(self, property)
-        if (propListeners?.length) {
-            for (let listener of propListeners) {
-                addContext(listener, makeContext(property,change))
-            }
-            listeners = listeners.concat(propListeners)
+        for (const listener of getListeners(self, property)) {
+            addContext(listener, makeContext(property, change))
+            listeners.add(listener)
         }
     })
-    listeners = new Set(listeners.filter(Boolean))
-    if (listeners) {
-        if (batchMode) {
-            batchedListeners = batchedListeners.union(listeners)
-        } else {
-            const currentEffect = computeStack[computeStack.length-1]
-            for (let listener of Array.from(listeners)) {
-                if (listener!=currentEffect && listener?.needsUpdate) {
-                    if (tracing && tracers.length) {
-                        callTracers('set', self, context, listener)
-                    }
-                    listener()
-                }
-                clearContext(listener)
-            }
-        }
+
+    if (!listeners.size) {
+        return
     }
+
+    if (batchDepth) {
+        for (const listener of listeners) {
+            batchedListeners.add(listener)
+        }
+        return
+    }
+
+    runListeners(listeners, self, context)
 }
 
-
 export function makeContext(property, change) {
-    let context = new Map()
+    const context = new Map()
+
     if (property instanceof Map) {
-        property.forEach((change, prop) => {
-            context.set(prop, change)
-        })
+        property.forEach((change, prop) => context.set(prop, change))
         return context
     }
+
     if (property !== null && typeof property === 'object') {
         for (const prop of Reflect.ownKeys(property)) {
             context.set(prop, property[prop])
@@ -415,9 +430,7 @@ function addContext(listener, context) {
     if (!listener.context) {
         listener.context = context
     } else {
-        context.forEach((change,property)=> {
-            listener.context.set(property, change) // TODO: merge change if needed
-        })
+        context.forEach((change, property) => listener.context.set(property, change))
     }
     listener.needsUpdate = true
 }
@@ -428,51 +441,33 @@ function clearContext(listener) {
 }
 
 /**
- * Called when a signal property is accessed. If this happens
- * inside a reactor function--computeStack is not empty--
- * then it adds the current reactor (top of this stack) to its
- * listeners. These are later called if this property changes
+ * Records a dependency on self[property] for the currently running effect.
  */
 export function notifyGet(self, property) {
-    let currentCompute = computeStack[computeStack.length-1]
-    if (currentCompute) {
-        if (tracing && tracers.length) {
-            callTracers('get', self, property)
-        }
-        // get was part of a react() function, so add it
-        setListeners(self, property, currentCompute)
+    const currentCompute = computeStack[computeStack.length - 1]
+    if (!currentCompute) {
+        return
     }
+
+    if (tracing && tracers.length) {
+        callTracers('get', self, property)
+    }
+    setListeners(self, property, currentCompute)
 }
 
-/**
- * Keeps track of which update() functions are dependent on which
- * signal objects and which properties. Maps signals to update fns
- */
 const listenersMap = new WeakMap()
-
-/**
- * Keeps track of which signals and properties are linked to which
- * update functions. Maps update functions and properties to signals
- */
 const computeMap = new WeakMap()
 
-/**
- * Returns the update functions for a given signal and property
- */
 function getListeners(self, property) {
-    let listeners = listenersMap.get(self)
+    const listeners = listenersMap.get(self)
     return listeners ? Array.from(listeners.get(property) || []) : []
 }
 
-/**
- * Adds an update function (compute) to the list of listeners on
- * the given signal (self) and property
- */
 function setListeners(self, property, compute) {
     if (!listenersMap.has(self)) {
         listenersMap.set(self, new Map())
     }
-    let listeners = listenersMap.get(self)
+    const listeners = listenersMap.get(self)
     if (!listeners.has(property)) {
         listeners.set(property, new Set())
     }
@@ -481,190 +476,94 @@ function setListeners(self, property, compute) {
     if (!computeMap.has(compute)) {
         computeMap.set(compute, new Map())
     }
-    let connectedSignals = computeMap.get(compute)
-    if (!connectedSignals.has(property)) {
-        connectedSignals.set(property, new Set)
+    const dependencies = computeMap.get(compute)
+    if (!dependencies.has(property)) {
+        dependencies.set(property, new Set())
     }
-    connectedSignals.get(property).add(self)
+    dependencies.get(property).add(self)
 }
 
-/**
- * Removes alle listeners that trigger the given reactor function (compute)
- * This happens when a reactor is called, so that it can set new listeners
- * based on the current call (code path)
- */
 function clearListeners(compute) {
-    const connectedSignals = computeMap.get(compute)
-    if (!connectedSignals) {
+    const dependencies = computeMap.get(compute)
+    if (!dependencies) {
         return
     }
 
-    connectedSignals.forEach((signals, property) => {
+    dependencies.forEach((signals, property) => {
         signals.forEach(signal => {
             const listeners = listenersMap.get(signal)
-
-            if (listeners?.has(property)) {
-                listeners.get(property).delete(compute)
-            }
+            listeners?.get(property)?.delete(compute)
         })
     })
 
     computeMap.delete(compute)
 }
 
-/**
- * The top most entry is the currently running update function, used
- * to automatically record signals used in an update function.
- */
-let computeStack = []
-
-/**
- * Used for cycle detection: effectStack contains all running effect
- * functions. If the same function appears twice in this stack, there
- * is a recursive update call, which would cause an infinite loop.
- */
+const computeStack = []
 const effectStack = []
-
-const effectMap = new WeakMap()
-/**
- * Used for cycle detection: signalStack contains all used signals. 
- * If the same signal appears more than once, there is a cyclical 
- * dependency between signals, which would cause an infinite loop.
- */
 const signalStack = []
+const effectMap = new WeakMap()
 
 function assertFunction(fn, name) {
     if (typeof fn !== 'function') {
         throw new TypeError(`simplyflow/state: ${name}() expects a function`)
     }
 }
-/**
- * Runs the given function at once, and then whenever a signal changes that
- * is used by the given function (or at least signals used in the previous run).
- */
-export function effect(fn) {
-    assertFunction(fn, 'effect')
-    if (effectStack.findIndex(f => fn==f)!==-1) {
-        throw new Error('Recursive update() call', {cause:fn})
-    }
-    effectStack.push(fn)
 
+function assertNotRecursive(fn) {
+    if (effectStack.includes(fn)) {
+        throw new Error('Recursive update() call', { cause: fn })
+    }
+}
+
+function effectSignal(fn) {
     let connectedSignal = signals.get(fn)
     if (!connectedSignal) {
-        connectedSignal = signal({
-            current: null
-        })
+        connectedSignal = signal({ current: null })
         signals.set(fn, connectedSignal)
     }
-
-    // this is the function that is called automatically
-    // whenever a signal dependency changes
-    const computeEffect = function computeEffect() {
-        if (signalStack.findIndex(s => s==connectedSignal)!==-1) {
-            throw new Error('Cyclical dependency in update() call', { cause: fn})
-        }
-        // remove all dependencies (signals) from previous runs 
-        clearListeners(computeEffect)
-        computeEffect.effectFunction = fn
-        computeEffect.effectType = effect
-        // record new dependencies on this run
-        computeStack.push(computeEffect)
-        // prevent recursion
-        signalStack.push(connectedSignal)
-        // call the actual update function
-        let result
-        try {
-            result = fn(computeEffect, computeStack, signalStack)
-        } finally {
-            // stop recording dependencies
-            computeStack.pop()
-            // stop the recursion prevention
-            signalStack.pop()
-            if (result instanceof Promise) {
-                result.then((result) => {
-                    connectedSignal.current = result
-                })
-            } else {
-                connectedSignal.current = result
-            }
-        }
-    }
-    computeEffect.fn = fn
-    effectMap.set(connectedSignal, computeEffect)
-
-    // run the computEffect immediately upon creation
-    computeEffect()
     return connectedSignal
 }
 
-
-export function destroy(connectedSignal) {
-    if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
-        throw new TypeError('simplyflow/state: destroy() expects an effect signal')
+function setEffectResult(connectedSignal, result) {
+    if (result instanceof Promise) {
+        result.then(value => {
+            connectedSignal.current = value
+        })
+    } else {
+        connectedSignal.current = result
     }
-    // find the computeEffect associated with this signal
-    const computeEffect = effectMap.get(connectedSignal)
-    if (!computeEffect) {
-        return
-    }
-
-    // stop any pending work owned by this effect
-    if (computeEffect.destroy) {
-        computeEffect.destroy()
-    }
-
-    // remove all listeners for this effect
-    clearListeners(computeEffect)
-
-    // remove all references to connectedSignal
-    if (computeEffect.fn) {
-        signals.delete(computeEffect.fn)
-        const effectIndex = effectStack.findIndex(fn => fn === computeEffect.fn)
-        if (effectIndex !== -1) {
-            effectStack.splice(effectIndex, 1)
-        }
-    }
-
-    effectMap.delete(connectedSignal)
-    // if no other references to connectedSignal exist, it will be garbage collected
 }
 
-/**
- * Inside a batch() call, any changes to signals do not trigger effects
- * immediately. Instead, immediately after finishing the batch() call,
- * these effects will be called. Effects that are triggered by multiple
- * signals are called only once.
- * @param Function fn batch() calls this function immediately
- * @result mixed the result of the fn() function call
- */
-export function batch(fn) {
-    assertFunction(fn, 'batch')
-    batchMode++
+function runTracked(compute, connectedSignal, fn, effectType, args = [compute, computeStack, signalStack]) {
+    if (signalStack.includes(connectedSignal)) {
+        throw new Error('Cyclical dependency in update() call', { cause: fn })
+    }
+
+    clearListeners(compute)
+    compute.effectFunction = fn
+    compute.effectType = effectType
+    computeStack.push(compute)
+    signalStack.push(connectedSignal)
+
     let result
     try {
-        result = fn()
+        result = fn(...args)
     } finally {
-        const finishBatch = () => {
-            batchMode--
-            if (!batchMode) {
-                runBatchedListeners()
-            }
-        }
-        if (result instanceof Promise) {
-            result.then(finishBatch, finishBatch)
-        } else {
-            finishBatch()
-        }
+        computeStack.pop()
+        signalStack.pop()
+        setEffectResult(connectedSignal, result)
     }
-    return result
 }
 
-function runBatchedListeners() {
-    let copyBatchedListeners = Array.from(batchedListeners)
-    batchedListeners = new Set()
-    const currentEffect = computeStack[computeStack.length-1]
-    for (let listener of copyBatchedListeners) {
-        if (listener!=currentEffect && listener?.needsUpdate) {
+function runListeners(listeners, signal, context) {
+    const currentEffect = computeStack[computeStack.length - 1]
+
+    for (const listener of Array.from(listeners)) {
+        if (listener !== currentEffect && listener?.needsUpdate) {
+            if (signal && tracing && tracers.length) {
+                callTracers('set', signal, context, listener)
+            }
             listener()
         }
         clearContext(listener)
@@ -672,35 +571,113 @@ function runBatchedListeners() {
 }
 
 /**
- * A throttledEffect is run immediately once. And then only once
- * per throttleTime (in ms).
- * @param Function fn the effect function to run whenever a signal changes
- * @param int throttleTime in ms
- * @returns signal with the result of the effect function fn
+ * Runs fn immediately, tracks every signal property it reads, and reruns it
+ * synchronously when one of those properties changes.
+ */
+export function effect(fn) {
+    assertFunction(fn, 'effect')
+    assertNotRecursive(fn)
+    effectStack.push(fn)
+
+    const connectedSignal = effectSignal(fn)
+    const compute = function computeEffect() {
+        runTracked(compute, connectedSignal, fn, effect)
+    }
+    compute.fn = fn
+    effectMap.set(connectedSignal, compute)
+
+    compute()
+    return connectedSignal
+}
+
+export function destroy(connectedSignal) {
+    if (!isSignal(connectedSignal)) {
+        throw new TypeError('simplyflow/state: destroy() expects an effect signal')
+    }
+
+    const compute = effectMap.get(connectedSignal)
+    if (!compute) {
+        return
+    }
+
+    compute.destroy?.()
+    clearListeners(compute)
+
+    if (compute.fn) {
+        signals.delete(compute.fn)
+        const index = effectStack.findIndex(fn => fn === compute.fn)
+        if (index !== -1) {
+            effectStack.splice(index, 1)
+        }
+    }
+
+    effectMap.delete(connectedSignal)
+}
+
+/**
+ * Defers effect execution until the outermost batch has finished. Async batches
+ * keep batching active until their returned promise settles.
+ */
+export function batch(fn) {
+    assertFunction(fn, 'batch')
+    batchDepth++
+
+    let result
+    try {
+        result = fn()
+    } finally {
+        const finish = () => {
+            batchDepth--
+            if (!batchDepth) {
+                runBatchedListeners()
+            }
+        }
+
+        if (result instanceof Promise) {
+            result.then(finish, finish)
+        } else {
+            finish()
+        }
+    }
+    return result
+}
+
+function runBatchedListeners() {
+    const listeners = batchedListeners
+    batchedListeners = new Set()
+    runListeners(listeners)
+}
+
+/**
+ * Like effect(), but after the immediate first run it recomputes at most once
+ * per throttleTime milliseconds.
  */
 export function throttledEffect(fn, throttleTime) {
     assertFunction(fn, 'throttledEffect')
     if (!Number.isFinite(throttleTime) || throttleTime < 0) {
-        throw new TypeError(
-            `simplyflow/state: throttledEffect() expects throttleTime to be a non-negative number`
-        )
+        throw new TypeError('simplyflow/state: throttledEffect() expects throttleTime to be a non-negative number')
     }
-    if (effectStack.findIndex(f => fn==f)!==-1) {
-        throw new Error('Recursive update() call', {cause:fn})
-    }
+    assertNotRecursive(fn)
     effectStack.push(fn)
 
-    let connectedSignal = signals.get(fn)
-    if (!connectedSignal) {
-        connectedSignal = signal({
-            current: null
-        })
-        signals.set(fn, connectedSignal)
-    }
-
+    const connectedSignal = effectSignal(fn)
     let throttledUntil = 0
     let hasChange = true
     let timeout = null
+
+    const compute = function computeEffect() {
+        const now = Date.now()
+        if (throttledUntil > now) {
+            hasChange = true
+            schedule()
+            return
+        }
+
+        runTracked(compute, connectedSignal, fn, throttledEffect)
+        hasChange = false
+        throttledUntil = Date.now() + throttleTime
+        schedule()
+    }
 
     function schedule() {
         if (timeout) {
@@ -708,124 +685,57 @@ export function throttledEffect(fn, throttleTime) {
         }
 
         const delay = Math.max(0, throttledUntil - Date.now())
-
         timeout = globalThis.setTimeout(() => {
             timeout = null
-
             if (hasChange) {
-                computeEffect()
+                compute()
             }
         }, delay)
     }
 
-    // this is the function that is called automatically
-    // whenever a signal dependency changes
-    const computeEffect = function computeEffect() {
-        const now = Date.now()
-
-        if (throttledUntil > now) {
-            hasChange = true
-            schedule()
-            return
-        }
-
-        if (signalStack.findIndex(s => s==connectedSignal)!==-1) {
-            throw new Error('Cyclical dependency in update() call', { cause: fn})
-        }
-
-        // remove all dependencies (signals) from previous runs 
-        clearListeners(computeEffect)
-        // record new dependencies on this run
-        computeEffect.effectFunction = fn
-        computeEffect.effectType = throttledEffect
-        computeStack.push(computeEffect)
-        // prevent recursion
-        signalStack.push(connectedSignal)
-        // call the actual update function
-        let result
-        try {
-            result = fn(computeEffect, computeStack, signalStack)
-        } finally {
-            hasChange = false
-            // stop recording dependencies
-            computeStack.pop()
-            // stop the recursion prevention
-            signalStack.pop()
-            if (result instanceof Promise) {
-                result.then((result) => {
-                    connectedSignal.current = result
-                })
-            } else {
-                connectedSignal.current = result
-            }
-        }
-        throttledUntil = Date.now()+throttleTime
-        schedule()
-    }
-    computeEffect.fn = fn
-    computeEffect.destroy = () => {
+    compute.fn = fn
+    compute.destroy = () => {
         if (timeout) {
             globalThis.clearTimeout(timeout)
             timeout = null
         }
         hasChange = false
     }
-    effectMap.set(connectedSignal, computeEffect)
+    effectMap.set(connectedSignal, compute)
 
-    // run the computEffect immediately upon creation
-    computeEffect()
+    compute()
     return connectedSignal
 }
 
-// refactor: Class clock() with an effect() method
-// keep track of effects per clock, and add clock property to the effect function
-// on notifySet add clock.effects to clock.needsUpdate list
-// on clock.tick() (or clock.time++) run only the clock.needsUpdate effects 
-// (first create a copy and reset clock.needsUpdate, then run effects)
+/**
+ * Tracks changes like effect(), but only recomputes after the supplied clock's
+ * .time value advances. This lets callers coordinate expensive updates.
+ */
 export function clockEffect(fn, clock) {
     assertFunction(fn, 'clockEffect')
     if (!clock || typeof clock !== 'object' || typeof clock.time !== 'number') {
-        throw new TypeError(
-            `simplyflow/state: clockEffect() expects a clock object with a numeric .time property`
-        )
-    }
-    let connectedSignal = signals.get(fn)
-    if (!connectedSignal) {
-        connectedSignal = signal({
-            current: null
-        })
-        signals.set(fn, connectedSignal)
+        throw new TypeError('simplyflow/state: clockEffect() expects a clock object with a numeric .time property')
     }
 
-    let lastTick = -1 // clock.time should start at 0 or larger
-    let hasChanged = true // make sure the first run goes through
-    // this is the function that is called automatically
-    // whenever a signal dependency changes
-    const computeEffect = function computeEffect() {
+    const connectedSignal = effectSignal(fn)
+    let lastTick = -1
+    let hasChanged = true
+
+    const compute = function computeEffect() {
         if (lastTick < clock.time) {
             if (hasChanged) {
-                // remove all dependencies (signals) from previous runs 
-                clearListeners(computeEffect)
-                computeEffect.effectFunction = fn
-                computeEffect.effectType = clockEffect
-                // record new dependencies on this run
-                computeStack.push(computeEffect)
-                // make sure the clock.time signal is a dependency
+                clearListeners(compute)
+                compute.effectFunction = fn
+                compute.effectType = clockEffect
+                computeStack.push(compute)
                 lastTick = clock.time
-                // call the actual update function
-                let result 
+
+                let result
                 try {
-                    result = fn(computeEffect, computeStack)
+                    result = fn(compute, computeStack)
                 } finally {
-                    // stop recording dependencies
                     computeStack.pop()
-                    if (result instanceof Promise) {
-                        result.then((result) => {
-                            connectedSignal.current = result
-                        })
-                    } else {
-                        connectedSignal.current = result
-                    }
+                    setEffectResult(connectedSignal, result)
                     hasChanged = false
                 }
             } else {
@@ -835,82 +745,68 @@ export function clockEffect(fn, clock) {
             hasChanged = true
         }
     }
-    computeEffect.fn = fn
-    effectMap.set(connectedSignal, computeEffect)
+    compute.fn = fn
+    effectMap.set(connectedSignal, compute)
 
-    // run the computEffect immediately upon creation
-    computeEffect()
+    compute()
     return connectedSignal
 }
 
 /**
- * Any signal access inside `fn` is not tracked for the current effect.
- * Any changes to signals inside `fn` will still trigger any effect listening to thoses signals.
- * @param fn Function that is called immediately. Its result is returned.
- * @result mixed
+ * Runs fn without recording reads as dependencies for the current effect.
+ * Writes inside fn still notify effects that already depend on those signals.
  */
 export function untracked(fn) {
     assertFunction(fn, 'untracked')
-    const pos = computeStack.length-1
-    const remember = computeStack[pos]
-    computeStack[pos] = false
+    const index = computeStack.length - 1
+    const current = computeStack[index]
+    computeStack[index] = false
     try {
         return fn()
     } finally {
-        computeStack[pos] = remember
+        computeStack[index] = current
     }
 }
 
 /**
- * This function will created a copy of the input, recursive if deep==true
- * It will replace signals with a clone of their target
- * It will keep cyclical references intact
- * @param value Object
- * @param deep Boolean default: false
- * @return mixed a clone of the value
+ * Clones plain objects and arrays. Signals are copied as their visible values;
+ * non-plain objects such as Date, Map, Set and class instances are returned as-is.
  */
-export function clone(value, deep=false)
-{
-    let seen = new Map()
-    const innerClone = function(value) {
+export function clone(value, deep = false) {
+    const seen = new Map()
+
+    function cloneValue(value) {
         if (seen.has(value)) {
             return seen.get(value)
         }
-        switch(typeof value) {
-            case 'object':
-                if (!value) {
-                    return value
-                }
-                if (Array.isArray(value)) {
-                    const result = []
-                    if (!deep) {
-                        return value.slice()
-                    }
 
-                    seen.set(value, result)
-                    for (let i=0; i<value.length; i++) {
-                        result[i] = innerClone(value[i])
-                    }
-                    return result
-                } else if (!value.constructor || value.constructor===Object) {
-                    let result = {}
-                    if (!value.constructor) {
-                        result = Object.create(null)
-                    }
-                    seen.set(value, result)
-                    for (const key in value) {
-                        result[key] = deep ? innerClone(value[key]) : value[key]
-                    }
-                    return result
-                } else {
-                    // cannot clone, ignore? throw error?
-                    return value
-                }
-            break
-            default:
-                return value // primitive
-            break
+        if (value === null || typeof value !== 'object') {
+            return value
         }
+
+        if (Array.isArray(value)) {
+            if (!deep) {
+                return value.slice()
+            }
+            const result = []
+            seen.set(value, result)
+            for (let index = 0; index < value.length; index++) {
+                result[index] = cloneValue(value[index])
+            }
+            return result
+        }
+
+        if (!value.constructor || value.constructor === Object) {
+            const result = value.constructor ? {} : Object.create(null)
+            seen.set(value, result)
+            for (const key in value) {
+                result[key] = deep ? cloneValue(value[key]) : value[key]
+            }
+            return result
+        }
+
+        return value
     }
-    return innerClone(value)
+
+    return cloneValue(value)
 }
