@@ -512,8 +512,12 @@ export function notifySet(self, context = new Map()) {
 
     const listeners = new Set()
     context.forEach((change, property) => {
-        for (const listener of getListeners(self, property)) {
-            addContext(listener, makeContext(property, change))
+        for (const listener of listenersFor(self, property)) {
+            // Avoid makeContext() here: notifySet() is a hot path and this loop
+            // can run once per changed property per listener. Writing directly
+            // to the listener context keeps object/Map keys intact and avoids
+            // creating a short-lived Map for every listener notification.
+            addContextChange(listener, property, change)
             listeners.add(listener)
         }
     })
@@ -558,12 +562,11 @@ export function makeContext(property, change) {
     return context
 }
 
-function addContext(listener, context) {
+function addContextChange(listener, property, change) {
     if (!listener.context) {
-        listener.context = context
-    } else {
-        context.forEach((change, property) => listener.context.set(property, change))
+        listener.context = new Map()
     }
+    listener.context.set(property, change)
     listener.needsUpdate = true
 }
 
@@ -595,9 +598,14 @@ export function notifyGet(self, property) {
 const listenersMap = new WeakMap()
 const computeMap = new WeakMap()
 
+const emptyListeners = new Set()
+
+function listenersFor(self, property) {
+    return listenersMap.get(self)?.get(property) || emptyListeners
+}
+
 function getListeners(self, property) {
-    const listeners = listenersMap.get(self)
-    return listeners ? Array.from(listeners.get(property) || []) : []
+    return Array.from(listenersFor(self, property))
 }
 
 function setListeners(self, property, compute) {
@@ -696,7 +704,7 @@ function runTracked(compute, connectedSignal, fn, effectType, args = [compute, c
 function runListeners(listeners, signal, context) {
     const currentEffect = computeStack[computeStack.length - 1]
 
-    for (const listener of Array.from(listeners)) {
+    for (const listener of listeners) {
         if (listener !== currentEffect && listener?.needsUpdate) {
             if (listener.scheduleClock) {
                 listener.scheduleClock()

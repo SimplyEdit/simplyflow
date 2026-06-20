@@ -380,8 +380,8 @@
     }
     const listeners = /* @__PURE__ */ new Set();
     context.forEach((change, property) => {
-      for (const listener of getListeners(self, property)) {
-        addContext(listener, makeContext(property, change));
+      for (const listener of listenersFor(self, property)) {
+        addContextChange(listener, property, change);
         listeners.add(listener);
       }
     });
@@ -411,12 +411,11 @@
     }
     return context;
   }
-  function addContext(listener, context) {
+  function addContextChange(listener, property, change) {
     if (!listener.context) {
-      listener.context = context;
-    } else {
-      context.forEach((change, property) => listener.context.set(property, change));
+      listener.context = /* @__PURE__ */ new Map();
     }
+    listener.context.set(property, change);
     listener.needsUpdate = true;
   }
   function clearContext(listener) {
@@ -435,9 +434,12 @@
   }
   var listenersMap = /* @__PURE__ */ new WeakMap();
   var computeMap = /* @__PURE__ */ new WeakMap();
+  var emptyListeners = /* @__PURE__ */ new Set();
+  function listenersFor(self, property) {
+    return listenersMap.get(self)?.get(property) || emptyListeners;
+  }
   function getListeners(self, property) {
-    const listeners = listenersMap.get(self);
-    return listeners ? Array.from(listeners.get(property) || []) : [];
+    return Array.from(listenersFor(self, property));
   }
   function setListeners(self, property, compute) {
     if (!listenersMap.has(self)) {
@@ -521,7 +523,7 @@
   }
   function runListeners(listeners, signal3, context) {
     const currentEffect = computeStack[computeStack.length - 1];
-    for (const listener of Array.from(listeners)) {
+    for (const listener of listeners) {
       if (listener !== currentEffect && listener?.needsUpdate) {
         if (listener.scheduleClock) {
           listener.scheduleClock();

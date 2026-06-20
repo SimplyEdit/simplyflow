@@ -592,6 +592,18 @@ describe('state API oversight fixes', () => {
     expect(hasB.current).toBe(false)
   })
 
+  it('keeps object-valued Map keys intact when notifying entry readers', () => {
+    const key = { id: 'entry' }
+    const map = signal(new Map([[key, 'first']]))
+    const result = effect(() => map.get(key))
+
+    expect(result.current).toBe('first')
+
+    map.set(key, 'second')
+
+    expect(result.current).toBe('second')
+  })
+
   it('leaves batch mode when an async batch rejects', async () => {
     const state = signal({ value: 1 })
     const result = effect(() => state.value)
