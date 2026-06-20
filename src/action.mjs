@@ -1,11 +1,5 @@
-export function actions(options, optionsCompat) 
+export function actions(options) 
 {
-	if (optionsCompat) {
-		let app = options
-		options = optionsCompat
-		options.app = app
-	}
-
 	if (options.app) {
 		const functionHandler = {
 			apply(target, thisArg, argumentsList)

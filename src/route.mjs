@@ -1,10 +1,6 @@
-export function routes(options, optionsCompat)
+import { closest } from './suggest.mjs'
+export function routes(options)
 {
-    if (optionsCompat) {
-        let app = options
-        options = optionsCompat
-        options.app = app
-    }
     return new SimplyRoute(options)
 }
 
@@ -53,14 +49,19 @@ export class SimplyRoute
         path = args.path ? args.path : path;
 
         let matches;
+        let searchParams;
         if (!path) {
-            if (this.has(document.location.pathname+document.location.hash)) {
-                path = document.location.pathname+document.location.hash
+            const currentPath = document.location.pathname + document.location.hash
+            if (this.has(currentPath)) {
+                path = currentPath
             } else {
                 path = document.location.pathname
             }
+            searchParams = new URLSearchParams(document.location.search)
+        } else {
+            searchParams = searchParamsForPath(path)
         }
-        path = getPath(path, this.baseURL);
+        path = getPath(routePath(path), this.baseURL);
         for ( let route of this.routeInfo) {
             matches = route.match.exec(path)
             if (this.addMissingSlash && !matches?.length) {
@@ -85,8 +86,8 @@ export class SimplyRoute
                 args.params = params
                 args = this.runListeners('call', args)
                 params = args.params ? args.params : params
-                const searchParams = new URLSearchParams(document.location.search)
-                args.result = route.action.call(this.app, params, searchParams)
+                args.searchParams = searchParams
+                args.result = callRouteAction(this.app, route, params, searchParams)
                 this.runListeners('finish', args)
                 return args.result
             }
@@ -136,13 +137,18 @@ export class SimplyRoute
                 && !link.link
                 && !link.dataset.simplyCommand
             ) {
-                let check = [link.hash, link.pathname+link.hash, link.pathname]
-                let path
+                let check = [
+                    { match: link.hash, goto: link.hash },
+                    { match: link.pathname + link.hash, goto: link.pathname + link.search + link.hash },
+                    { match: link.pathname, goto: link.pathname + link.search }
+                ]
+                let target
                 do {
-                    path = getPath(check.shift(), this.baseURL);
-                } while(check.length && !this.has(path))
-                if ( this.has(path) ) {
-                    let params = this.runListeners('goto', { path: path});
+                    target = check.shift()
+                    target.match = getPath(target.match, this.baseURL);
+                } while(check.length && !this.has(target.match))
+                if ( this.has(target.match) ) {
+                    let params = this.runListeners('goto', { path: target.goto});
                     if (params.path) {
                         const followLink = this.goto(params.path)
                         if (!followLink || (this.options.hijackLinks && followLink!==false)) {
@@ -164,7 +170,7 @@ export class SimplyRoute
 
     has(path)
     {
-        path = getPath(path, this.baseURL)
+        path = getPath(routePath(path), this.baseURL)
         for (let route of this.routeInfo) {
             var matches = route.match.exec(path)
             if (matches && matches.length) {
@@ -204,6 +210,94 @@ export class SimplyRoute
             this.baseURL = options.baseURL
         }
     }
+}
+
+function callRouteAction(app, route, params, searchParams)
+{
+    if (typeof route.action === 'function') {
+        return route.action.call(app, params, searchParams)
+    }
+
+    if (typeof route.action === 'string') {
+        const action = app.actions?.[route.action]
+        if (typeof action === 'function') {
+            return action.call(app, routeActionParams(route, params, searchParams))
+        }
+        throw unknownRouteActionError(route, app.actions)
+    }
+
+    throw new TypeError(`simplyflow/route: route "${route.path}" must use a function or action name`)
+}
+
+const warnedRouteQueryConflicts = new Set()
+
+function routeActionParams(route, params, searchParams)
+{
+    const query = queryParams(searchParams)
+    for (const key of Object.keys(query)) {
+        if (Object.hasOwn(params, key)) {
+            warnRouteQueryConflict(route, key)
+        }
+    }
+    // Query parameters are user-editable, while route params come from the
+    // developer-defined route pattern. Route params therefore win on conflicts.
+    return Object.assign(query, params)
+}
+
+function queryParams(searchParams)
+{
+    const params = {}
+    for (const [key, value] of searchParams.entries()) {
+        if (!Object.hasOwn(params, key)) {
+            params[key] = value
+        } else if (Array.isArray(params[key])) {
+            params[key].push(value)
+        } else {
+            params[key] = [params[key], value]
+        }
+    }
+    return params
+}
+
+function warnRouteQueryConflict(route, key)
+{
+    const warningKey = `${route.path}\0${key}`
+    if (warnedRouteQueryConflicts.has(warningKey)) {
+        return
+    }
+    warnedRouteQueryConflicts.add(warningKey)
+    console.warn(`simplyflow/route: query parameter "${key}" was ignored because route "${route.path}" already provides a route parameter with that name.`)
+}
+
+function unknownRouteActionError(route, actions)
+{
+    const suggestion = closest(route.action, Object.keys(actions || {}))
+    const hint = suggestion ? ` Did you mean "${suggestion}"?` : ''
+    return new TypeError(`simplyflow/route: route "${route.path}" uses unknown action "${route.action}".${hint}`)
+}
+
+function searchParamsForPath(path)
+{
+    const index = typeof path === 'string' ? path.indexOf('?') : -1
+    if (index === -1) {
+        return new URLSearchParams()
+    }
+    const hashIndex = path.indexOf('#', index)
+    const search = hashIndex === -1 ? path.substring(index) : path.substring(index, hashIndex)
+    return new URLSearchParams(search)
+}
+
+function routePath(path)
+{
+    const index = typeof path === 'string' ? path.indexOf('?') : -1
+    if (index === -1) {
+        return path
+    }
+    const hashIndex = path.indexOf('#', index)
+    if (hashIndex === -1) {
+        return path.substring(0, index)
+    }
+    return path.substring(0, index) + path.substring(hashIndex)
 }
 
 function getPath(path, baseURL='/')
@@ -260,6 +354,7 @@ function parseRoutes(routes, routeInfo, exact=false)
             }
         } while(matches)
         routeInfo.push({
+            path,
             match:  getRegexpFromRoute(path, exact),
             params: params,
             action: routes[path]

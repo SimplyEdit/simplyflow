@@ -125,11 +125,12 @@ describe('command API', () => {
     expect(submitted).toEqual({ title: 'Hello', tag: ['a', 'b'] })
   })
 
-  it('supports command.call(), custom handlers and the legacy call shape', () => {
+  it('supports command.call() and custom handlers', () => {
     document.body.innerHTML = `<div id="app"><span data-special-command="mark" data-value="custom"></span></div>`
     const container = document.getElementById('app')
     const calls = []
-    const commandApi = commands({ container }, {
+    const commandApi = commands({
+      app: { container },
       commands: {
         mark(source, value, event) {
           calls.push({ value, event })

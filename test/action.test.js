@@ -49,20 +49,6 @@ describe('action API', () => {
     expect(errors[0].action.name).toBe('bound throwsNow')
   })
 
-  it('supports the legacy actions(app, options) call shape', () => {
-    const testApp = { data: { value: '' } }
-    const api = actions(testApp, {
-      actions: {
-        setValue(value) {
-          this.data.value = value
-        }
-      }
-    })
-
-    api.setValue('legacy')
-    expect(testApp.data.value).toBe('legacy')
-  })
-
   it('returns the input unchanged when no app is supplied', () => {
     const config = { actions: { noop() {} } }
     expect(actions(config)).toBe(config)

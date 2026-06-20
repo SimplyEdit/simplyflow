@@ -67,12 +67,7 @@ class SimplyCommands {
     }
 }
 
-export function commands(options={}, optionsCompat) {
-    if (optionsCompat) {
-        let app = options
-        options = optionsCompat
-        options.app = app
-    }
+export function commands(options={}) {
 	return new SimplyCommands(options)
 }
 

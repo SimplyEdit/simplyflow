@@ -109,12 +109,32 @@ app({
 
 ### `routes`
 
-Routes map URLs to actions or functions.
+Routes map URLs to actions or functions. The simplest form uses an action name.
+
+```javascript
+actions: {
+  selectContact({ id, tab = 'details' }) {
+    this.data.selectedContactId = id
+    this.data.selectedTab = tab
+  }
+},
+
+routes: {
+  '/contacts/:id': 'selectContact'
+}
+```
+
+For `/contacts/42?tab=notes`, the route shorthand calls `selectContact({ id: '42', tab: 'notes' })`. Route parameters win over query parameters when names conflict, because query parameters can be changed by anyone.
+
+A route can also use a function directly. Inside that function, `this` is the app instance.
 
 ```javascript
 routes: {
-  '/contacts/:id': function(params) {
-    this.actions.selectContact(params.id)
+  '/contacts/:id': function(params, searchParams) {
+    this.actions.selectContact({
+      id: params.id,
+      tab: searchParams.get('tab') || 'details'
+    })
   }
 }
 ```

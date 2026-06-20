@@ -231,6 +231,36 @@ describe('app integration details', () => {
     testApp.destroy()
   })
 
+
+  it('supports route action-name shorthand in app routes', async () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const calls = []
+
+    const testApp = app({
+      container,
+      actions: {
+        showContact({ id, tab }) {
+          calls.push({ thisValue: this, id, tab })
+          return id
+        }
+      },
+      routes: {
+        '/contacts/:id': 'showContact'
+      }
+    })
+
+    expect(testApp.routes.match('/contacts/42?tab=notes')).toBe('42')
+    expect(calls).toEqual([
+      {
+        thisValue: testApp,
+        id: '42',
+        tab: 'notes'
+      }
+    ])
+    testApp.destroy()
+  })
+
   it('waits for async start before initializing routes', async () => {
     const container = document.createElement('div')
     document.body.append(container)

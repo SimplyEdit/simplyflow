@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals'
 import { routes, SimplyRoute } from '../src/route.mjs'
 
 beforeEach(() => {
@@ -116,9 +117,135 @@ describe('route API', () => {
     expect(seen).toEqual(['3', '7'])
   })
 
-  it('throws for unknown listener actions and supports the legacy routes(app, options) call shape', () => {
-    const router = routes({}, { routes: { '/': () => 'root' } })
-    expect(router.match('/')).toBe('root')
+
+  it('supports route shorthand that calls an app action with named parameters', () => {
+    const calls = []
+    const app = {
+      label: 'app',
+      actions: {
+        showContact(params) {
+          calls.push({ thisValue: this, params })
+          return `${params.id}:${params.tab}:${params.tag.join(',')}`
+        }
+      }
+    }
+
+    const router = routes({
+      app,
+      routes: {
+        '/contacts/:id': 'showContact'
+      }
+    })
+
+    expect(router.match('/contacts/42?tab=notes&tag=one&tag=two')).toBe('42:notes:one,two')
+    expect(calls).toEqual([
+      {
+        thisValue: app,
+        params: {
+          id: '42',
+          tab: 'notes',
+          tag: ['one', 'two']
+        }
+      }
+    ])
+  })
+
+
+
+  it('keeps search params separate from the path used for route matching', () => {
+    history.replaceState({}, '', '/contacts/42?tab=notes#details')
+    const calls = []
+    const app = {
+      actions: {
+        showContact(params) {
+          calls.push(params)
+          return `${params.id}:${params.tab}`
+        }
+      }
+    }
+
+    const router = routes({
+      app,
+      routes: {
+        '/contacts/:id#details': 'showContact'
+      }
+    })
+
+    expect(router.match()).toBe('42:notes')
+    expect(calls).toEqual([{ id: '42', tab: 'notes' }])
+  })
+
+  it('does not use the current document search params for explicit route paths without a search string', () => {
+    history.replaceState({}, '', '/current?tab=notes')
+    const calls = []
+    const app = {
+      actions: {
+        showContact(params) {
+          calls.push(params)
+          return params.tab || 'no-tab'
+        }
+      }
+    }
+
+    const router = routes({
+      app,
+      routes: {
+        '/contacts/:id': 'showContact'
+      }
+    })
+
+    expect(router.match('/contacts/42')).toBe('no-tab')
+    expect(calls).toEqual([{ id: '42' }])
+  })
+
+  it('lets route params win over query params for action shorthand and warns once', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const calls = []
+    const app = {
+      actions: {
+        showContact(params) {
+          calls.push(params)
+          return params.id
+        }
+      }
+    }
+
+    const router = routes({
+      app,
+      routes: {
+        '/contacts/:id': 'showContact'
+      }
+    })
+
+    expect(router.match('/contacts/42?id=999&tab=notes')).toBe('42')
+    expect(router.match('/contacts/43?id=999')).toBe('43')
+
+    expect(calls).toEqual([
+      { id: '42', tab: 'notes' },
+      { id: '43' }
+    ])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('simplyflow/route: query parameter "id" was ignored because route "/contacts/:id" already provides a route parameter with that name.')
+    warn.mockRestore()
+  })
+
+  it('throws a helpful error when a route shorthand names an unknown action', () => {
+    const router = routes({
+      app: {
+        actions: {
+          showContact() {}
+        }
+      },
+      routes: {
+        '/contacts/:id': 'showConact'
+      }
+    })
+
+    expect(() => router.match('/contacts/42')).toThrow('simplyflow/route: route "/contacts/:id" uses unknown action "showConact". Did you mean "showContact"?')
+  })
+
+  it('throws for unknown listener actions', () => {
+    const router = routes({ routes: { '/': () => 'root' } })
     expect(() => router.addListener('unknown', '/', () => {})).toThrow('simplyflow/route: unknown listener type "unknown"')
     expect(() => router.removeListener('unknown', '/', () => {})).toThrow('simplyflow/route: unknown listener type "unknown"')
   })

@@ -2263,13 +2263,46 @@
     customElements.define("simply-render", SimplyRender);
   }
 
-  // src/route.mjs
-  function routes(options, optionsCompat) {
-    if (optionsCompat) {
-      let app2 = options;
-      options = optionsCompat;
-      options.app = app2;
+  // src/suggest.mjs
+  function closest(name, options, { maxDistance = 2, minLength = 4 } = {}) {
+    if (name.length < minLength) {
+      return;
     }
+    let result;
+    let resultDistance = Infinity;
+    for (const option of options) {
+      const distance = editDistance(name, option, maxDistance);
+      if (distance < resultDistance) {
+        result = option;
+        resultDistance = distance;
+      }
+    }
+    return resultDistance <= maxDistance ? result : void 0;
+  }
+  function editDistance(a, b, maxDistance = 2) {
+    const tooFar = maxDistance + 1;
+    if (Math.abs(a.length - b.length) > maxDistance) {
+      return tooFar;
+    }
+    const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+    const current = new Array(b.length + 1);
+    for (let ai = 1; ai <= a.length; ai++) {
+      current[0] = ai;
+      for (let bi = 1; bi <= b.length; bi++) {
+        const cost = a[ai - 1] === b[bi - 1] ? 0 : 1;
+        current[bi] = Math.min(
+          previous[bi] + 1,
+          current[bi - 1] + 1,
+          previous[bi - 1] + cost
+        );
+      }
+      previous.splice(0, previous.length, ...current);
+    }
+    return previous[b.length];
+  }
+
+  // src/route.mjs
+  function routes(options) {
     return new SimplyRoute(options);
   }
   var SimplyRoute = class {
@@ -2308,14 +2341,19 @@
       args = this.runListeners("match", args);
       path2 = args.path ? args.path : path2;
       let matches;
+      let searchParams;
       if (!path2) {
-        if (this.has(document.location.pathname + document.location.hash)) {
-          path2 = document.location.pathname + document.location.hash;
+        const currentPath = document.location.pathname + document.location.hash;
+        if (this.has(currentPath)) {
+          path2 = currentPath;
         } else {
           path2 = document.location.pathname;
         }
+        searchParams = new URLSearchParams(document.location.search);
+      } else {
+        searchParams = searchParamsForPath(path2);
       }
-      path2 = getPath(path2, this.baseURL);
+      path2 = getPath(routePath(path2), this.baseURL);
       for (let route of this.routeInfo) {
         matches = route.match.exec(path2);
         if (this.addMissingSlash && !matches?.length) {
@@ -2340,8 +2378,8 @@
           args.params = params;
           args = this.runListeners("call", args);
           params = args.params ? args.params : params;
-          const searchParams = new URLSearchParams(document.location.search);
-          args.result = route.action.call(this.app, params, searchParams);
+          args.searchParams = searchParams;
+          args.result = callRouteAction(this.app, route, params, searchParams);
           this.runListeners("finish", args);
           return args.result;
         }
@@ -2382,13 +2420,18 @@
           link = link.parentElement;
         }
         if (link && link.pathname && link.hostname == globalThis.location.hostname && !link.link && !link.dataset.simplyCommand) {
-          let check = [link.hash, link.pathname + link.hash, link.pathname];
-          let path2;
+          let check = [
+            { match: link.hash, goto: link.hash },
+            { match: link.pathname + link.hash, goto: link.pathname + link.search + link.hash },
+            { match: link.pathname, goto: link.pathname + link.search }
+          ];
+          let target;
           do {
-            path2 = getPath(check.shift(), this.baseURL);
-          } while (check.length && !this.has(path2));
-          if (this.has(path2)) {
-            let params = this.runListeners("goto", { path: path2 });
+            target = check.shift();
+            target.match = getPath(target.match, this.baseURL);
+          } while (check.length && !this.has(target.match));
+          if (this.has(target.match)) {
+            let params = this.runListeners("goto", { path: target.goto });
             if (params.path) {
               const followLink = this.goto(params.path);
               if (!followLink || this.options.hijackLinks && followLink !== false) {
@@ -2405,7 +2448,7 @@
       return this.match(path2);
     }
     has(path2) {
-      path2 = getPath(path2, this.baseURL);
+      path2 = getPath(routePath(path2), this.baseURL);
       for (let route of this.routeInfo) {
         var matches = route.match.exec(path2);
         if (matches && matches.length) {
@@ -2440,6 +2483,75 @@
       }
     }
   };
+  function callRouteAction(app2, route, params, searchParams) {
+    if (typeof route.action === "function") {
+      return route.action.call(app2, params, searchParams);
+    }
+    if (typeof route.action === "string") {
+      const action = app2.actions?.[route.action];
+      if (typeof action === "function") {
+        return action.call(app2, routeActionParams(route, params, searchParams));
+      }
+      throw unknownRouteActionError(route, app2.actions);
+    }
+    throw new TypeError(`simplyflow/route: route "${route.path}" must use a function or action name`);
+  }
+  var warnedRouteQueryConflicts = /* @__PURE__ */ new Set();
+  function routeActionParams(route, params, searchParams) {
+    const query = queryParams(searchParams);
+    for (const key of Object.keys(query)) {
+      if (Object.hasOwn(params, key)) {
+        warnRouteQueryConflict(route, key);
+      }
+    }
+    return Object.assign(query, params);
+  }
+  function queryParams(searchParams) {
+    const params = {};
+    for (const [key, value] of searchParams.entries()) {
+      if (!Object.hasOwn(params, key)) {
+        params[key] = value;
+      } else if (Array.isArray(params[key])) {
+        params[key].push(value);
+      } else {
+        params[key] = [params[key], value];
+      }
+    }
+    return params;
+  }
+  function warnRouteQueryConflict(route, key) {
+    const warningKey = `${route.path}\0${key}`;
+    if (warnedRouteQueryConflicts.has(warningKey)) {
+      return;
+    }
+    warnedRouteQueryConflicts.add(warningKey);
+    console.warn(`simplyflow/route: query parameter "${key}" was ignored because route "${route.path}" already provides a route parameter with that name.`);
+  }
+  function unknownRouteActionError(route, actions2) {
+    const suggestion = closest(route.action, Object.keys(actions2 || {}));
+    const hint = suggestion ? ` Did you mean "${suggestion}"?` : "";
+    return new TypeError(`simplyflow/route: route "${route.path}" uses unknown action "${route.action}".${hint}`);
+  }
+  function searchParamsForPath(path2) {
+    const index = typeof path2 === "string" ? path2.indexOf("?") : -1;
+    if (index === -1) {
+      return new URLSearchParams();
+    }
+    const hashIndex = path2.indexOf("#", index);
+    const search = hashIndex === -1 ? path2.substring(index) : path2.substring(index, hashIndex);
+    return new URLSearchParams(search);
+  }
+  function routePath(path2) {
+    const index = typeof path2 === "string" ? path2.indexOf("?") : -1;
+    if (index === -1) {
+      return path2;
+    }
+    const hashIndex = path2.indexOf("#", index);
+    if (hashIndex === -1) {
+      return path2.substring(0, index);
+    }
+    return path2.substring(0, index) + path2.substring(hashIndex);
+  }
   function getPath(path2, baseURL = "/") {
     if (path2.substring(0, baseURL.length) == baseURL || baseURL[baseURL.length - 1] == "/" && path2.length == baseURL.length - 1 && path2 == baseURL.substring(0, path2.length)) {
       path2 = path2.substring(baseURL.length);
@@ -2481,50 +2593,13 @@
         }
       } while (matches);
       routeInfo.push({
+        path: path2,
         match: getRegexpFromRoute(path2, exact),
         params,
         action: routes2[path2]
       });
     }
     return routeInfo;
-  }
-
-  // src/suggest.mjs
-  function closest(name, options, { maxDistance = 2, minLength = 4 } = {}) {
-    if (name.length < minLength) {
-      return;
-    }
-    let result;
-    let resultDistance = Infinity;
-    for (const option of options) {
-      const distance = editDistance(name, option, maxDistance);
-      if (distance < resultDistance) {
-        result = option;
-        resultDistance = distance;
-      }
-    }
-    return resultDistance <= maxDistance ? result : void 0;
-  }
-  function editDistance(a, b, maxDistance = 2) {
-    const tooFar = maxDistance + 1;
-    if (Math.abs(a.length - b.length) > maxDistance) {
-      return tooFar;
-    }
-    const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-    const current = new Array(b.length + 1);
-    for (let ai = 1; ai <= a.length; ai++) {
-      current[0] = ai;
-      for (let bi = 1; bi <= b.length; bi++) {
-        const cost = a[ai - 1] === b[bi - 1] ? 0 : 1;
-        current[bi] = Math.min(
-          previous[bi] + 1,
-          current[bi - 1] + 1,
-          previous[bi - 1] + cost
-        );
-      }
-      previous.splice(0, previous.length, ...current);
-    }
-    return previous[b.length];
   }
 
   // src/command.mjs
@@ -2588,12 +2663,7 @@
       this.$handlers.unshift(handler);
     }
   };
-  function commands(options = {}, optionsCompat) {
-    if (optionsCompat) {
-      let app2 = options;
-      options = optionsCompat;
-      options.app = app2;
-    }
+  function commands(options = {}) {
     return new SimplyCommands(options);
   }
   function getCommand(evt, handlers) {
@@ -2703,12 +2773,7 @@
   }
 
   // src/action.mjs
-  function actions(options, optionsCompat) {
-    if (optionsCompat) {
-      let app2 = options;
-      options = optionsCompat;
-      options.app = app2;
-    }
+  function actions(options) {
     if (options.app) {
       const functionHandler = {
         apply(target, thisArg, argumentsList) {
