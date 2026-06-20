@@ -31,6 +31,22 @@ const counter = app({
 
 The page updates automatically whenever `app.data` changes.
 
+Custom top-level options become app properties, so you can add services without extra ceremony:
+
+```javascript
+const contacts = simply.app({
+  data: { contacts: [] },
+  api: metro.jsonApi('/api/'),
+  actions: {
+    async loadContacts() {
+      this.data.contacts = await this.api.get('contacts.json')
+    }
+  }
+})
+```
+
+If an unknown option looks like a typo of a built-in app option, SimplyFlow logs a warning, but still adds the option to the app.
+
 ## Install
 
 ```shell

@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals'
 import { app } from '../src/app.mjs'
 
 const wait = (ms = 80) => new Promise(resolve => setTimeout(resolve, ms))
@@ -217,4 +218,50 @@ describe('app integration details', () => {
     expect(calls).toContain('started')
     expect(calls.some(call => Array.isArray(call) && call[0] === 'route')).toBe(true)
   })
+  it('copies custom app options without warning so actions can use app services', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const api = {
+      async get(path) {
+        return { path, title: 'Loaded' }
+      }
+    }
+
+    const testApp = app({
+      bind: false,
+      data: {
+        item: null
+      },
+      api,
+      actions: {
+        async loadItem() {
+          this.data.item = await this.api.get('foo.json')
+        }
+      }
+    })
+
+    await testApp.actions.loadItem()
+
+    expect(testApp.api).toBe(api)
+    expect(testApp.data.item).toEqual({ path: 'foo.json', title: 'Loaded' })
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('warns when a custom app option is probably a typo of a built-in option', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const testApp = app({
+      bind: false,
+      data: {},
+      commmands: {
+        save() {}
+      }
+    })
+
+    expect(testApp.commmands).toEqual({ save: expect.any(Function) })
+    expect(testApp.commands).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith('simplyflow/app: unknown option "commmands". Did you mean "commands"? The option was still added to the app as "app.commmands".')
+    warn.mockRestore()
+  })
+
 })

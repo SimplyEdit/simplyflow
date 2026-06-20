@@ -117,6 +117,28 @@ html: {
 
 A map of style names to CSS strings. Each entry is installed as a `<style>` element in the app container.
 
+### Custom app properties
+
+Any unknown top-level option is copied onto the app. This is useful for app services such as an API client:
+
+```javascript
+const contacts = app({
+  data: {
+    contacts: []
+  },
+
+  api: metro.jsonApi('/api/'),
+
+  actions: {
+    async loadContacts() {
+      this.data.contacts = await this.api.get('contacts.json')
+    }
+  }
+})
+```
+
+SimplyFlow warns only when an unknown option looks like a typo of a built-in option. For example, `commmands` warns and suggests `commands`, but `api` is accepted without warning.
+
 ### `bind`
 
 Binding options passed to the underlying `bind()` call. Set `bind: false` to disable automatic binding.
