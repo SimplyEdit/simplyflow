@@ -153,6 +153,27 @@ shortcuts: {
 
 Use `data-simply-shortcuts="name"` on an element to select a named shortcut scope for that part of the page.
 
+### `behaviors`
+
+Behaviors attach reusable JavaScript behavior to DOM elements. Use `data-simply-behavior="name"` in the HTML and define the behavior in the app options.
+
+```html
+<div data-simply-behavior="tabs"></div>
+```
+
+```javascript
+behaviors: {
+  tabs(element) {
+    // Set up the element.
+    return function cleanup(element) {
+      // Clean up when the element is removed or the app is destroyed.
+    }
+  }
+}
+```
+
+Inside a behavior and its cleanup function, `this` is the app instance.
+
 ### `templates`
 
 A map of template names to HTML strings. Each entry is installed as a `<template>` in the app container.
@@ -210,6 +231,7 @@ The app API uses `data-simply-*` attributes. They map directly to the lower-leve
 - `data-simply-map="path"` repeats an object or map.
 - `data-simply-command="name"` runs a command.
 - `data-simply-value="value"` passes a value to a command.
+- `data-simply-behavior="name"` attaches a reusable behavior to an element.
 
 Use `data-simply-edit` on ordinary editable controls such as text inputs, textareas and single selects:
 
@@ -243,6 +265,7 @@ Example list:
 - `app.actions` - action object.
 - `app.routes` - route object, if routes were configured.
 - `app.shortcuts` - shortcut object, if shortcuts were configured.
+- `app.behaviors` - behavior controller, if behaviors were configured.
 - `app.binding` - the underlying bind instance.
 
-Use `app.destroy()` to destroy the underlying binding.
+Use `app.destroy()` to destroy the underlying binding and any active behaviors.

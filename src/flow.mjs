@@ -5,7 +5,7 @@ import './render.mjs'
 import * as dom from './dom.mjs'
 import { app } from './app.mjs'
 import { actions } from './action.mjs'
-import { activate } from './activate.mjs'
+import { behaviors } from './behavior.mjs'
 import { commands } from './command.mjs'
 import { include } from './include.mjs'
 import { shortcuts } from './shortcut.mjs'
@@ -23,7 +23,7 @@ Object.assign(globalThis.simply, {
     flow: model,
     state,
     dom,
-    activate,
+    behaviors,
     actions,
     action: actions,
     commands,
@@ -42,7 +42,7 @@ export {
     model,
     state,
     dom,
-    activate,
+    behaviors,
     actions,
     commands,
     include,

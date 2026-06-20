@@ -418,23 +418,23 @@
     if (!(context instanceof Map)) {
       throw new TypeError("simplyflow/state: notifySet() expects context to be a Map; use makeContext()");
     }
-    const listeners2 = /* @__PURE__ */ new Set();
+    const listeners = /* @__PURE__ */ new Set();
     context.forEach((change, property) => {
       for (const listener of listenersFor(self, property)) {
         addContextChange(listener, property, change);
-        listeners2.add(listener);
+        listeners.add(listener);
       }
     });
-    if (!listeners2.size) {
+    if (!listeners.size) {
       return;
     }
     if (batchDepth) {
-      for (const listener of listeners2) {
+      for (const listener of listeners) {
         batchedListeners.add(listener);
       }
       return;
     }
-    runListeners(listeners2, self, context);
+    runListeners(listeners, self, context);
   }
   function makeContext(property, change) {
     const context = /* @__PURE__ */ new Map();
@@ -485,11 +485,11 @@
     if (!listenersMap.has(self)) {
       listenersMap.set(self, /* @__PURE__ */ new Map());
     }
-    const listeners2 = listenersMap.get(self);
-    if (!listeners2.has(property)) {
-      listeners2.set(property, /* @__PURE__ */ new Set());
+    const listeners = listenersMap.get(self);
+    if (!listeners.has(property)) {
+      listeners.set(property, /* @__PURE__ */ new Set());
     }
-    listeners2.get(property).add(compute);
+    listeners.get(property).add(compute);
     if (!computeMap.has(compute)) {
       computeMap.set(compute, /* @__PURE__ */ new Map());
     }
@@ -506,8 +506,8 @@
     }
     dependencies.forEach((signals2, property) => {
       signals2.forEach((signal3) => {
-        const listeners2 = listenersMap.get(signal3);
-        listeners2?.get(property)?.delete(compute);
+        const listeners = listenersMap.get(signal3);
+        listeners?.get(property)?.delete(compute);
       });
     });
     computeMap.delete(compute);
@@ -561,9 +561,9 @@
       setEffectResult(connectedSignal, result);
     }
   }
-  function runListeners(listeners2, signal3, context) {
+  function runListeners(listeners, signal3, context) {
     const currentEffect = computeStack[computeStack.length - 1];
-    for (const listener of listeners2) {
+    for (const listener of listeners) {
       if (listener !== currentEffect && listener?.needsUpdate) {
         if (listener.scheduleClock) {
           listener.scheduleClock();
@@ -631,11 +631,11 @@
     return result;
   }
   function runBatchedListeners() {
-    const listeners2 = batchedListeners;
+    const listeners = batchedListeners;
     batchedListeners = /* @__PURE__ */ new Set();
     const clocked = /* @__PURE__ */ new Set();
     const ready = /* @__PURE__ */ new Set();
-    for (const listener of listeners2) {
+    for (const listener of listeners) {
       if (listener.scheduleClock) {
         clocked.add(listener);
       } else {
@@ -1077,7 +1077,7 @@
     let oldContentHTML = el.innerHTML;
     let oldContentText = el.innerText;
     if (!observers.has(el)) {
-      const observer3 = new MutationObserver((mutationList, observer4) => {
+      const observer2 = new MutationObserver((mutationList, observer3) => {
         const changes = {};
         for (const mutation of mutationList) {
           if (mutation.type === "attributes") {
@@ -1114,8 +1114,8 @@
           notifySet(signal3, makeContext(prop, { was: changes[prop], now: el[prop] }));
         }
       });
-      observer3.observe(el, options);
-      observers.set(el, observer3);
+      observer2.observe(el, options);
+      observers.set(el, observer2);
       if (el.matches("input, textarea, select")) {
         let prevValue = el.value;
         el.addEventListener("change", (evt) => {
@@ -2243,14 +2243,14 @@
         this.parentNode.removeChild(this);
       } else {
         const observe2 = () => {
-          const observer3 = new MutationObserver(() => {
+          const observer2 = new MutationObserver(() => {
             template = document.getElementById(templateId);
             if (template) {
-              observer3.disconnect();
+              observer2.disconnect();
               this.replaceWith(this);
             }
           });
-          observer3.observe(globalThis.document, {
+          observer2.observe(globalThis.document, {
             subtree: true,
             childList: true
           });
@@ -2942,6 +2942,103 @@
     });
   }
 
+  // src/behavior.mjs
+  var BEHAVIOR_SELECTOR = "[data-simply-behavior]";
+  var SimplyBehaviors = class {
+    constructor(options = {}) {
+      this.app = options.app;
+      this.container = options.container || document.body;
+      this.behaviors = options.behaviors || {};
+      this.active = /* @__PURE__ */ new Set();
+      this.cleanups = /* @__PURE__ */ new WeakMap();
+      this.unknown = /* @__PURE__ */ new Set();
+      this.observer = new MutationObserver((changes) => this.handleChanges(changes));
+      this.observer.observe(this.container, {
+        subtree: true,
+        childList: true
+      });
+      for (const node of behaviorNodes(this.container)) {
+        this.start(node);
+      }
+    }
+    start(node) {
+      if (this.active.has(node)) {
+        return;
+      }
+      const name = node?.dataset?.simplyBehavior;
+      const behavior = this.behaviors[name];
+      if (!name || typeof behavior !== "function") {
+        this.warnUnknown(name, node);
+        return;
+      }
+      this.active.add(node);
+      const cleanup = behavior.call(this.app || node, node);
+      if (typeof cleanup === "function") {
+        this.cleanups.set(node, cleanup);
+      } else if (typeof cleanup !== "undefined") {
+        console.warn("simplyflow/behavior: behavior may only return a cleanup function", { cause: cleanup });
+      }
+    }
+    stop(node) {
+      if (!this.active.has(node)) {
+        return;
+      }
+      this.active.delete(node);
+      const cleanup = this.cleanups.get(node);
+      this.cleanups.delete(node);
+      if (cleanup) {
+        cleanup.call(this.app || node, node);
+      }
+    }
+    handleChanges(changes) {
+      const added = [];
+      for (const change of changes) {
+        if (change.type !== "childList") {
+          continue;
+        }
+        for (const node of change.removedNodes) {
+          for (const behaviorNode of behaviorNodes(node)) {
+            this.stop(behaviorNode);
+          }
+        }
+        for (const node of change.addedNodes) {
+          added.push(...behaviorNodes(node));
+        }
+      }
+      for (const node of added) {
+        this.start(node);
+      }
+    }
+    warnUnknown(name, node) {
+      if (!name || this.unknown.has(name)) {
+        return;
+      }
+      this.unknown.add(name);
+      const suggestion = closest(name, Object.keys(this.behaviors));
+      const suffix = suggestion ? `. Did you mean "${suggestion}"?` : "";
+      console.warn(`simplyflow/behavior: unknown behavior "${name}"${suffix}`, { cause: node });
+    }
+    destroy() {
+      this.observer.disconnect();
+      for (const node of Array.from(this.active)) {
+        this.stop(node);
+      }
+    }
+  };
+  function behaviors(options = {}) {
+    return new SimplyBehaviors(options);
+  }
+  function behaviorNodes(root) {
+    if (!root?.querySelectorAll) {
+      return [];
+    }
+    const nodes = Array.from(root.querySelectorAll(BEHAVIOR_SELECTOR));
+    if (root.matches?.(BEHAVIOR_SELECTOR)) {
+      nodes.unshift(root);
+    }
+    return nodes;
+  }
+
   // src/highlight.mjs
   function html(strings, ...values) {
     const outputArray = values.map(
@@ -2962,6 +3059,7 @@
     "start",
     "onError",
     "components",
+    "behaviors",
     "baseURL",
     "root",
     "commands",
@@ -3002,6 +3100,9 @@
           case "shortcuts":
             this.shortcuts = shortcuts({ app: this, shortcuts: options.shortcuts });
             break;
+          case "behaviors":
+            this.behaviors = behaviors({ app: this, container: this.container, behaviors: options.behaviors });
+            break;
           case "routes":
             this.routes = routes({ app: this, routes: options.routes });
             break;
@@ -3040,6 +3141,10 @@
       if (this.binding) {
         this.binding.destroy();
         this.binding = void 0;
+      }
+      if (this.behaviors) {
+        this.behaviors.destroy();
+        this.behaviors = void 0;
       }
     }
   };
@@ -3172,87 +3277,6 @@
     }
   }
 
-  // src/activate.mjs
-  if (!Symbol.onDestroy) {
-    Symbol.onDestroy = Symbol("onDestroy");
-  }
-  var listeners = /* @__PURE__ */ new Map();
-  var activate = {
-    addListener: (name, callback) => {
-      if (!listeners.has(name)) {
-        listeners.set(name, []);
-      }
-      listeners.get(name).push(callback);
-      initialCall(name);
-    },
-    removeListener: (name, callback) => {
-      if (!listeners.has(name)) {
-        return false;
-      }
-      listeners.set(name, listeners.get(name).filter((listener) => {
-        return listener != callback;
-      }));
-    }
-  };
-  function initialCall(name) {
-    const nodes = document.querySelectorAll('[data-simply-activate="' + name + '"]');
-    if (nodes) {
-      for (let node of nodes) {
-        callListeners(node);
-      }
-    }
-  }
-  function callListeners(node) {
-    const activate2 = node?.dataset?.simplyActivate;
-    if (activate2 && listeners.has(activate2)) {
-      for (let callback of listeners.get(activate2)) {
-        const onDestroy = callback.call(node);
-        if (typeof onDestroy == "function") {
-          node[Symbol.onDestroy] = onDestroy;
-        } else if (typeof onDestroy != "undefined") {
-          console.warn("simplyflow/activate: listener may only return a cleanup function", { cause: onDestroy });
-        }
-      }
-    }
-  }
-  function handleChanges(changes) {
-    let activateNodes = [];
-    for (let change of changes) {
-      if (change.type == "childList") {
-        for (let node of change.addedNodes) {
-          if (node.querySelectorAll) {
-            let toActivate = Array.from(node.querySelectorAll("[data-simply-activate]"));
-            if (node.matches("[data-simply-activate]")) {
-              toActivate.push(node);
-            }
-            activateNodes = activateNodes.concat(toActivate);
-          }
-        }
-        for (let node of change.removedNodes) {
-          if (node.querySelectorAll) {
-            let toDestroy = Array.from(node.querySelectorAll("[data-simply-activate]"));
-            if (node.matches("[data-simply-activate]")) {
-              toDestroy.push(node);
-            }
-            for (let child of toDestroy) {
-              if (child[Symbol.onDestroy]) {
-                child[Symbol.onDestroy].call(child);
-              }
-            }
-          }
-        }
-      }
-    }
-    for (let node of activateNodes) {
-      callListeners(node);
-    }
-  }
-  var observer = new MutationObserver(handleChanges);
-  observer.observe(document, {
-    subtree: true,
-    childList: true
-  });
-
   // src/include.mjs
   function throttle(callbackFunction, intervalTime) {
     let eventId = 0;
@@ -3283,7 +3307,7 @@
     }
     return url.href;
   }
-  var observer2;
+  var observer;
   var head = globalThis.document.querySelector("head");
   var scriptLocations = [];
   function cloneScript(script, base) {
@@ -3396,7 +3420,7 @@
       }
     }
   };
-  var handleChanges2 = throttle(() => {
+  var handleChanges = throttle(() => {
     runWhenIdle(() => {
       var links = globalThis.document.querySelectorAll('link[rel="simply-include"],link[rel="simply-include-once"]');
       if (links.length) {
@@ -3405,14 +3429,14 @@
     });
   });
   var observe = () => {
-    observer2 = new MutationObserver(handleChanges2);
-    observer2.observe(globalThis.document, {
+    observer = new MutationObserver(handleChanges);
+    observer.observe(globalThis.document, {
       subtree: true,
       childList: true
     });
   };
   observe();
-  handleChanges2();
+  handleChanges();
 
   // src/path.mjs
   var path = {
@@ -3472,7 +3496,7 @@
     flow: model_exports,
     state: state_exports,
     dom: dom_exports,
-    activate,
+    behaviors,
     actions,
     action: actions,
     commands,

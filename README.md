@@ -54,6 +54,23 @@ const contacts = simply.app({
 
 If an unknown option looks like a typo of a built-in app option, SimplyFlow logs a warning, but still adds the option to the app.
 
+Reusable element behavior can be attached with `data-simply-behavior`:
+
+```html
+<div data-simply-behavior="tabs"></div>
+```
+
+```javascript
+const page = simply.app({
+  data: {},
+  behaviors: {
+    tabs(element) {
+      // Set up the tabs element.
+    }
+  }
+})
+```
+
 Keyboard shortcuts can be added with the `shortcuts` option:
 
 ```javascript
@@ -120,6 +137,7 @@ bind({ root: data })
 - [Commands](docs/command.md)
 - [Actions](docs/action.md)
 - [Routes](docs/route.md)
+- [Behaviors](docs/behavior.md)
 
 Or check the [examples](examples/) for more information.
 

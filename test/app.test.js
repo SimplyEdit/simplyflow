@@ -178,6 +178,37 @@ describe('app API', () => {
     testApp.destroy()
   })
 
+
+  it('uses app-level behaviors for data-simply-behavior elements', async () => {
+    document.body.innerHTML = `<div id="app"><button data-simply-behavior="focusButton">Focus</button></div>`
+    const container = document.getElementById('app')
+    const started = []
+    const stopped = []
+    const thisValues = []
+
+    const testApp = app({
+      container,
+      data: {},
+      behaviors: {
+        focusButton(element) {
+          thisValues.push(this)
+          started.push(element)
+          return function cleanup(cleanupElement) {
+            thisValues.push(this)
+            stopped.push(cleanupElement)
+          }
+        }
+      }
+    })
+
+    const button = container.querySelector('button')
+    expect(started).toEqual([button])
+    expect(thisValues[0]).toBe(testApp)
+    testApp.destroy()
+    expect(stopped).toEqual([button])
+    expect(thisValues[1]).toBe(testApp)
+  })
+
 })
 
 

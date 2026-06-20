@@ -4,6 +4,7 @@ import { routes } from './route.mjs'
 import { commands } from './command.mjs'
 import { actions } from './action.mjs'
 import { shortcuts, accesskeys } from './shortcut.mjs'
+import { behaviors } from './behavior.mjs'
 import { html, css } from './highlight.mjs'
 import { findAttribute } from './dom.mjs'
 import { closest } from './suggest.mjs'
@@ -16,6 +17,7 @@ const APP_OPTIONS = [
     'start',
     'onError',
     'components',
+    'behaviors',
     'baseURL',
     'root',
     'commands',
@@ -62,6 +64,9 @@ class SimplyApp
                     break
                 case 'shortcuts':
                     this.shortcuts = shortcuts({ app: this, shortcuts: options.shortcuts })
+                    break
+                case 'behaviors':
+                    this.behaviors = behaviors({ app: this, container: this.container, behaviors: options.behaviors })
                     break
                 case 'routes':
                     this.routes = routes({ app: this, routes: options.routes})
@@ -111,6 +116,10 @@ class SimplyApp
         if (this.binding) {
             this.binding.destroy()
             this.binding = undefined
+        }
+        if (this.behaviors) {
+            this.behaviors.destroy()
+            this.behaviors = undefined
         }
     }
 }
