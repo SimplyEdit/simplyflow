@@ -51,7 +51,7 @@ or a different attribute prefix.
 - data-flow-field
   Shows a value from the root object.
 - data-flow-edit
-  Shows a value from the root object and writes user edits back for that element. This reuses field rendering and opts in to reverse updates without enabling two-way binding for every binding.
+  Shows a value from the root object and writes user edits back for that element. This reuses field rendering and opts in to reverse updates without enabling two-way binding for every binding. Text inputs, textareas and single selects write strings; checkboxes write booleans unless the data value is an array, in which case they toggle their own value in the array; radio buttons write the selected value; multiple selects write arrays.
 - data-flow-list
 - data-flow-map
 	These reference a JSON path inside the root object, to bind to.

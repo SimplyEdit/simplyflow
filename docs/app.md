@@ -255,7 +255,7 @@ Includes are scoped to the app container. When `app.destroy()` is called, Simply
 <link rel="simply-include" href="header.html">
 ```
 
-Use `data-simply-edit` on ordinary editable controls such as text inputs, textareas and single selects:
+Use `data-simply-edit` on editable controls:
 
 ```html
 <input data-simply-edit="person.name">
@@ -263,6 +263,35 @@ Use `data-simply-edit` on ordinary editable controls such as text inputs, textar
 <select data-simply-edit="person.country">
   <option value="nl">Netherlands</option>
   <option value="be">Belgium</option>
+</select>
+```
+
+Checkboxes edit booleans by default:
+
+```html
+<input type="checkbox" data-simply-edit="person.active">
+```
+
+When the data value is an array, checkboxes toggle their own `value` in that array:
+
+```html
+<input type="checkbox" value="js" data-simply-edit="person.tags">
+<input type="checkbox" value="html" data-simply-edit="person.tags">
+```
+
+Radio buttons write the selected radio value:
+
+```html
+<input type="radio" name="color" value="red" data-simply-edit="settings.color">
+<input type="radio" name="color" value="blue" data-simply-edit="settings.color">
+```
+
+A multiple select writes an array of selected option values:
+
+```html
+<select multiple data-simply-edit="person.tags">
+  <option value="js">JavaScript</option>
+  <option value="html">HTML</option>
 </select>
 ```
 

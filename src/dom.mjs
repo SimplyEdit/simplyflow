@@ -140,15 +140,18 @@ function domListen(el, signal, options) {
         //@TODO: unregister the observer when el is removed from the dom (after a timeout)
         if (el.matches('input, textarea, select')) {
             let prevValue = el.value
-            el.addEventListener('change', (evt) => {
+            let prevChecked = el.checked
+            const notifyFormValue = () => {
                 notifySet(signal, makeContext('value', { was: prevValue, now: el.value }))
                 prevValue = el.value
-            })
+                if ('checked' in el) {
+                    notifySet(signal, makeContext('checked', { was: prevChecked, now: el.checked }))
+                    prevChecked = el.checked
+                }
+            }
+            el.addEventListener('change', notifyFormValue)
             if (el.matches('input, textarea')) {
-                el.addEventListener('input', (evt) => {
-                    notifySet(signal, makeContext('value', { was: prevValue, now: el.value }))
-                    prevValue = el.value
-                })
+                el.addEventListener('input', notifyFormValue)
             }
         }
     }
@@ -202,7 +205,7 @@ export function trackDomList(element)
  * @param HTMLElement element - the element to track
  * @returns Proxy
  */
-export function trackDomField(element, props, valueIsString, stringProperty = 'innerHTML') {
+export function trackDomField(element, props, valueIsString, stringProperty = 'innerHTML', getUpdateValue) {
     if (domSignals.has(element)) {
         return
     }
@@ -215,9 +218,20 @@ export function trackDomField(element, props, valueIsString, stringProperty = 'i
     //TODO: run reverse transformers (extract)
     batch(() => { // avoids cyclical dependencies - check why
         throttledEffect(() => {
-            let updateValue = s[stringProperty]
-            if (!valueIsString) {
-                updateValue = getProperties(s, ...props)
+            let updateValue
+            if (getUpdateValue) {
+                // Custom edit extractors often need the current data value, for
+                // example to toggle a checkbox value in an array. Read the DOM
+                // properties here for dependency tracking, but read the data only
+                // in the untracked section below to avoid DOM/data cycles.
+                for (const prop of props) {
+                    s[prop]
+                }
+            } else {
+                updateValue = s[stringProperty]
+                if (!valueIsString) {
+                    updateValue = getProperties(s, ...props)
+                }
             }
             untracked(() => { // don't track changes in data, only in the dom
                 // Rendering a primitive value into the DOM usually turns it into
@@ -225,6 +239,12 @@ export function trackDomField(element, props, valueIsString, stringProperty = 'i
                 // when it still represents the current value. This keeps numbers
                 // and booleans stable after one-way rendering in a two-way bind.
                 const currentValue = getValueByPath(this.options.root, path)
+                if (getUpdateValue) {
+                    updateValue = getUpdateValue.call(this, s, currentValue)
+                }
+                if (typeof updateValue === 'undefined') {
+                    return
+                }
                 if (valueIsString && !Object.is(currentValue, updateValue) && String(currentValue) === updateValue) {
                     return
                 }

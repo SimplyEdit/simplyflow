@@ -36,7 +36,7 @@ For editable values, use `data-simply-edit`:
 <span data-simply-field="name"></span>
 ```
 
-The page updates automatically whenever `app.data` changes. Use `data-simply-edit` on form fields when the user should be able to edit a value directly.
+The page updates automatically whenever `app.data` changes. Use `data-simply-edit` on form fields when the user should be able to edit a value directly. Text inputs, textareas and selects edit string values; checkboxes edit booleans or toggle values in arrays; radio buttons edit the selected value.
 
 Buttons inside list templates can pass the current item or one of its fields to a command:
 

@@ -87,6 +87,129 @@ describe('app API', () => {
     testApp.destroy()
   })
 
+
+  it('edits checkbox boolean values explicitly', async () => {
+    document.body.innerHTML = `<div id="app"><input type="checkbox" data-simply-edit="active"></div>`
+    const container = document.getElementById('app')
+    const testApp = app({
+      container,
+      data: {
+        active: true
+      }
+    })
+
+    await wait()
+    const checkbox = container.querySelector('input')
+    expect(checkbox.checked).toBe(true)
+
+    checkbox.checked = false
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+    await wait()
+    expect(testApp.data.active).toBe(false)
+
+    checkbox.checked = true
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+    await wait()
+    expect(testApp.data.active).toBe(true)
+    testApp.destroy()
+  })
+
+  it('edits checkbox arrays by toggling the checkbox value', async () => {
+    document.body.innerHTML = `<div id="app">
+      <input id="js" type="checkbox" value="js" data-simply-edit="tags">
+      <input id="html" type="checkbox" value="html" data-simply-edit="tags">
+    </div>`
+    const container = document.getElementById('app')
+    const testApp = app({
+      container,
+      data: {
+        tags: ['js']
+      }
+    })
+
+    await wait()
+    const js = container.querySelector('#js')
+    const html = container.querySelector('#html')
+    expect(js.checked).toBe(true)
+    expect(html.checked).toBe(false)
+
+    html.checked = true
+    html.dispatchEvent(new Event('change', { bubbles: true }))
+    await wait()
+    expect(Array.from(testApp.data.tags)).toEqual(['js', 'html'])
+
+    js.checked = false
+    js.dispatchEvent(new Event('change', { bubbles: true }))
+    await wait()
+    expect(Array.from(testApp.data.tags)).toEqual(['html'])
+    testApp.destroy()
+  })
+
+  it('edits radio groups by writing the selected radio value', async () => {
+    document.body.innerHTML = `<div id="app">
+      <input id="red" type="radio" name="color" value="red" data-simply-edit="color">
+      <input id="blue" type="radio" name="color" value="blue" data-simply-edit="color">
+    </div>`
+    const container = document.getElementById('app')
+    const testApp = app({
+      container,
+      data: {
+        color: 'red'
+      }
+    })
+
+    await wait()
+    const red = container.querySelector('#red')
+    const blue = container.querySelector('#blue')
+    expect(red.checked).toBe(true)
+    expect(blue.checked).toBe(false)
+
+    blue.checked = true
+    blue.dispatchEvent(new Event('change', { bubbles: true }))
+    await wait()
+    expect(testApp.data.color).toBe('blue')
+    testApp.destroy()
+  })
+
+  it('edits select and multiple-select values', async () => {
+    document.body.innerHTML = `<div id="app">
+      <select id="country" data-simply-edit="country">
+        <option value="nl">Netherlands</option>
+        <option value="be">Belgium</option>
+      </select>
+      <select id="tags" multiple data-simply-edit="tags">
+        <option value="js">JavaScript</option>
+        <option value="html">HTML</option>
+        <option value="css">CSS</option>
+      </select>
+    </div>`
+    const container = document.getElementById('app')
+    const testApp = app({
+      container,
+      data: {
+        country: 'nl',
+        tags: ['js']
+      }
+    })
+
+    await wait()
+    const country = container.querySelector('#country')
+    const tags = container.querySelector('#tags')
+    expect(country.value).toBe('nl')
+    expect(Array.from(tags.selectedOptions).map(option => option.value)).toEqual(['js'])
+
+    country.value = 'be'
+    country.dispatchEvent(new Event('change', { bubbles: true }))
+    tags.options[1].selected = true
+    tags.options[0].selected = false
+    tags.dispatchEvent(new Event('change', { bubbles: true }))
+    await wait()
+
+    expect(testApp.data.country).toBe('be')
+    expect(Array.from(testApp.data.tags)).toEqual(['html'])
+    testApp.destroy()
+  })
+
   it('runs commands with the app as this so commands can change data', async () => {
     document.body.innerHTML = `
       <div id="app">

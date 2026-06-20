@@ -125,7 +125,9 @@ export function setValueByPath(root, path, value)
             }
         }
         if (prev && prevPart && prev[prevPart]!==value) {
-            if (value && typeof value=='object') {
+            if (Array.isArray(value)) {
+                prev[prevPart] = value
+            } else if (value && typeof value=='object') {
                 curr = prev[prevPart]
                 if (!curr) {
                     // last part of path in html does not exist yet, create it
@@ -385,26 +387,74 @@ export function input(context)
     // Inputs display their bound primitive in `value`, not `innerHTML`.
     // Calling element() here would also enable two-way tracking on
     // innerHTML, which would overwrite text input data with an empty string.
-    if (value && typeof value === 'object') {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
         setProperties(el, value, 'title', 'id', 'className', 'value', 'checked')
         value = value.value
     }
     if (typeof value == 'undefined') {
         value = ''
     }
-    if (el.type=='checkbox' || el.type=='radio') {
-        if (matchValue(el.value, value)) {
-            el.checked = true
-        } else {
-            el.checked = false
-        }
+    if (el.type=='checkbox') {
+        el.checked = checkboxIsChecked(el, value)
+    } else if (el.type=='radio') {
+        el.checked = matchValue(el.value, value)
     } else if (!matchValue(el.value, value)) {
         el.value = ''+value
     }
 
     if (writesFromDom(this, context)) {
-        trackDomField.call(this, context.element, ['value'], true, 'value')
+        if (el.type=='checkbox') {
+            trackDomField.call(this, context.element, ['checked'], true, 'checked', checkboxEditValue)
+        } else if (el.type=='radio') {
+            trackDomField.call(this, context.element, ['checked'], true, 'checked', radioEditValue)
+        } else {
+            trackDomField.call(this, context.element, ['value'], true, 'value')
+        }
     }
+}
+
+function checkboxIsChecked(el, value)
+{
+    if (Array.isArray(value)) {
+        return value.some(selected => matchValue(el.value, selected))
+    }
+    if (typeof value === 'boolean') {
+        return value
+    }
+    return matchValue(el.value, value)
+}
+
+function checkboxEditValue(el, currentValue)
+{
+    // An array-bound checkbox toggles its value in that array. Otherwise a
+    // checkbox edits a boolean; this keeps the app API simple and predictable.
+    // Existing string values are left alone on the initial checked render so
+    // lower-level two-way bindings do not immediately rewrite legacy data.
+    if (Array.isArray(currentValue)) {
+        const value = el.value
+        const values = currentValue.filter(item => !matchValue(item, value))
+        if (el.checked) {
+            values.push(value)
+        }
+        return values
+    }
+    if (typeof currentValue === 'boolean') {
+        return el.checked
+    }
+    if (el.checked && matchValue(el.value, currentValue)) {
+        return currentValue
+    }
+    return el.checked
+}
+
+function radioEditValue(el, currentValue)
+{
+    // Browsers fire the useful change event on the newly checked radio. If this
+    // radio is not checked, leave the bound value unchanged.
+    if (!el.checked) {
+        return undefined
+    }
+    return el.value
 }
 
 /**
@@ -453,8 +503,23 @@ export function select(context)
     }
 
     if (writesFromDom(this, context)) {
-        trackDomField.call(this, context.element, ['value'], true, 'value')
+        if (el.multiple) {
+            trackDomField.call(this, context.element, ['value'], true, 'value', selectMultipleEditValue)
+        } else {
+            trackDomField.call(this, context.element, ['value'], true, 'value')
+        }
     }
+}
+
+function selectMultipleEditValue(el)
+{
+    // Keep multiple-select editing as ordinary data: an array of selected values.
+    // Reading `value` registers the DOM dependency; the change listener notifies
+    // it whenever the selection changes.
+    const value = el.value
+    return Array.from(el.options)
+        .filter(option => option.selected)
+        .map(option => option.value)
 }
 
 /**

@@ -1118,15 +1118,18 @@
       observers.set(el, observer);
       if (el.matches("input, textarea, select")) {
         let prevValue = el.value;
-        el.addEventListener("change", (evt) => {
+        let prevChecked = el.checked;
+        const notifyFormValue = () => {
           notifySet(signal3, makeContext("value", { was: prevValue, now: el.value }));
           prevValue = el.value;
-        });
+          if ("checked" in el) {
+            notifySet(signal3, makeContext("checked", { was: prevChecked, now: el.checked }));
+            prevChecked = el.checked;
+          }
+        };
+        el.addEventListener("change", notifyFormValue);
         if (el.matches("input, textarea")) {
-          el.addEventListener("input", (evt) => {
-            notifySet(signal3, makeContext("value", { was: prevValue, now: el.value }));
-            prevValue = el.value;
-          });
+          el.addEventListener("input", notifyFormValue);
         }
       }
     }
@@ -1169,7 +1172,7 @@
     }, 50);
     return s;
   }
-  function trackDomField(element2, props, valueIsString, stringProperty = "innerHTML") {
+  function trackDomField(element2, props, valueIsString, stringProperty = "innerHTML", getUpdateValue) {
     if (domSignals.has(element2)) {
       return;
     }
@@ -1181,12 +1184,25 @@
     domSignals.set(element2, s);
     batch(() => {
       throttledEffect(() => {
-        let updateValue = s[stringProperty];
-        if (!valueIsString) {
-          updateValue = getProperties(s, ...props);
+        let updateValue;
+        if (getUpdateValue) {
+          for (const prop of props) {
+            s[prop];
+          }
+        } else {
+          updateValue = s[stringProperty];
+          if (!valueIsString) {
+            updateValue = getProperties(s, ...props);
+          }
         }
         untracked(() => {
           const currentValue = getValueByPath(this.options.root, path2);
+          if (getUpdateValue) {
+            updateValue = getUpdateValue.call(this, s, currentValue);
+          }
+          if (typeof updateValue === "undefined") {
+            return;
+          }
           if (valueIsString && !Object.is(currentValue, updateValue) && String(currentValue) === updateValue) {
             return;
           }
@@ -1281,7 +1297,9 @@
         }
       }
       if (prev && prevPart && prev[prevPart] !== value) {
-        if (value && typeof value == "object") {
+        if (Array.isArray(value)) {
+          prev[prevPart] = value;
+        } else if (value && typeof value == "object") {
           curr = prev[prevPart];
           if (!curr) {
             prev[prevPart] = {};
@@ -1472,25 +1490,61 @@
   function input(context) {
     const el = context.element;
     let value = context.value;
-    if (value && typeof value === "object") {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
       setProperties(el, value, "title", "id", "className", "value", "checked");
       value = value.value;
     }
     if (typeof value == "undefined") {
       value = "";
     }
-    if (el.type == "checkbox" || el.type == "radio") {
-      if (matchValue(el.value, value)) {
-        el.checked = true;
-      } else {
-        el.checked = false;
-      }
+    if (el.type == "checkbox") {
+      el.checked = checkboxIsChecked(el, value);
+    } else if (el.type == "radio") {
+      el.checked = matchValue(el.value, value);
     } else if (!matchValue(el.value, value)) {
       el.value = "" + value;
     }
     if (writesFromDom(this, context)) {
-      trackDomField.call(this, context.element, ["value"], true, "value");
+      if (el.type == "checkbox") {
+        trackDomField.call(this, context.element, ["checked"], true, "checked", checkboxEditValue);
+      } else if (el.type == "radio") {
+        trackDomField.call(this, context.element, ["checked"], true, "checked", radioEditValue);
+      } else {
+        trackDomField.call(this, context.element, ["value"], true, "value");
+      }
     }
+  }
+  function checkboxIsChecked(el, value) {
+    if (Array.isArray(value)) {
+      return value.some((selected) => matchValue(el.value, selected));
+    }
+    if (typeof value === "boolean") {
+      return value;
+    }
+    return matchValue(el.value, value);
+  }
+  function checkboxEditValue(el, currentValue) {
+    if (Array.isArray(currentValue)) {
+      const value = el.value;
+      const values = currentValue.filter((item) => !matchValue(item, value));
+      if (el.checked) {
+        values.push(value);
+      }
+      return values;
+    }
+    if (typeof currentValue === "boolean") {
+      return el.checked;
+    }
+    if (el.checked && matchValue(el.value, currentValue)) {
+      return currentValue;
+    }
+    return el.checked;
+  }
+  function radioEditValue(el, currentValue) {
+    if (!el.checked) {
+      return void 0;
+    }
+    return el.value;
   }
   function button(context) {
     element.call(this, context, "value");
@@ -1526,8 +1580,16 @@
       setProperties(el, value, "name", "id", "selectedIndex", "className");
     }
     if (writesFromDom(this, context)) {
-      trackDomField.call(this, context.element, ["value"], true, "value");
+      if (el.multiple) {
+        trackDomField.call(this, context.element, ["value"], true, "value", selectMultipleEditValue);
+      } else {
+        trackDomField.call(this, context.element, ["value"], true, "value");
+      }
     }
+  }
+  function selectMultipleEditValue(el) {
+    const value = el.value;
+    return Array.from(el.options).filter((option) => option.selected).map((option) => option.value);
   }
   function addOption(select2, option) {
     if (!option) {
