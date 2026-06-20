@@ -2858,12 +2858,6 @@
       }
       return this[command].call(this.app, el, value, event);
     }
-    action(name) {
-      console.warn("simplyflow/command: this.commands.action() is deprecated; use this.app.actions.<name>() instead");
-      let params = Array.from(arguments).slice();
-      params.shift();
-      return this.app.actions[name](...params);
-    }
     appendHandler(handler) {
       this.$handlers.push(handler);
     }
@@ -3492,17 +3486,6 @@
     links: (links) => defaultInclude().includeLinks(Array.from(links))
   };
 
-  // src/highlight.mjs
-  function html(strings, ...values) {
-    const outputArray = values.map(
-      (value, index) => `${strings[index]}${value}`
-    );
-    return outputArray.join("") + strings[strings.length - 1];
-  }
-  function css(strings, ...values) {
-    return html(strings, ...values);
-  }
-
   // src/app.mjs
   var APP_OPTIONS = [
     "container",
@@ -3514,7 +3497,6 @@
     "components",
     "behaviors",
     "baseURL",
-    "root",
     "commands",
     "shortcuts",
     "routes",
@@ -3534,7 +3516,7 @@
       this.start = options.start;
       this.onError = options.onError;
       this.components = options.components;
-      this.baseURL = options.baseURL || options.root;
+      this.baseURL = options.baseURL;
       installTemplates(this.container, options.templates);
       installStyles(this.container, options.styles);
       for (const key of Object.keys(options)) {
@@ -3562,12 +3544,6 @@
             break;
           case "actions":
             this.actions = actions({ app: this, actions: options.actions });
-            this.action = function(name) {
-              console.warn("simplyflow/app: this.action() is deprecated; use this.actions.<name>() instead");
-              const params = Array.from(arguments).slice();
-              params.shift();
-              return this.actions[name](...params);
-            };
             break;
           case "prototype":
           case "__proto__":
@@ -3705,12 +3681,6 @@
     }
     return app2;
   }
-  if (!globalThis.html) {
-    globalThis.html = html;
-  }
-  if (!globalThis.css) {
-    globalThis.css = css;
-  }
   function mergeOptions(options, otherOptions) {
     for (const key of Object.keys(otherOptions)) {
       switch (typeof otherOptions[key]) {
@@ -3757,10 +3727,23 @@
     }
   }
 
+  // src/highlight.mjs
+  function html(strings, ...values) {
+    const outputArray = values.map(
+      (value, index) => `${strings[index]}${value}`
+    );
+    return outputArray.join("") + strings[strings.length - 1];
+  }
+  function css(strings, ...values) {
+    return html(strings, ...values);
+  }
+
   // src/flow.mjs
   if (!globalThis.simply) {
     globalThis.simply = {};
   }
+  globalThis.html = html;
+  globalThis.css = css;
   var modelApi = Object.assign(model, {
     model,
     sort,
@@ -3794,7 +3777,8 @@
     shortcuts,
     path: path_default,
     routes,
-    findAttribute
+    html,
+    css
   });
   delete globalThis.simply.advanced;
   var flow_default = globalThis.simply;

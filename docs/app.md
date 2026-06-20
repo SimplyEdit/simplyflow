@@ -45,8 +45,6 @@ this.data.title = 'New title'
 this.data.todos.push({ text: 'Buy milk', done: false })
 ```
 
-`data` replaces the old SimplyView `view` option. There is no `state` or `view` alias in the new API.
-
 ### `commands`
 
 Commands respond to DOM events. Add `data-simply-command="name"` to a button, link, input, select, textarea, form or any clickable element.
@@ -199,6 +197,14 @@ templates: {
 }
 ```
 
+When using the browser bundle, SimplyFlow also provides a global `html` template tag. It returns a string, but many code editors recognize `html` template literals and highlight the HTML inside them:
+
+```javascript
+templates: {
+  item: html`<li><span data-simply-field=":value.text"></span></li>`
+}
+```
+
 ### `styles`
 
 A map of style names to CSS strings. Each entry is installed as a `<style>` element in the app container.
@@ -207,6 +213,28 @@ A map of style names to CSS strings. Each entry is installed as a `<style>` elem
 styles: {
   app: `.selected { font-weight: bold; }`
 }
+```
+
+The browser bundle also provides a global `css` template tag for editor highlighting:
+
+```javascript
+styles: {
+  app: css`.selected { font-weight: bold; }`
+}
+```
+
+
+### `baseURL`
+
+The base URL used by routes. Most apps do not need this. Use it when the app is served from a subdirectory and routes should be relative to that directory.
+
+```javascript
+app({
+  baseURL: '/contacts/',
+  routes: {
+    '/:id': 'selectContact'
+  }
+})
 ```
 
 ### Custom app properties

@@ -11,11 +11,18 @@ import { include, includes } from './include.mjs'
 import { shortcuts } from './shortcut.mjs'
 import path from './path.mjs'
 import { routes, SimplyRoute } from './route.mjs'
-import { findAttribute } from './dom.mjs'
+import { html, css } from './highlight.mjs'
 
 if (!globalThis.simply) {
     globalThis.simply = {}
 }
+
+// These global template tags are intentional. Many editors recognize
+// html`...` and css`...` template literals and provide syntax highlighting.
+// Keeping them global gives script-tag users the same authoring experience
+// without requiring a build step or explicit imports.
+globalThis.html = html
+globalThis.css = css
 
 const modelApi = Object.assign(model.model, {
     model: model.model,
@@ -50,8 +57,7 @@ Object.assign(globalThis.simply, {
     includes,
     shortcuts,
     path,
-    routes,
-    findAttribute
+    routes
 })
 
 delete globalThis.simply.advanced
@@ -71,7 +77,8 @@ export {
     path,
     routes,
     SimplyRoute,
-    findAttribute
+    html,
+    css
 }
 
 export default globalThis.simply

@@ -12,34 +12,33 @@
 		<form data-simply-command="addEntry">
 			<input type="text" name="newItem" class="new-todo" placeholder="What needs to be done?" autocomplete="off">
 		</form>
-		<ul class="todo-list" data-flow-list="items">
+		<ul class="todo-list" data-simply-list="items">
 			<template>
 				<li>
-					<label data-flow-field="item">Item</label>
+					<label data-simply-field="item">Item</label>
 				</li>
 			</template>
 		</ul>
 	</div>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/simplyview/dist/simply.everything.js"></script>
 <script src="../../dist/simply.flow.js"></script>
 <script class="source">
 	var todoApp = simply.app({
 		container: document.getElementById('todoApp'),
 		commands: {
 			addEntry: function(form, values) {
-				todoApp.actions.addEntry(values.newItem);
+				this.actions.addEntry(values.newItem);
 				form.elements.newItem.value = '';
 			}
 		},
 		actions: {
 			addEntry: async function(item) {
-				this.state.items.push({
+				this.data.items.push({
 					item: item
 				});
 			}
 		},
-		state: simply.state.signal({
+		data: {
 			items: [
 				{
 					item: 'something'
@@ -48,13 +47,6 @@
 					item: 'something else'
 				}
 			]
-		})
+		}
 	});
-</script>
-<script>
-	simply.bind({
-		container: document.getElementById('todoApp'),
-		attribute: 'data-flow',
-		root: todoApp.state
-	})
 </script>

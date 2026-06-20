@@ -2,7 +2,7 @@
 
 SimplyFlow is an experimental browser library for building small reactive web applications with ordinary HTML and ordinary JavaScript data.
 
-It now includes the former SimplyView app layer. The intended beginner-facing API is:
+The intended beginner-facing API is:
 
 ```javascript
 import { app } from 'simplyflow/src/flow.mjs'
@@ -144,6 +144,19 @@ simply.bind({ root: data })
 
 const table = simply.model({ data: [] })
 table.addEffect(simply.model.sort({ property: 'title' }))
+```
+
+The browser bundle also intentionally provides global `html` and `css` template tags. They return strings, but many code editors recognize these tag names and provide syntax highlighting inside template literals:
+
+```javascript
+const page = simply.app({
+  templates: {
+    card: html`<article data-simply-field=":value.title"></article>`
+  },
+  styles: {
+    card: css`.selected { font-weight: bold; }`
+  }
+})
 ```
 
 Module imports are still available when you prefer explicit imports:

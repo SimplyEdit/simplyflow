@@ -1,4 +1,4 @@
-import simply, { app, commands, actions, routes, path, shortcuts, behaviors, include, includes, findAttribute } from '../src/flow.mjs'
+import simply, { app, commands, actions, routes, path, shortcuts, behaviors, include, includes, html, css } from '../src/flow.mjs'
 import * as state from '../src/state.mjs'
 import * as model from '../src/model.mjs'
 import { bind } from '../src/bind.mjs'
@@ -28,8 +28,7 @@ const GLOBAL_KEYS = [
   'includes',
   'shortcuts',
   'path',
-  'routes',
-  'findAttribute'
+  'routes'
 ]
 
 afterEach(() => {
@@ -50,7 +49,6 @@ describe('merged app-layer exports', () => {
     expect(simply.include).toBe(include)
     expect(simply.includes).toBe(includes)
     expect(simply.path).toBe(path)
-    expect(simply.findAttribute).toBe(findAttribute)
     expect(simply.state).toBe(state)
     expect(simply.dom).toBe(dom)
     expect(simply.signal).toBe(state.signal)
@@ -70,9 +68,9 @@ describe('merged app-layer exports', () => {
     }
   })
 
-  it('finds inherited data-simply attributes', () => {
+  it('finds inherited data-simply attributes through the DOM API', () => {
     document.body.innerHTML = `<div data-simply-example="value"><button>Run</button></div>`
-    expect(findAttribute(document.querySelector('button'), 'data-simply-example')).toBe('value')
+    expect(dom.findAttribute(document.querySelector('button'), 'data-simply-example')).toBe('value')
   })
 })
 
@@ -89,6 +87,8 @@ describe('flow entrypoint API', () => {
     expect(typeof simply.signal).toBe('function')
     expect(typeof simply.model).toBe('function')
     expect(typeof simply.model.model).toBe('function')
+    expect(globalThis.html).toBe(html)
+    expect(globalThis.css).toBe(css)
     expect(simply.advanced).toBeUndefined()
 
     delete globalThis.simply
@@ -110,6 +110,8 @@ describe('flow entrypoint API', () => {
     expect(typeof simply.state.signal).toBe('function')
     expect(typeof simply.signal).toBe('function')
     expect(typeof simply.dom.signal).toBe('function')
+    expect(globalThis.html).toBe(simply.html)
+    expect(globalThis.css).toBe(simply.css)
     expect(simply.route).toBeUndefined()
     expect(simply.SimplyRoute).toBeUndefined()
     expect(simply.advanced).toBeUndefined()

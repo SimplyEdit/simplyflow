@@ -80,14 +80,12 @@
 <script type="importmap">
   {
     "imports": {
-      "SimplyView":"https://cdn.jsdelivr.net/npm/simplyview@3.5.6/src/everything.mjs",
       "SimplyFlow":"../../src/flow.mjs",
       "@muze-nl/metro": "https://cdn.jsdelivr.net/npm/@muze-nl/metro@0.6.12/src/everything.mjs"
     }
   }
 </script>
 <script type="module">
-import 'SimplyView'
 import 'SimplyFlow'
 import '@muze-nl/metro'
 
@@ -108,21 +106,21 @@ var hnpwa = simply.app({
       alert(err.message)
     },
     list: async function(section, page=1) {
-      this.state.items = await this.api.list(section, page)
-      this.state.page = 'items'
-      this.state.section = section
+      this.data.items = await this.api.list(section, page)
+      this.data.page = 'items'
+      this.data.section = section
     },
     comments: async function(commentId) {
-      this.state.item = await this.api.item(commentId)
-      this.state.page = 'item'
+      this.data.item = await this.api.item(commentId)
+      this.data.page = 'item'
     }
   },
-  state: simply.state.signal({
+  data: {
     page: 'items',
     items: [],
     item: null,
     section: 'news'
-  }),
+  },
   api: metro.api(
     'https://api.hackerwebapp.com/',
     {
@@ -137,7 +135,7 @@ var hnpwa = simply.app({
 })
 
 simply.bind({
-  root: hnpwa.state,
+  root: hnpwa.data,
   attribute: 'data-flow',
   transformers: {
     comments_link: function(context, next) {
@@ -152,7 +150,7 @@ simply.bind({
 })
 
 simply.state.effect(() => {
-  let section = hnpwa.state.section
+  let section = hnpwa.data.section
   let toolbar = document.querySelector('.toolbar')
   toolbar.querySelector('.active')?.classList.remove('active')
   toolbar.querySelector('[href="#'+section+'"')?.classList.add('active')

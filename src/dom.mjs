@@ -262,7 +262,7 @@ export function trackDomField(element, props, valueIsString, stringProperty = 'i
  * returns that attribute value.
  *
  * This helper is used by the app/command layer and lives in this module so
- * SimplyFlow has one DOM utility module after merging SimplyView.
+ * DOM utility helpers shared by the app and binding layers.
  *
  * @param {Element} el - Element to start searching from.
  * @param {string} attr - Attribute name to find.

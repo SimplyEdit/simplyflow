@@ -56,13 +56,6 @@ class SimplyCommands {
         return this[command].call(this.app, el, value, event)
     }
 
-    action(name) {
-        console.warn('simplyflow/command: this.commands.action() is deprecated; use this.app.actions.<name>() instead')
-        let params = Array.from(arguments).slice()
-        params.shift()
-        return this.app.actions[name](...params)
-    }
-
     appendHandler(handler) {
         this.$handlers.push(handler)
     }

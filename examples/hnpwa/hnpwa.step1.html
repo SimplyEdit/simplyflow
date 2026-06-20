@@ -13,14 +13,12 @@
 <script type="importmap">
   {
     "imports": {
-      "SimplyView":"../../../simplyview/src/everything.mjs",
       "SimplyFlow":"../../src/flow.mjs",
       "@muze-nl/metro": "https://cdn.jsdelivr.net/npm/@muze-nl/metro@0.6.19/src/everything.mjs"
     }
   }
 </script>
 <script type="module">
-import 'SimplyView'
 import 'SimplyFlow'
 import '@muze-nl/metro'
 
@@ -32,12 +30,12 @@ var hnpwa = simply.app({
   },
   actions: {
     news: async function(page=1) {
-      this.state.items = await this.api.news(page)
+      this.data.items = await this.api.news(page)
     }
   },
-  state: simply.state.signal({
+  data: {
     items: []
-  }),
+  },
   api: metro.jsonApi(
     'https://api.hackerwebapp.com/',
     {
@@ -45,14 +43,9 @@ var hnpwa = simply.app({
         return this.get('news', new URLSearchParams({ page }))
       }
     }
-  ),
-  hooks: {
-    start: function() {
-      simply.bind({
-          root: this.state
-      })
-    }
-  }
+  )
 })
-hnpwa.start()
-</script>
+
+simply.bind({
+  root: hnpwa.data
+})

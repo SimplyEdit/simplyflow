@@ -6,7 +6,6 @@ import { actions } from './action.mjs'
 import { shortcuts, destroyShortcuts, accesskeys, destroyAccesskeys } from './shortcut.mjs'
 import { behaviors } from './behavior.mjs'
 import { includes } from './include.mjs'
-import { html, css } from './highlight.mjs'
 import { findAttribute } from './dom.mjs'
 import { closest } from './suggest.mjs'
 
@@ -20,7 +19,6 @@ const APP_OPTIONS = [
     'components',
     'behaviors',
     'baseURL',
-    'root',
     'commands',
     'shortcuts',
     'routes',
@@ -45,7 +43,7 @@ class SimplyApp
         this.start = options.start
         this.onError = options.onError
         this.components = options.components
-        this.baseURL = options.baseURL || options.root
+        this.baseURL = options.baseURL
 
         installTemplates(this.container, options.templates)
         installStyles(this.container, options.styles)
@@ -75,12 +73,6 @@ class SimplyApp
                     break
                 case 'actions':
                     this.actions = actions({app: this, actions: options.actions})
-                    this.action = function(name) { // backwards compatible with SimplyView2
-                        console.warn('simplyflow/app: this.action() is deprecated; use this.actions.<name>() instead')
-                        const params = Array.from(arguments).slice()
-                        params.shift()
-                        return this.actions[name](...params)
-                    }
                     break
                 case 'prototype':
                 case '__proto__':
@@ -244,12 +236,6 @@ export function app(options={})
     return app
 }
 
-if (!globalThis.html) {
-    globalThis.html = html
-}
-if (!globalThis.css) {
-    globalThis.css = css
-}
 
 function mergeOptions(options, otherOptions)
 {

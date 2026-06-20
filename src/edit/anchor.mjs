@@ -1,4 +1,5 @@
 import '../flow.mjs'
+import { html, css } from '../highlight.mjs'
 
 export default {
 	templates: {

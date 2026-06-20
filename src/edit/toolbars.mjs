@@ -1,5 +1,6 @@
 import anchor from './anchor.mjs'
 import '../flow.mjs'
+import { html, css } from '../highlight.mjs'
 
 
 const simplyToolbarCSS = css`
