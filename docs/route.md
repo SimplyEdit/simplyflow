@@ -32,6 +32,29 @@ this.actions.selectContact({
 
 Repeated query parameters become arrays. For example, `/search?tag=js&tag=html` passes `{ tag: ['js', 'html'] }`.
 
+## Route patterns
+
+SimplyFlow route patterns use a small URLPattern-compatible pathname syntax:
+
+- `:name` matches one path segment and passes it as `name`.
+- `:name*` matches the rest of the path and passes it as `name`.
+
+For example:
+
+```javascript
+routes: {
+  '/files/:path*': 'openFile'
+},
+
+actions: {
+  openFile({ path }) {
+    this.data.currentFile = path
+  }
+}
+```
+
+`/files/docs/readme.md` calls `openFile({ path: 'docs/readme.md' })`. Named wildcards are used instead of the older SimplyFlow-only `:*` syntax so route patterns stay close to the browser `URLPattern` API.
+
 Routes can also use functions directly:
 
 ```javascript

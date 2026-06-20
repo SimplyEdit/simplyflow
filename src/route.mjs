@@ -48,7 +48,6 @@ export class SimplyRoute
         args = this.runListeners('match',args)
         path = args.path ? args.path : path;
 
-        let matches;
         let searchParams;
         if (!path) {
             const currentPath = document.location.pathname + document.location.hash
@@ -63,24 +62,18 @@ export class SimplyRoute
         }
         path = getPath(routePath(path), this.baseURL);
         for ( let route of this.routeInfo) {
-            matches = route.match.exec(path)
-            if (this.addMissingSlash && !matches?.length) {
+            let params = route.pattern.match(path)
+            if (this.addMissingSlash && !params) {
                 if (path && path[path.length-1]!='/') {
-                    matches = route.match.exec(path+'/')
-                    if (matches) {
-                        path+='/'
+                    const pathWithSlash = path + '/'
+                    params = route.pattern.match(pathWithSlash)
+                    if (params) {
+                        path = pathWithSlash
                         history.replaceState({}, '', getURL(path, this.baseURL))
                     }
                 }
             }
-            if (matches && matches.length) {
-                let params = {};
-                route.params.forEach((key, i) => {
-                    if (key=='*') {
-                        key = 'remainder'
-                    }
-                    params[key] = matches[i+1]
-                })
+            if (params) {
                 Object.assign(params, options)
                 args.route = route
                 args.params = params
@@ -101,8 +94,8 @@ export class SimplyRoute
             return
         }
         Object.keys(this.listeners[action]).forEach((route) => {
-            var routeRe = getRegexpFromRoute(route);
-            if (routeRe.exec(params.path)) {
+            const pattern = compileRoutePattern(route)
+            if (pattern.match(routePath(params.path))) {
                 var result;
                 for (let callback of this.listeners[action][route]) {
                     result = callback.call(this.app, params)
@@ -172,8 +165,7 @@ export class SimplyRoute
     {
         path = getPath(routePath(path), this.baseURL)
         for (let route of this.routeInfo) {
-            var matches = route.match.exec(path)
-            if (matches && matches.length) {
+            if (route.pattern.match(path)) {
                 return true
             }
         }
@@ -329,34 +321,76 @@ function getURL(path, baseURL)
     return baseURL + path
 }
 
-function getRegexpFromRoute(route, exact=false)
+function compileRoutePattern(path, exact=false)
 {
-    if (route[0]!='#') {
-        route = '^'+route
+    const params = []
+    const regexp = routeRegexp(path, exact, params)
+    return {
+        path,
+        params,
+        regexp,
+        match(value) {
+            const matches = regexp.exec(value)
+            if (!matches) {
+                return null
+            }
+            const result = {}
+            params.forEach((name, i) => {
+                result[name] = matches[i + 1]
+            })
+            return result
+        }
     }
-    if (exact) {
-        return new RegExp(route.replace(/:\w+/g, '([^/]+)').replace(/:\*/, '(.*)')+'(\\?|$)')
+}
+
+function routeRegexp(route, exact=false, params=[])
+{
+    if (route.includes(':*')) {
+        throw new TypeError(`simplyflow/route: route "${route}" uses the old wildcard syntax ":*". Use a named wildcard like ":path*" instead.`)
     }
-    return new RegExp(route.replace(/:\w+/g, '([^/]+)').replace(/:\*/, '(.*)'))
+    const prefix = route[0] === '#' ? '' : '^'
+    const suffix = exact ? '$' : ''
+    return new RegExp(prefix + routeRegexpSource(route, params) + suffix)
+}
+
+function routeRegexpSource(route, params)
+{
+    let source = ''
+    let index = 0
+    while (index < route.length) {
+        if (route[index] === ':') {
+            const match = /^:([A-Za-z_][A-Za-z0-9_]*)(\*)?/.exec(route.substring(index))
+            if (!match) {
+                throw new TypeError(`simplyflow/route: invalid route parameter in "${route}"`)
+            }
+            params.push(match[1])
+            source += match[2] ? '(.*)' : '([^/]+)'
+            index += match[0].length
+            continue
+        }
+        if (route[index] === '*') {
+            source += '.*'
+            index++
+            continue
+        }
+        source += escapeRegexp(route[index])
+        index++
+    }
+    return source
+}
+
+function escapeRegexp(value)
+{
+    return value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
 }
 
 function parseRoutes(routes, routeInfo, exact=false)
 {
     const paths = Object.keys(routes)
-    const matchParams = /:(\w+|\*)/g
     for (let path of paths) {
-        let matches = []
-        let params  = []
-        do {
-            matches = matchParams.exec(path)
-            if (matches) {
-                params.push(matches[1])
-            }
-        } while(matches)
         routeInfo.push({
             path,
-            match:  getRegexpFromRoute(path, exact),
-            params: params,
+            pattern: compileRoutePattern(path, exact),
             action: routes[path]
         })
     }

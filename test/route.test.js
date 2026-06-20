@@ -22,7 +22,7 @@ describe('route API', () => {
           calls.push({ thisValue: this, params })
           return 'user'
         },
-        '/files/:*': params => params.remainder
+        '/files/:path*': params => params.path
       }
     })
 
@@ -31,6 +31,16 @@ describe('route API', () => {
     expect(calls[0].params).toEqual({ id: '42' })
     expect(router.match('/users/42/extra')).toBe(false)
     expect(router.match('/files/a/b/c')).toBe('a/b/c')
+  })
+
+
+
+  it('rejects the old unnamed wildcard route syntax', () => {
+    expect(() => routes({
+      routes: {
+        '/files/:*': () => 'old wildcard'
+      }
+    })).toThrow('simplyflow/route: route "/files/:*" uses the old wildcard syntax ":*". Use a named wildcard like ":path*" instead.')
   })
 
   it('supports base URLs, init(), has(), clear() and load()', () => {

@@ -2340,7 +2340,6 @@
       };
       args = this.runListeners("match", args);
       path2 = args.path ? args.path : path2;
-      let matches;
       let searchParams;
       if (!path2) {
         const currentPath = document.location.pathname + document.location.hash;
@@ -2355,24 +2354,18 @@
       }
       path2 = getPath(routePath(path2), this.baseURL);
       for (let route of this.routeInfo) {
-        matches = route.match.exec(path2);
-        if (this.addMissingSlash && !matches?.length) {
+        let params = route.pattern.match(path2);
+        if (this.addMissingSlash && !params) {
           if (path2 && path2[path2.length - 1] != "/") {
-            matches = route.match.exec(path2 + "/");
-            if (matches) {
-              path2 += "/";
+            const pathWithSlash = path2 + "/";
+            params = route.pattern.match(pathWithSlash);
+            if (params) {
+              path2 = pathWithSlash;
               history.replaceState({}, "", getURL(path2, this.baseURL));
             }
           }
         }
-        if (matches && matches.length) {
-          let params = {};
-          route.params.forEach((key, i) => {
-            if (key == "*") {
-              key = "remainder";
-            }
-            params[key] = matches[i + 1];
-          });
+        if (params) {
           Object.assign(params, options);
           args.route = route;
           args.params = params;
@@ -2391,8 +2384,8 @@
         return;
       }
       Object.keys(this.listeners[action]).forEach((route) => {
-        var routeRe = getRegexpFromRoute(route);
-        if (routeRe.exec(params.path)) {
+        const pattern = compileRoutePattern(route);
+        if (pattern.match(routePath(params.path))) {
           var result;
           for (let callback of this.listeners[action][route]) {
             result = callback.call(this.app, params);
@@ -2450,8 +2443,7 @@
     has(path2) {
       path2 = getPath(routePath(path2), this.baseURL);
       for (let route of this.routeInfo) {
-        var matches = route.match.exec(path2);
-        if (matches && matches.length) {
+        if (route.pattern.match(path2)) {
           return true;
         }
       }
@@ -2571,31 +2563,67 @@
     }
     return baseURL + path2;
   }
-  function getRegexpFromRoute(route, exact = false) {
-    if (route[0] != "#") {
-      route = "^" + route;
+  function compileRoutePattern(path2, exact = false) {
+    const params = [];
+    const regexp = routeRegexp(path2, exact, params);
+    return {
+      path: path2,
+      params,
+      regexp,
+      match(value) {
+        const matches = regexp.exec(value);
+        if (!matches) {
+          return null;
+        }
+        const result = {};
+        params.forEach((name, i) => {
+          result[name] = matches[i + 1];
+        });
+        return result;
+      }
+    };
+  }
+  function routeRegexp(route, exact = false, params = []) {
+    if (route.includes(":*")) {
+      throw new TypeError(`simplyflow/route: route "${route}" uses the old wildcard syntax ":*". Use a named wildcard like ":path*" instead.`);
     }
-    if (exact) {
-      return new RegExp(route.replace(/:\w+/g, "([^/]+)").replace(/:\*/, "(.*)") + "(\\?|$)");
+    const prefix = route[0] === "#" ? "" : "^";
+    const suffix = exact ? "$" : "";
+    return new RegExp(prefix + routeRegexpSource(route, params) + suffix);
+  }
+  function routeRegexpSource(route, params) {
+    let source = "";
+    let index = 0;
+    while (index < route.length) {
+      if (route[index] === ":") {
+        const match = /^:([A-Za-z_][A-Za-z0-9_]*)(\*)?/.exec(route.substring(index));
+        if (!match) {
+          throw new TypeError(`simplyflow/route: invalid route parameter in "${route}"`);
+        }
+        params.push(match[1]);
+        source += match[2] ? "(.*)" : "([^/]+)";
+        index += match[0].length;
+        continue;
+      }
+      if (route[index] === "*") {
+        source += ".*";
+        index++;
+        continue;
+      }
+      source += escapeRegexp(route[index]);
+      index++;
     }
-    return new RegExp(route.replace(/:\w+/g, "([^/]+)").replace(/:\*/, "(.*)"));
+    return source;
+  }
+  function escapeRegexp(value) {
+    return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
   }
   function parseRoutes(routes2, routeInfo, exact = false) {
     const paths = Object.keys(routes2);
-    const matchParams = /:(\w+|\*)/g;
     for (let path2 of paths) {
-      let matches = [];
-      let params = [];
-      do {
-        matches = matchParams.exec(path2);
-        if (matches) {
-          params.push(matches[1]);
-        }
-      } while (matches);
       routeInfo.push({
         path: path2,
-        match: getRegexpFromRoute(path2, exact),
-        params,
+        pattern: compileRoutePattern(path2, exact),
         action: routes2[path2]
       });
     }
