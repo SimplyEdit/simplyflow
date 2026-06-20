@@ -1725,9 +1725,10 @@
       }
       this.state.options[options.name] = options;
       return throttledEffect(() => {
-        if (this.state.options[options.name].enabled) {
-          const filterOptions = this.state.options[options.name];
-          const matches = filterOptions[DEP.XRAY]?.matches || filterOptions.matches;
+        const filterOptions = this.state.options[options.name];
+        if (filterOptions.enabled) {
+          const trackedMatches = filterOptions.matches;
+          const matches = filterOptions[DEP.XRAY]?.matches || trackedMatches;
           return data.current.filter((row) => matches.call(this, row));
         }
         return data.current;

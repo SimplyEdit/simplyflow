@@ -101,6 +101,39 @@ describe('model API contract coverage', () => {
     expect(m.view.current.map(row => row.id)).toEqual([2])
   })
 
+  it('reacts when an enabled filter predicate is replaced', async () => {
+    const m = model({
+      data: [
+        { id: 1, score: 1 },
+        { id: 2, score: 2 },
+        { id: 3, score: 3 }
+      ]
+    })
+
+    m.addEffect(filter({
+      name: 'scoreFilter',
+      enabled: true,
+      threshold: 2,
+      matches(row) {
+        return row.score >= this.state.options.scoreFilter.threshold
+      }
+    }))
+
+    expect(m.view.current.map(row => row.id)).toEqual([2, 3])
+
+    m.state.options.scoreFilter.matches = function matchesBelowThreshold(row) {
+      return row.score < this.state.options.scoreFilter.threshold
+    }
+    await wait()
+
+    expect(m.view.current.map(row => row.id)).toEqual([1])
+
+    m.state.options.scoreFilter.threshold = 3
+    await wait()
+
+    expect(m.view.current.map(row => row.id)).toEqual([1, 2])
+  })
+
   it('rejects invalid and duplicate filters', () => {
     expect(() => filter()).toThrow('filter requires options.name to be a string')
     expect(() => filter({ name: 1, matches: () => true })).toThrow('filter requires options.name to be a string')

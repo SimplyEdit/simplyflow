@@ -168,10 +168,15 @@ export function filter(options) {
 		}
 		this.state.options[options.name] = options
 		return throttledEffect(() => {
-			if (this.state.options[options.name].enabled) {
-				const filterOptions = this.state.options[options.name]
-					const matches = filterOptions[DEP.XRAY]?.matches || filterOptions.matches
-					return data.current.filter(row => matches.call(this, row))
+			const filterOptions = this.state.options[options.name]
+			if (filterOptions.enabled) {
+				// Read through the signal proxy so replacing `.matches` is tracked
+				// as a dependency of this effect. The proxied function may already
+				// be bound to the options object, so call the raw function explicitly
+				// with the model as `this`.
+				const trackedMatches = filterOptions.matches
+				const matches = filterOptions[DEP.XRAY]?.matches || trackedMatches
+				return data.current.filter(row => matches.call(this, row))
 			}
 			return data.current
 		}, 50)
