@@ -135,7 +135,7 @@ export function paging(options={}) {
 				if (!paging.pageSize) {
 					paging.pageSize = 20
 				}
-				paging.max = Math.ceil(this.state.data.length / paging.pageSize)
+				paging.max = Math.ceil(data.current.length / paging.pageSize)
 				paging.page = Math.max(1, Math.min(paging.max, paging.page))
 
 				const start = (paging.page-1) * paging.pageSize
@@ -169,7 +169,9 @@ export function filter(options) {
 		this.state.options[options.name] = options
 		return throttledEffect(() => {
 			if (this.state.options[options.name].enabled) {
-				return data.current.filter(this.state.options[options.name].matches.bind(this))
+				const filterOptions = this.state.options[options.name]
+					const matches = filterOptions[DEP.XRAY]?.matches || filterOptions.matches
+					return data.current.filter(row => matches.call(this, row))
 			}
 			return data.current
 		}, 50)

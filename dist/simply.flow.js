@@ -30,6 +30,7 @@
     XRAY: Symbol.for("@simplyedit/simplyflow.xRay"),
     SIGNAL: Symbol.for("@simplyedit/simplyflow.Signal"),
     TEMPLATE: Symbol.for("@simplyedit/simplyflow.bindTemplate"),
+    VALUE: Symbol.for("@simplyedit/simplyflow.bindValue"),
     LENGTH: "length",
     SIZE: "size"
   };
@@ -144,11 +145,13 @@
       return true;
     },
     defineProperty: (target, property, descriptor) => {
-      if (typeof target[property] === "undefined") {
+      const isNewProperty = typeof target[property] === "undefined";
+      const result = Object.defineProperty(target, property, descriptor);
+      if (isNewProperty) {
         let receiver = signals.get(target);
         notifySet(receiver, makeContext(DEP.ITERATE, {}));
       }
-      return Object.defineProperty(target, property, descriptor);
+      return result;
     },
     ownKeys: (target) => {
       let receiver = signals.get(target);
@@ -658,12 +661,12 @@
       if (receiver) {
         notifyGet(receiver, property);
       }
-      return Object.hasOwn(target, property);
+      return Reflect.has(target, property);
     },
     ownKeys: (target) => {
       let receiver = signals.get(target);
       if (receiver) {
-        notifyGet(receiver, iterate);
+        notifyGet(receiver, DEP.ITERATE);
       }
       return Reflect.ownKeys(target);
     }
@@ -683,7 +686,8 @@
       characterData: true,
       subtree: true,
       attributes: true,
-      attributesOldValue: true
+      attributesOldValue: true,
+      childList: true
     };
     if (!options) {
       options = defaultOptions;
@@ -712,6 +716,14 @@
               //FIXME; fill in 'now'
             };
             changes.length = -1;
+            if (el.innerHTML != oldContentHTML) {
+              changes.innerHTML = oldContentHTML;
+              oldContentHTML = el.innerHTML;
+            }
+            if (el.innerText != oldContentText) {
+              changes.innerText = oldContentText;
+              oldContentText = el.innerText;
+            }
           } else {
             console.log("nothing to do for", el, mutation.type);
           }
@@ -772,7 +784,7 @@
           }
         });
       });
-    });
+    }, 50);
     return s;
   }
   function trackDomField(element2, props, valueIsString) {
@@ -794,7 +806,7 @@
         untracked(() => {
           setValueByPath(this.options.root, path, updateValue);
         });
-      });
+      }, 50);
     });
     return s;
   }
@@ -898,105 +910,143 @@
     const attribute = this.options.attribute;
     const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
     const attrQuery = "[" + attributes.join("],[") + "]";
-    let items = context.element.querySelectorAll(":scope > [" + attribute + "-key]");
-    let lastKey = 0;
-    let skipped = 0;
+    const keyAttribute = attribute + "-key";
+    const items = Array.from(context.element.querySelectorAll(":scope > [" + keyAttribute + "]"));
+    const usedItems = /* @__PURE__ */ new Set();
+    let cursor = 0;
     context.list = context.value;
-    for (let item of items) {
-      let currentKey = parseInt(item.getAttribute(attribute + "-key"));
-      if (currentKey > lastKey) {
-        context.index = lastKey;
-        context.element.insertBefore(this.applyTemplate(context), item);
-      } else if (currentKey < lastKey) {
-        item.remove();
-      } else {
-        let bindings = Array.from(item.querySelectorAll(attrQuery));
-        if (item.matches(attrQuery)) {
-          bindings.unshift(item);
-        }
-        let needsReplacement = bindings.find((b) => {
-          for (let attr of attributes) {
-            let databind = b.getAttribute(attr);
-            if (databind && databind.substr(0, 5) !== ":root" && databind.substr(0, context.path.length) !== context.path) {
-              return true;
-            }
-          }
-          return false;
-        });
-        if (!needsReplacement) {
-          if (item[DEP.TEMPLATE]) {
-            let newTemplate = this.findTemplate(context.templates, context.list[lastKey]);
-            if (newTemplate != item[DEP.TEMPLATE]) {
-              needsReplacement = true;
-              if (!newTemplate) {
-                skipped++;
-              }
-            }
-          }
-        }
-        if (needsReplacement) {
-          context.index = lastKey;
-          context.element.replaceChild(this.applyTemplate(context), item);
-        }
-      }
-      lastKey++;
-      if (lastKey >= context.value.length) {
-        break;
-      }
-    }
-    items = context.element.querySelectorAll(":scope > [" + attribute + "-key]");
-    let length = items.length + skipped;
-    if (length > context.value.length) {
-      while (length > context.value.length) {
-        let child = context.element.querySelectorAll(":scope > :not(template)")?.[length - 1];
-        child?.remove();
-        length--;
-      }
-    } else if (length < context.value.length) {
-      while (length < context.value.length) {
-        context.index = length;
+    for (let index = 0; index < context.value.length; index++) {
+      context.index = index;
+      const value = context.list[index];
+      let item = nextUnusedItem(items, usedItems, cursor);
+      if (!item) {
         context.element.appendChild(this.applyTemplate(context));
-        length++;
+        continue;
+      }
+      const newTemplate = this.findTemplate(context.templates, value);
+      const currentValueMatches = item[DEP.VALUE] === value;
+      let reusableItem = currentValueMatches ? item : findReusableItem(items, usedItems, value, newTemplate, cursor + 1);
+      if (reusableItem) {
+        if (newTemplate != reusableItem[DEP.TEMPLATE]) {
+          context.element.replaceChild(this.applyTemplate(context), reusableItem);
+        } else {
+          context.element.insertBefore(reusableItem, item);
+          updateItemKey(reusableItem, index, context.path, keyAttribute, attributes, attrQuery);
+          reusableItem[DEP.VALUE] = value;
+        }
+        usedItems.add(reusableItem);
+        if (reusableItem === item) {
+          cursor++;
+        }
+        continue;
+      }
+      context.element.insertBefore(this.applyTemplate(context), item);
+    }
+    for (let item of items) {
+      if (!usedItems.has(item)) {
+        item.remove();
       }
     }
     if (this.options.twoway) {
       trackDomList.call(this, context.element);
     }
   }
-  function objectByTemplates(context) {
-    const attribute = this.options.attribute;
-    context.list = context.value;
-    let items = Array.from(context.element.querySelectorAll(":scope > [" + attribute + "-key]"));
-    for (let key in context.list) {
-      context.index = key;
-      let item = items.shift();
-      if (!item) {
-        let clone2 = this.applyTemplate(context);
-        context.element.appendChild(clone2);
-        continue;
+  function nextUnusedItem(items, usedItems, start) {
+    while (start < items.length) {
+      const item = items[start];
+      if (!usedItems.has(item)) {
+        return item;
       }
-      if (item.getAttribute(attribute + "-key") != key) {
-        items.unshift(item);
-        let outOfOrderItem = context.element.querySelector(":scope > [" + attribute + '-key="' + key + '"]');
-        if (!outOfOrderItem) {
-          let clone2 = this.applyTemplate(context);
-          context.element.insertBefore(clone2, item);
-          continue;
-        } else {
-          context.element.insertBefore(outOfOrderItem, item);
-          item = outOfOrderItem;
-          items = items.filter((i) => i != outOfOrderItem);
-        }
-      }
-      let newTemplate = this.findTemplate(context.templates, context.list[context.index]);
-      if (newTemplate != item[DEP.TEMPLATE]) {
-        let clone2 = this.applyTemplate(context);
-        context.element.replaceChild(clone2, item);
+      start++;
+    }
+  }
+  function findReusableItem(items, usedItems, value, template, start) {
+    for (let i = start; i < items.length; i++) {
+      const item = items[i];
+      if (!usedItems.has(item) && item[DEP.VALUE] === value && item[DEP.TEMPLATE] === template) {
+        return item;
       }
     }
-    while (items.length) {
-      let item = items.shift();
-      item.remove();
+  }
+  function updateItemKey(item, key, path, keyAttribute, attributes, attrQuery) {
+    const oldKey = item.getAttribute(keyAttribute);
+    const newKey = "" + key;
+    if (oldKey === newKey) {
+      return;
+    }
+    item.setAttribute(keyAttribute, newKey);
+    const oldPrefix = path + "." + oldKey;
+    const newPrefix = path + "." + newKey;
+    const bindings = Array.from(item.querySelectorAll(attrQuery));
+    if (item.matches(attrQuery)) {
+      bindings.unshift(item);
+    }
+    for (let binding of bindings) {
+      for (let attr of attributes) {
+        const bindPath = binding.getAttribute(attr);
+        if (!bindPath || bindPath.substr(0, 5) === ":root") {
+          continue;
+        }
+        if (bindPath === oldPrefix) {
+          binding.setAttribute(attr, newPrefix);
+        } else if (bindPath.startsWith(oldPrefix + ".")) {
+          binding.setAttribute(attr, newPrefix + bindPath.substr(oldPrefix.length));
+        }
+      }
+    }
+  }
+  function objectByTemplates(context) {
+    const attribute = this.options.attribute;
+    const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
+    const attrQuery = "[" + attributes.join("],[") + "]";
+    const keyAttribute = attribute + "-key";
+    const items = Array.from(context.element.querySelectorAll(":scope > [" + keyAttribute + "]"));
+    const usedItems = /* @__PURE__ */ new Set();
+    let cursor = 0;
+    context.list = context.value;
+    for (let key in context.list) {
+      context.index = key;
+      const value = context.list[key];
+      let item = nextUnusedItem(items, usedItems, cursor);
+      if (!item) {
+        context.element.appendChild(this.applyTemplate(context));
+        continue;
+      }
+      const newTemplate = this.findTemplate(context.templates, value);
+      let reusableItem;
+      if (item.getAttribute(keyAttribute) === key) {
+        reusableItem = item;
+      } else {
+        reusableItem = findItemByKey(items, usedItems, key, keyAttribute) || findReusableItem(items, usedItems, value, newTemplate, cursor);
+      }
+      if (reusableItem) {
+        if (newTemplate != reusableItem[DEP.TEMPLATE]) {
+          context.element.replaceChild(this.applyTemplate(context), reusableItem);
+        } else {
+          context.element.insertBefore(reusableItem, item);
+          updateItemKey(reusableItem, key, context.path, keyAttribute, attributes, attrQuery);
+          reusableItem[DEP.VALUE] = value;
+        }
+        usedItems.add(reusableItem);
+        if (reusableItem === item) {
+          cursor++;
+        }
+        continue;
+      }
+      context.element.insertBefore(this.applyTemplate(context), item);
+    }
+    for (let item of items) {
+      if (!usedItems.has(item)) {
+        item.remove();
+      }
+    }
+  }
+  function findItemByKey(items, usedItems, key, keyAttribute) {
+    const stringKey = "" + key;
+    for (let item of items) {
+      if (!usedItems.has(item) && item.getAttribute(keyAttribute) === stringKey) {
+        return item;
+      }
     }
   }
   function fieldByTemplates(context) {
@@ -1053,30 +1103,27 @@
     if (value === null) {
       value = "";
     }
-    if (typeof value != "object") {
-      if (el.multiple) {
-        if (Array.isArray(value)) {
-          for (let option of el.options) {
-            if (value.indexOf(option.value) === false) {
-              option.selected = false;
-            } else {
-              option.selected = true;
-            }
-          }
-        }
-      } else {
-        let option = el.options.find((o) => matchValue(o.value, value));
-        if (option) {
-          option.selected = true;
+    if (Array.isArray(value)) {
+      for (let option of el.options) {
+        option.selected = value.some((selected) => matchValue(option.value, selected));
+        if (option.selected) {
           option.setAttribute("selected", true);
+        } else {
+          option.removeAttribute("selected");
         }
+      }
+    } else if (typeof value != "object") {
+      let option = Array.from(el.options).find((o) => matchValue(o.value, value));
+      if (option) {
+        option.selected = true;
+        option.setAttribute("selected", true);
       }
     } else {
       if (value.options) {
         setSelectOptions(el, value.options);
       }
-      if (value.selected) {
-        select(Object.asssign({}, context, { value: value.selected }));
+      if (typeof value.selected !== "undefined") {
+        select(Object.assign({}, context, { value: value.selected }));
       }
       setProperties(el, value, "name", "id", "selectedIndex", "className");
     }
@@ -1172,6 +1219,9 @@
       }
     }
   }
+  function updateProperties(context, properties) {
+    trackDomField.call(this, context.element, properties, false);
+  }
   function getProperties(el, ...properties) {
     const result = {};
     for (const property of properties) {
@@ -1256,7 +1306,11 @@
         this.bindings.set(el, throttledEffect(() => {
           if (!el.isConnected) {
             untrack(el, this.getBindingPath(el));
-            destroy(this.bindings.get(el));
+            const binding = this.bindings.get(el);
+            if (binding) {
+              destroy(binding);
+              this.bindings.delete(el);
+            }
             return;
           }
           let context = {
@@ -1340,8 +1394,13 @@
       const bindings = this.options.container.querySelectorAll(
         ":is([" + this.options.attribute + "-field],[" + this.options.attribute + "-list],[" + this.options.attribute + "-map]):not(template)"
       );
-      if (bindings.length) {
-        applyBindings(bindings);
+      try {
+        if (bindings.length) {
+          applyBindings(bindings);
+        }
+      } catch (error) {
+        this.destroy();
+        throw error;
       }
     }
     /**
@@ -1394,6 +1453,7 @@
         clone2.children[0].setAttribute(attribute + "-key", index);
       }
       clone2.children[0][DEP.TEMPLATE] = template;
+      clone2.children[0][DEP.VALUE] = value;
       return clone2;
     }
     parseLinks(links) {
@@ -1442,7 +1502,7 @@
         let currentItem;
         if (path) {
           if (path.substr(0, 6) == ":root.") {
-            currentItem = getValueByPath(this.options.root, path);
+            currentItem = getValueByPath(this.options.root, path.substring(6));
           } else {
             currentItem = getValueByPath(value, path);
           }
@@ -1505,7 +1565,7 @@
   function untrack(el, path) {
     let list2 = tracking.get(path);
     if (list2) {
-      list2 = list2.filter((context) => context.element == el);
+      list2 = list2.filter((context) => context.element !== el);
       tracking.set(path, list2);
     }
   }
@@ -1643,7 +1703,7 @@
           if (!paging2.pageSize) {
             paging2.pageSize = 20;
           }
-          paging2.max = Math.ceil(this.state.data.length / paging2.pageSize);
+          paging2.max = Math.ceil(data.current.length / paging2.pageSize);
           paging2.page = Math.max(1, Math.min(paging2.max, paging2.page));
           const start = (paging2.page - 1) * paging2.pageSize;
           const end = start + paging2.pageSize;
@@ -1666,7 +1726,9 @@
       this.state.options[options.name] = options;
       return throttledEffect(() => {
         if (this.state.options[options.name].enabled) {
-          return data.current.filter(this.state.options[options.name].matches.bind(this));
+          const filterOptions = this.state.options[options.name];
+          const matches = filterOptions[DEP.XRAY]?.matches || filterOptions.matches;
+          return data.current.filter((row) => matches.call(this, row));
         }
         return data.current;
       }, 50);

@@ -133,11 +133,13 @@ const signalHandler = {
         return true
     },
     defineProperty: (target, property, descriptor) => {
-        if (typeof target[property] === 'undefined') {
+        const isNewProperty = typeof target[property] === 'undefined'
+        const result = Object.defineProperty(target, property, descriptor)
+        if (isNewProperty) {
             let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
             notifySet(receiver, makeContext(DEP.ITERATE, {}))
         }
-        return Object.defineProperty(target, property, descriptor)
+        return result
     },
     ownKeys: (target) => {
         let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
