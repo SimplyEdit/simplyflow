@@ -1,5 +1,7 @@
 import { closest } from './suggest.mjs'
 import path from './path.mjs'
+
+const commandState = new WeakMap()
 const COMMAND_OPTIONS = [
     'commands',
     'handlers',
@@ -38,10 +40,12 @@ class SimplyCommands {
             }
 		}
 
-        options.app.container.addEventListener('click', commandHandler)
-        options.app.container.addEventListener('submit', commandHandler)
-        options.app.container.addEventListener('change', commandHandler)
-        options.app.container.addEventListener('input', commandHandler)
+        const container = options.app.container
+        container.addEventListener('click', commandHandler)
+        container.addEventListener('submit', commandHandler)
+        container.addEventListener('change', commandHandler)
+        container.addEventListener('input', commandHandler)
+        commandState.set(this, { container, commandHandler })
 	}
 
     call(command, el, value, event) {
@@ -70,6 +74,19 @@ class SimplyCommands {
 
 export function commands(options={}) {
 	return new SimplyCommands(options)
+}
+
+export function destroyCommands(commandApi)
+{
+    const state = commandState.get(commandApi)
+    if (!state) {
+        return
+    }
+    state.container.removeEventListener('click', state.commandHandler)
+    state.container.removeEventListener('submit', state.commandHandler)
+    state.container.removeEventListener('change', state.commandHandler)
+    state.container.removeEventListener('input', state.commandHandler)
+    commandState.delete(commandApi)
 }
 
 function getCommand(evt, handlers, app) {

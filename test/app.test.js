@@ -678,4 +678,146 @@ describe('app integration details', () => {
     testApp.destroy()
   })
 
+
+  it('destroy stops command listeners', async () => {
+    document.body.innerHTML = `<div id="app"><button data-simply-command="count">Count</button></div>`
+    const container = document.getElementById('app')
+    let count = 0
+    const testApp = app({
+      container,
+      data: {},
+      commands: {
+        count() {
+          count++
+        }
+      }
+    })
+
+    await wait()
+    const button = container.querySelector('button')
+    button.click()
+    testApp.destroy()
+    button.click()
+
+    expect(count).toBe(1)
+  })
+
+  it('destroy stops shortcut and accesskey listeners', async () => {
+    document.body.innerHTML = `<div id="app">
+      <input>
+      <button data-simply-accesskey="Control+k">Open</button>
+    </div>`
+    const container = document.getElementById('app')
+    let shortcuts = 0
+    let accesskeyClicks = 0
+    container.querySelector('button').addEventListener('click', () => {
+      accesskeyClicks++
+    })
+
+    const testApp = app({
+      container,
+      data: {},
+      shortcuts: {
+        'Control+s'() {
+          shortcuts++
+        }
+      }
+    })
+
+    await wait()
+    const input = container.querySelector('input')
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 's',
+      ctrlKey: true,
+      keyCode: 83
+    }))
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'k',
+      ctrlKey: true,
+      keyCode: 75
+    }))
+    testApp.destroy()
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 's',
+      ctrlKey: true,
+      keyCode: 83
+    }))
+    input.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'k',
+      ctrlKey: true,
+      keyCode: 75
+    }))
+
+    expect(shortcuts).toBe(1)
+    expect(accesskeyClicks).toBe(1)
+  })
+
+  it('destroy stops route event listeners', async () => {
+    document.body.innerHTML = `<div id="app"></div>`
+    const container = document.getElementById('app')
+    const hits = []
+    const testApp = app({
+      container,
+      data: {},
+      actions: {
+        show({ id }) {
+          hits.push(id)
+        }
+      },
+      routes: {
+        '/contacts/:id': 'show'
+      }
+    })
+
+    await wait()
+    history.pushState({}, '', '/contacts/ada')
+    globalThis.dispatchEvent(new Event('popstate'))
+    testApp.destroy()
+    history.pushState({}, '', '/contacts/grace')
+    globalThis.dispatchEvent(new Event('popstate'))
+
+    expect(hits).toEqual(['ada'])
+  })
+
+  it('does not initialize routes after an async start if the app was destroyed first', async () => {
+    document.body.innerHTML = `<div id="app"></div>`
+    const container = document.getElementById('app')
+    let resolveStart
+    const started = new Promise(resolve => {
+      resolveStart = resolve
+    })
+    const hits = []
+    const testApp = app({
+      container,
+      data: {},
+      start() {
+        return started
+      },
+      actions: {
+        show({ id }) {
+          hits.push(id)
+        }
+      },
+      routes: {
+        '/contacts/:id': 'show'
+      }
+    })
+
+    testApp.destroy()
+    resolveStart()
+    await wait()
+    history.pushState({}, '', '/contacts/ada')
+    globalThis.dispatchEvent(new Event('popstate'))
+
+    expect(hits).toEqual([])
+  })
+
 })

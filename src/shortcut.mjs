@@ -1,3 +1,6 @@
+const shortcutState = new WeakMap()
+const accesskeyState = new WeakMap()
+
 const KEY = Object.freeze({
 	Compose: 229,
 	Control: 17,
@@ -61,7 +64,9 @@ class SimplyShortcuts
 			}
 		}
 
-		options.app.container.addEventListener('keydown', keyHandler)
+		const container = options.app.container
+		container.addEventListener('keydown', keyHandler)
+		shortcutState.set(this, { container, keyHandler })
 	}
 }
 
@@ -99,9 +104,19 @@ export function shortcuts(options={})
 	return new SimplyShortcuts(options)
 }
 
-export function accesskeys(app) {
-	const container = app.container || document.body
-	container.addEventListener('keydown', (e) => {
+export function destroyShortcuts(shortcutApi)
+{
+	const state = shortcutState.get(shortcutApi)
+	if (!state) {
+		return
+	}
+	state.container.removeEventListener('keydown', state.keyHandler)
+	shortcutState.delete(shortcutApi)
+}
+
+export function accesskeys(options={}) {
+	const container = options.container || options.app?.container || document.body
+	const keyHandler = (e) => {
 		const separators = ["+", "-"]
 		for (const separator of separators) {
 			const keyString = getKeyString(e, separator)
@@ -113,5 +128,19 @@ export function accesskeys(app) {
 				})
 			}
 		}
-	})
+	}
+	container.addEventListener('keydown', keyHandler)
+	const controller = {}
+	accesskeyState.set(controller, { container, keyHandler })
+	return controller
+}
+
+export function destroyAccesskeys(accesskeyApi)
+{
+	const state = accesskeyState.get(accesskeyApi)
+	if (!state) {
+		return
+	}
+	state.container.removeEventListener('keydown', state.keyHandler)
+	accesskeyState.delete(accesskeyApi)
 }

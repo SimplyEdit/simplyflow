@@ -2511,10 +2511,11 @@
       return params;
     }
     handleEvents() {
-      globalThis.addEventListener("popstate", () => {
+      this.removeEvents();
+      const popstateHandler = () => {
         this.match();
-      });
-      this.app.container.addEventListener("click", (evt) => {
+      };
+      const clickHandler = (evt) => {
         if (evt.ctrlKey) {
           return;
         }
@@ -2547,7 +2548,25 @@
             }
           }
         }
-      });
+      };
+      globalThis.addEventListener("popstate", popstateHandler);
+      this.app.container.addEventListener("click", clickHandler);
+      this.eventHandlers = {
+        container: this.app.container,
+        popstateHandler,
+        clickHandler
+      };
+    }
+    removeEvents() {
+      if (!this.eventHandlers) {
+        return;
+      }
+      globalThis.removeEventListener("popstate", this.eventHandlers.popstateHandler);
+      this.eventHandlers.container.removeEventListener("click", this.eventHandlers.clickHandler);
+      this.eventHandlers = void 0;
+    }
+    destroy() {
+      this.removeEvents();
     }
     goto(path2) {
       history.pushState({}, "", getURL(path2, this.baseURL));
@@ -2792,6 +2811,7 @@
   var path_default = path;
 
   // src/command.mjs
+  var commandState = /* @__PURE__ */ new WeakMap();
   var COMMAND_OPTIONS = [
     "commands",
     "handlers",
@@ -2827,10 +2847,12 @@
           return false;
         }
       };
-      options.app.container.addEventListener("click", commandHandler);
-      options.app.container.addEventListener("submit", commandHandler);
-      options.app.container.addEventListener("change", commandHandler);
-      options.app.container.addEventListener("input", commandHandler);
+      const container = options.app.container;
+      container.addEventListener("click", commandHandler);
+      container.addEventListener("submit", commandHandler);
+      container.addEventListener("change", commandHandler);
+      container.addEventListener("input", commandHandler);
+      commandState.set(this, { container, commandHandler });
     }
     call(command, el, value, event) {
       if (!this[command]) {
@@ -2854,6 +2876,17 @@
   };
   function commands(options = {}) {
     return new SimplyCommands(options);
+  }
+  function destroyCommands(commandApi) {
+    const state = commandState.get(commandApi);
+    if (!state) {
+      return;
+    }
+    state.container.removeEventListener("click", state.commandHandler);
+    state.container.removeEventListener("submit", state.commandHandler);
+    state.container.removeEventListener("change", state.commandHandler);
+    state.container.removeEventListener("input", state.commandHandler);
+    commandState.delete(commandApi);
   }
   function getCommand(evt, handlers, app2) {
     var el = evt.target.closest("[data-simply-command]");
@@ -3019,6 +3052,8 @@
   }
 
   // src/shortcut.mjs
+  var shortcutState = /* @__PURE__ */ new WeakMap();
+  var accesskeyState = /* @__PURE__ */ new WeakMap();
   var KEY = Object.freeze({
     Compose: 229,
     Control: 17,
@@ -3075,7 +3110,9 @@
           }
         }
       };
-      options.app.container.addEventListener("keydown", keyHandler);
+      const container = options.app.container;
+      container.addEventListener("keydown", keyHandler);
+      shortcutState.set(this, { container, keyHandler });
     }
   };
   function getKeyString(e, separator = "+") {
@@ -3107,9 +3144,17 @@
   function shortcuts(options = {}) {
     return new SimplyShortcuts(options);
   }
-  function accesskeys(app2) {
-    const container = app2.container || document.body;
-    container.addEventListener("keydown", (e) => {
+  function destroyShortcuts(shortcutApi) {
+    const state = shortcutState.get(shortcutApi);
+    if (!state) {
+      return;
+    }
+    state.container.removeEventListener("keydown", state.keyHandler);
+    shortcutState.delete(shortcutApi);
+  }
+  function accesskeys(options = {}) {
+    const container = options.container || options.app?.container || document.body;
+    const keyHandler = (e) => {
       const separators = ["+", "-"];
       for (const separator of separators) {
         const keyString = getKeyString(e, separator);
@@ -3121,7 +3166,19 @@
           });
         }
       }
-    });
+    };
+    container.addEventListener("keydown", keyHandler);
+    const controller = {};
+    accesskeyState.set(controller, { container, keyHandler });
+    return controller;
+  }
+  function destroyAccesskeys(accesskeyApi) {
+    const state = accesskeyState.get(accesskeyApi);
+    if (!state) {
+      return;
+    }
+    state.container.removeEventListener("keydown", state.keyHandler);
+    accesskeyState.delete(accesskeyApi);
   }
 
   // src/behavior.mjs
@@ -3456,6 +3513,7 @@
         options = mergedOptions;
       }
       this.container = options.container || document.body;
+      this.destroyed = false;
       this.data = signal(options.data || {});
       this.start = options.start;
       this.onError = options.onError;
@@ -3510,7 +3568,7 @@
         attribute: "data-simply"
       });
       this.includes = includes({ container: this.container });
-      accesskeys({ app: this });
+      this.accesskeys = accesskeys({ app: this, container: this.container });
     }
     get app() {
       return this;
@@ -3519,9 +3577,24 @@
       return findAttribute.apply(this, params);
     }
     destroy() {
+      this.destroyed = true;
       if (this.binding) {
         this.binding.destroy();
         this.binding = void 0;
+      }
+      if (this.commands) {
+        destroyCommands(this.commands);
+      }
+      if (this.shortcuts) {
+        destroyShortcuts(this.shortcuts);
+      }
+      if (this.accesskeys) {
+        destroyAccesskeys(this.accesskeys);
+        this.accesskeys = void 0;
+      }
+      if (this.routes) {
+        this.routes.destroy();
+        this.routes = void 0;
       }
       if (this.behaviors) {
         this.behaviors.destroy();
@@ -3572,12 +3645,18 @@
     }
   }
   function initRoutes(app2) {
+    if (app2.destroyed) {
+      return;
+    }
     if (app2.routes) {
       if (app2.baseURL) {
         app2.routes.init({ baseURL: app2.baseURL });
       }
       app2.routes.handleEvents();
       globalThis.setTimeout(() => {
+        if (app2.destroyed || !app2.routes) {
+          return;
+        }
         if (app2.routes.has(globalThis.location?.hash)) {
           app2.routes.match(globalThis.location.hash);
         } else {

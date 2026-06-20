@@ -320,4 +320,4 @@ Example list:
 - `app.includes` - include controller for the app container.
 - `app.binding` - the underlying bind instance.
 
-Use `app.destroy()` to destroy the underlying binding, active behaviors and the app include observer.
+Use `app.destroy()` to stop the app: it destroys the underlying binding, command listeners, shortcuts, accesskeys, route listeners, active behaviors and the app include observer.

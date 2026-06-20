@@ -110,10 +110,11 @@ export class SimplyRoute
 
     handleEvents()
     {
-        globalThis.addEventListener('popstate', () => {
+        this.removeEvents()
+        const popstateHandler = () => {
             this.match()
-        })
-        this.app.container.addEventListener('click', (evt) => {
+        }
+        const clickHandler = (evt) => {
             if (evt.ctrlKey) {
                 return;
             }
@@ -152,7 +153,29 @@ export class SimplyRoute
                     }
                 }
             }
-        })
+        }
+        globalThis.addEventListener('popstate', popstateHandler)
+        this.app.container.addEventListener('click', clickHandler)
+        this.eventHandlers = {
+            container: this.app.container,
+            popstateHandler,
+            clickHandler
+        }
+    }
+
+    removeEvents()
+    {
+        if (!this.eventHandlers) {
+            return
+        }
+        globalThis.removeEventListener('popstate', this.eventHandlers.popstateHandler)
+        this.eventHandlers.container.removeEventListener('click', this.eventHandlers.clickHandler)
+        this.eventHandlers = undefined
+    }
+
+    destroy()
+    {
+        this.removeEvents()
     }
 
     goto(path)

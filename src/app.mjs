@@ -1,9 +1,9 @@
 import { bind } from './bind.mjs'
 import { signal } from './state.mjs'
 import { routes } from './route.mjs'
-import { commands } from './command.mjs'
+import { commands, destroyCommands } from './command.mjs'
 import { actions } from './action.mjs'
-import { shortcuts, accesskeys } from './shortcut.mjs'
+import { shortcuts, destroyShortcuts, accesskeys, destroyAccesskeys } from './shortcut.mjs'
 import { behaviors } from './behavior.mjs'
 import { includes } from './include.mjs'
 import { html, css } from './highlight.mjs'
@@ -40,6 +40,7 @@ class SimplyApp
 
 
         this.container = options.container || document.body
+        this.destroyed = false
         this.data = signal(options.data || {})
         this.start = options.start
         this.onError = options.onError
@@ -102,7 +103,7 @@ class SimplyApp
 
         this.includes = includes({ container: this.container })
 
-        accesskeys({ app: this })
+        this.accesskeys = accesskeys({ app: this, container: this.container })
     }
 
     get app()
@@ -116,9 +117,24 @@ class SimplyApp
 
     destroy()
     {
+        this.destroyed = true
         if (this.binding) {
             this.binding.destroy()
             this.binding = undefined
+        }
+        if (this.commands) {
+            destroyCommands(this.commands)
+        }
+        if (this.shortcuts) {
+            destroyShortcuts(this.shortcuts)
+        }
+        if (this.accesskeys) {
+            destroyAccesskeys(this.accesskeys)
+            this.accesskeys = undefined
+        }
+        if (this.routes) {
+            this.routes.destroy()
+            this.routes = undefined
         }
         if (this.behaviors) {
             this.behaviors.destroy()
@@ -177,12 +193,18 @@ function warnLikelyOptionTypo(key)
 }
 
 function initRoutes(app) {
+    if (app.destroyed) {
+        return
+    }
     if (app.routes) {
         if (app.baseURL) {
             app.routes.init({ baseURL: app.baseURL })
         }
         app.routes.handleEvents()
         globalThis.setTimeout(() => {
+            if (app.destroyed || !app.routes) {
+                return
+            }
             if (app.routes.has(globalThis.location?.hash)) {
                 app.routes.match(globalThis.location.hash)
             } else {
