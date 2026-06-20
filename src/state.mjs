@@ -582,7 +582,7 @@ function clearContext(listener) {
  */
 export function notifyGet(self, property) {
     const currentCompute = computeStack[computeStack.length - 1]
-    if (!currentCompute) {
+    if (!currentCompute || currentCompute.skipDependency?.(self, property)) {
         return
     }
 
@@ -698,10 +698,14 @@ function runListeners(listeners, signal, context) {
 
     for (const listener of Array.from(listeners)) {
         if (listener !== currentEffect && listener?.needsUpdate) {
-            if (signal && tracing && tracers.length) {
-                callTracers('set', signal, context, listener)
+            if (listener.scheduleClock) {
+                listener.scheduleClock()
+            } else {
+                if (signal && tracing && tracers.length) {
+                    callTracers('set', signal, context, listener)
+                }
+                listener()
             }
-            listener()
         }
         clearContext(listener)
     }
@@ -798,7 +802,22 @@ export function batch(fn) {
 function runBatchedListeners() {
     const listeners = batchedListeners
     batchedListeners = new Set()
-    runListeners(listeners)
+
+    // Batched clocked dependency changes must be marked before clock ticks are
+    // flushed. Otherwise batch(() => { clock.time++; source.value++ }) would see
+    // the tick first and leave the source change pending until the next tick.
+    const clocked = new Set()
+    const ready = new Set()
+    for (const listener of listeners) {
+        if (listener.scheduleClock) {
+            clocked.add(listener)
+        } else {
+            ready.add(listener)
+        }
+    }
+
+    runListeners(clocked)
+    runListeners(ready)
 }
 
 /**
@@ -866,6 +885,66 @@ export function throttledEffect(fn, throttleTime) {
     return connectedSignal
 }
 
+const clockQueues = new WeakMap()
+
+function readClockTime(clock) {
+    return raw(clock).time
+}
+
+function getClockQueue(clock) {
+    if (!clockQueues.has(clock)) {
+        const queue = {
+            clock,
+            effects: new Set(),
+            pending: new Set(),
+            time: readClockTime(clock)
+        }
+
+        // A clock has exactly one listener on `.time`. Ordinary dependency
+        // changes add clock effects to `pending`; the shared tick listener only
+        // flushes that pending set after time increases. This avoids waking every
+        // clockEffect on every clock tick just to discover most of them have no
+        // pending changes.
+        queue.tick = function tickClockEffects() {
+            const time = readClockTime(clock)
+            if (time <= queue.time) {
+                return
+            }
+
+            queue.time = time
+            const pending = Array.from(queue.pending)
+            queue.pending.clear()
+
+            for (const compute of pending) {
+                compute.clockPending = false
+                if (queue.effects.has(compute)) {
+                    compute()
+                }
+            }
+        }
+        queue.tick.effectFunction = queue.tick
+        queue.tick.effectType = clockEffect
+        setListeners(clock, 'time', queue.tick)
+        clockQueues.set(clock, queue)
+    }
+
+    return clockQueues.get(clock)
+}
+
+function detachClockEffect(compute) {
+    const queue = compute.clockQueue
+    if (!queue) {
+        return
+    }
+
+    queue.pending.delete(compute)
+    queue.effects.delete(compute)
+    if (!queue.effects.size) {
+        clearListeners(queue.tick)
+        clockQueues.delete(queue.clock)
+    }
+}
+
 /**
  * Tracks fn like an effect, but recomputes only after clock.time advances.
  *
@@ -877,39 +956,41 @@ export function throttledEffect(fn, throttleTime) {
  */
 export function clockEffect(fn, clock) {
     assertFunction(fn, 'clockEffect')
-    if (!clock || typeof clock !== 'object' || typeof clock.time !== 'number') {
+    if (!clock || typeof clock !== 'object' || typeof raw(clock).time !== 'number') {
         throw new TypeError('simplyflow/state: clockEffect() expects a clock object with a numeric .time property')
     }
 
+    const clockSignal = isSignal(clock) ? clock : signal(raw(clock))
     const connectedSignal = effectSignal(fn)
-    let lastTick = -1
-    let hasChanged = true
+    const queue = getClockQueue(clockSignal)
 
     const compute = function computeEffect() {
-        if (lastTick < clock.time) {
-            if (hasChanged) {
-                clearListeners(compute)
-                compute.effectFunction = fn
-                compute.effectType = clockEffect
-                computeStack.push(compute)
-                lastTick = clock.time
+        clearListeners(compute)
+        compute.effectFunction = fn
+        compute.effectType = clockEffect
+        computeStack.push(compute)
 
-                let result
-                try {
-                    result = fn(compute, computeStack)
-                } finally {
-                    computeStack.pop()
-                    setEffectResult(connectedSignal, result)
-                    hasChanged = false
-                }
-            } else {
-                lastTick = clock.time
-            }
-        } else {
-            hasChanged = true
+        let result
+        try {
+            result = fn(compute, computeStack)
+        } finally {
+            computeStack.pop()
+            setEffectResult(connectedSignal, result)
         }
     }
+
     compute.fn = fn
+    compute.clockQueue = queue
+    compute.skipDependency = (self, property) => self === clockSignal && property === 'time'
+    compute.scheduleClock = () => {
+        if (!compute.clockPending) {
+            compute.clockPending = true
+            queue.pending.add(compute)
+        }
+    }
+    compute.destroy = () => detachClockEffect(compute)
+
+    queue.effects.add(compute)
     effectMap.set(connectedSignal, compute)
 
     compute()

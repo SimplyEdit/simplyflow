@@ -232,6 +232,58 @@ describe('state API contract coverage', () => {
     expect(result.current).toBe(3)
   })
 
+  it('keeps one scheduler listener per clock and runs only pending clock effects on tick', () => {
+    const clock = signal({ time: 0 })
+    const left = signal({ value: 1 })
+    const right = signal({ value: 10 })
+    let leftRuns = 0
+    let rightRuns = 0
+
+    const leftResult = clockEffect(() => {
+      leftRuns++
+      return `${clock.time}:${left.value}`
+    }, clock)
+    const rightResult = clockEffect(() => {
+      rightRuns++
+      return `${clock.time}:${right.value}`
+    }, clock)
+
+    expect(leftResult.current).toBe('0:1')
+    expect(rightResult.current).toBe('0:10')
+    expect(leftRuns).toBe(1)
+    expect(rightRuns).toBe(1)
+    expect(trace(clock, 'time')).toHaveLength(1)
+
+    clock.time++
+    expect(leftResult.current).toBe('0:1')
+    expect(rightResult.current).toBe('0:10')
+    expect(leftRuns).toBe(1)
+    expect(rightRuns).toBe(1)
+
+    left.value = 2
+    left.value = 3
+    expect(leftResult.current).toBe('0:1')
+
+    clock.time++
+    expect(leftResult.current).toBe('2:3')
+    expect(rightResult.current).toBe('0:10')
+    expect(leftRuns).toBe(2)
+    expect(rightRuns).toBe(1)
+  })
+
+  it('runs batched clock effects when a source changes in the same batch as the clock tick', () => {
+    const clock = signal({ time: 0 })
+    const state = signal({ value: 1 })
+    const result = clockEffect(() => state.value, clock)
+
+    batch(() => {
+      clock.time++
+      state.value = 2
+    })
+
+    expect(result.current).toBe(2)
+  })
+
   it('supports asynchronous throttled and clock effects', async () => {
     jest.useFakeTimers()
     try {
