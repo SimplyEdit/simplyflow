@@ -604,6 +604,84 @@ describe('state API oversight fixes', () => {
     expect(result.current).toBe('second')
   })
 
+  it('does not rerun Map effects for no-op writes', () => {
+    const map = signal(new Map([
+      ['a', 1],
+      ['nan', NaN]
+    ]))
+    let entryRuns = 0
+    let iterationRuns = 0
+    const entry = effect(() => {
+      entryRuns++
+      return map.get('a')
+    })
+    const keys = effect(() => {
+      iterationRuns++
+      return [...map.keys()].join(',')
+    })
+
+    expect(entry.current).toBe(1)
+    expect(keys.current).toBe('a,nan')
+    expect(entryRuns).toBe(1)
+    expect(iterationRuns).toBe(1)
+
+    map.set('a', 1)
+    map.set('nan', NaN)
+    map.delete('missing')
+
+    expect(entry.current).toBe(1)
+    expect(keys.current).toBe('a,nan')
+    expect(entryRuns).toBe(1)
+    expect(iterationRuns).toBe(1)
+
+    map.clear()
+    expect(entry.current).toBeUndefined()
+    expect(keys.current).toBe('')
+    expect(entryRuns).toBe(2)
+    expect(iterationRuns).toBe(2)
+
+    map.clear()
+    expect(entryRuns).toBe(2)
+    expect(iterationRuns).toBe(2)
+  })
+
+  it('does not rerun Set effects for no-op writes', () => {
+    const set = signal(new Set(['a']))
+    let hasRuns = 0
+    let iterationRuns = 0
+    const hasA = effect(() => {
+      hasRuns++
+      return set.has('a')
+    })
+    const values = effect(() => {
+      iterationRuns++
+      return [...set.values()].join(',')
+    })
+
+    expect(hasA.current).toBe(true)
+    expect(values.current).toBe('a')
+    expect(hasRuns).toBe(1)
+    expect(iterationRuns).toBe(1)
+
+    set.add('a')
+    set.delete('missing')
+
+    expect(hasA.current).toBe(true)
+    expect(values.current).toBe('a')
+    expect(hasRuns).toBe(1)
+    expect(iterationRuns).toBe(1)
+
+    set.clear()
+    expect(hasA.current).toBe(false)
+    expect(values.current).toBe('')
+    expect(hasRuns).toBe(2)
+    expect(iterationRuns).toBe(2)
+
+    set.clear()
+    expect(hasRuns).toBe(2)
+    expect(iterationRuns).toBe(2)
+  })
+
   it('leaves batch mode when an async batch rejects', async () => {
     const state = signal({ value: 1 })
     const result = effect(() => state.value)

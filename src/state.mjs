@@ -125,6 +125,58 @@ function wrapArrayMethod(target, property, receiver, value) {
     }
 }
 
+function addMapWriteChanges(context, target, property, args, oldSize) {
+    if (property === 'set') {
+        const [key, nextValue] = args
+        const hadKey = target.has(key)
+        const oldValue = target.get(key)
+
+        return () => {
+            if (!hadKey || !Object.is(oldValue, nextValue)) {
+                context.set(key, { was: oldValue, now: nextValue })
+                // Existing value changes affect values(), entries(), forEach()
+                // and direct iteration. The current dependency model uses one
+                // iteration token, so keys() listeners are also conservatively
+                // notified until Map iteration dependencies are split further.
+                context.set(DEP.ITERATE, {})
+            }
+            if (!hadKey) {
+                context.set(DEP.SIZE, { was: oldSize, now: target.size })
+            }
+        }
+    }
+
+    if (property === 'delete') {
+        const [key] = args
+        const hadKey = target.has(key)
+        const oldValue = target.get(key)
+
+        return () => {
+            if (hadKey) {
+                context.set(key, { delete: true, was: oldValue, now: undefined })
+                context.set(DEP.SIZE, { was: oldSize, now: target.size })
+                context.set(DEP.ITERATE, {})
+            }
+        }
+    }
+
+    if (property === 'clear') {
+        const oldEntries = oldSize ? Array.from(target.entries()) : []
+
+        return () => {
+            if (oldEntries.length) {
+                for (const [key, oldValue] of oldEntries) {
+                    context.set(key, { delete: true, was: oldValue, now: undefined })
+                }
+                context.set(DEP.SIZE, { was: oldSize, now: target.size })
+                context.set(DEP.ITERATE, {})
+            }
+        }
+    }
+
+    return () => {}
+}
+
 function wrapMapMethod(target, property, receiver, value) {
     return (...args) => {
         if (MAP_READS_KEY.has(property)) {
@@ -135,47 +187,55 @@ function wrapMapMethod(target, property, receiver, value) {
         }
 
         const oldSize = target.size
-        const clearedEntries = property === 'clear' ? Array.from(target.entries()) : []
-        const result = value.apply(target, args)
         const context = new Map()
+        const addChanges = MAP_WRITES.has(property)
+            ? addMapWriteChanges(context, target, property, args, oldSize)
+            : () => {}
+        const result = value.apply(target, args)
 
-        if (property === 'set') {
-            context.set(args[0], { now: args[1] })
-        }
-        if (property === 'delete') {
-            context.set(args[0], { delete: true })
-        }
-        if (property === 'clear') {
-            for (const [key, oldValue] of clearedEntries) {
-                context.set(key, { delete: true, was: oldValue, now: undefined })
-            }
-        }
-        if (oldSize !== target.size) {
-            context.set(DEP.SIZE, { was: oldSize, now: target.size })
-        }
-        if (MAP_WRITES.has(property) || oldSize !== target.size) {
-            context.set(DEP.ITERATE, {})
-        }
-
+        addChanges()
         notifyContext(receiver, context)
         return result
+    }
+}
+
+function addSetWriteChanges(context, target, property, args, oldSize) {
+    const [value] = args
+    const hadValue = property === 'add' || property === 'delete'
+        ? target.has(value)
+        : false
+
+    return () => {
+        const changed = property === 'clear'
+            ? oldSize > 0
+            : target.size !== oldSize || (property === 'delete' && hadValue)
+
+        if (!changed) {
+            return
+        }
+
+        context.set(DEP.SIZE, { was: oldSize, now: target.size })
+
+        // Set.has(value) currently tracks at method level rather than per value.
+        // Notify all Set read methods after real writes so this remains correct,
+        // but suppress add(existing), delete(missing), and clear(empty).
+        for (const prop of Reflect.ownKeys(SET_ITERATION_PROPERTIES)) {
+            context.set(prop, {})
+        }
     }
 }
 
 function wrapSetMethod(target, property, receiver, value) {
     return (...args) => {
         const oldSize = target.size
+        const context = new Map()
+        const addChanges = SET_WRITES.has(property)
+            ? addSetWriteChanges(context, target, property, args, oldSize)
+            : () => {}
         const result = value.apply(target, args)
 
-        if (oldSize !== target.size) {
-            notifySet(receiver, makeContext(DEP.SIZE, { was: oldSize, now: target.size }))
-        }
-
-        // Set.has(value) currently tracks at method level rather than per value.
-        // Notify all Set read methods after writes so this remains correct.
-        if (SET_WRITES.has(property)) {
-            notifySet(receiver, makeContext(SET_ITERATION_PROPERTIES))
-        }
+        addChanges()
+        notifyContext(receiver, context)
         return result
     }
 }
