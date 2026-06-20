@@ -40,12 +40,12 @@ const domSignalHandler = {
         if (receiver) {
             notifyGet(receiver, property)
         }
-        return Object.hasOwn(target, property)
+        return Reflect.has(target, property)
     },
     ownKeys: (target) => {
         let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
         if (receiver) {
-            notifyGet(receiver, iterate)
+            notifyGet(receiver, DEP.ITERATE)
         }
         return Reflect.ownKeys(target)
     }
