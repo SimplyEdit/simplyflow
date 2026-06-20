@@ -333,4 +333,4 @@ actions: {
 
 That means your actions can stay simple. They do not need to know much about URLs. They just receive the values they need.
 
-Next: add keyboard shortcuts for common dragon-keeper tasks.
+Next: [add keyboard shortcuts for common dragon-keeper tasks.](./09-keyboard-shortcuts.md)
