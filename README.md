@@ -1,61 +1,89 @@
-# Introduction
+# SimplyFlow
 
-SimplyFlow implements flow based programming in javascript using signals and effects. It als implements reactive databinding.
+SimplyFlow is an experimental browser library for building small reactive web applications with ordinary HTML and ordinary JavaScript data.
 
-SimplyFlow is intended to be used with [SimplyView](https://github.com/simplyedit/simplyview/)
-, but can also be used standalone. SimplyFlow is experimental and, once vetted,
-will be integrated into SimplyView.
+It now includes the former SimplyView app layer. The intended beginner-facing API is:
+
+```javascript
+import { app } from 'simplyflow/src/flow.mjs'
+
+const counter = app({
+  container: document.getElementById('counter'),
+
+  data: {
+    count: 0
+  },
+
+  commands: {
+    add1() {
+      this.data.count++
+    }
+  }
+})
+```
+
+```html
+<div id="counter">
+  <button data-simply-command="add1">+</button>
+  <span data-simply-field="count"></span>
+</div>
+```
+
+The page updates automatically whenever `app.data` changes.
 
 ## Install
-
 
 ```shell
 npm install simplyflow
 ```
 
-or using GIT
+or using Git:
 
 ```shell
 git clone https://github.com/SimplyEdit/simplyflow.git
 ```
 
-## Usage
+## Browser bundle
 
-Import the functions you need like this:
-```javascript
-	import {signal, effect, batch} from 'simplyflow/src/state.mjs'
-	import {bind} from 'simplyflow/src/bind.mjs'
-	import {model, paging, sort, filter, columns} from 'simplyflow/src/model.mjs'
-
-	let mySignal = signal({value:1})
-	bind({
-		root: mySignal
-	})
-	let myModel = model({
-		data: mySignal
-	})
-```
-
-Or include the entire set of code from a cdn like this:
-```
+```html
 <script src="https://cdn.jsdelivr.net/npm/simplyflow/dist/simply.flow.js"></script>
 ```
 
-In the latter case you can access the functions like this:
+Then use the global `simply` object:
+
 ```javascript
-	let mySignal = simply.state.signal({value: 1})
-	simply.bind({
-		root: mySignal
-	})
-	let myModel = simply.flow.model({
-		data: mySignal
-	})
+const counter = simply.app({
+  data: { count: 0 },
+  commands: {
+    add1() {
+      this.data.count++
+    }
+  }
+})
 ```
 
-Read more about the bundled libraries here:
-- [simply.bind](docs/bind.md)
-- [simply.model](docs/model.md)
-- [simply.state](docs/state.md)
+## Lower-level APIs
+
+The app API is built on smaller modules that can also be used directly:
+
+```javascript
+import { signal, effect, batch } from 'simplyflow/src/state.mjs'
+import { bind } from 'simplyflow/src/bind.mjs'
+import { model, paging, sort, filter, columns } from 'simplyflow/src/model.mjs'
+
+const data = signal({ title: 'Hello' })
+bind({ root: data })
+```
+
+## Documentation
+
+- [App API](docs/app.md)
+- [Binding API](docs/bind.md)
+- [Model API](docs/model.md)
+- [State API](docs/state.md)
+- [Commands](docs/command.md)
+- [Actions](docs/action.md)
+- [Routes](docs/route.md)
 
 Or check the [examples](examples/) for more information.
 

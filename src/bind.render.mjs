@@ -377,7 +377,13 @@ export function input(context)
     const el  = context.element
     let value = context.value
 
-    element.call(this, context)
+    // Inputs display their bound primitive in `value`, not `innerHTML`.
+    // Calling element() here would also enable two-way tracking on
+    // innerHTML, which would overwrite text input data with an empty string.
+    if (value && typeof value === 'object') {
+        setProperties(el, value, 'title', 'id', 'className', 'value', 'checked')
+        value = value.value
+    }
     if (typeof value == 'undefined') {
         value = ''
     }
@@ -389,6 +395,10 @@ export function input(context)
         }
     } else if (!matchValue(el.value, value)) {
         el.value = ''+value
+    }
+
+    if (this.options.twoway) {
+        trackDomField.call(this, context.element, ['value'], true, 'value')
     }
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "simplyflow",
   "version": "0.9.0",
-  "description": "Flow based programming in javascript, with signals and effects",
+  "description": "Reactive browser applications with signals, effects, data binding and an app layer",
   "main": "src/flow.mjs",
   "type": "module",
   "directories": {
@@ -43,7 +43,9 @@
   "files": [
     "README.md",
     "dist/",
-    "src/"
+    "src/",
+    "docs/",
+    "examples/"
   ],
   "jest": {
     "transform": {},

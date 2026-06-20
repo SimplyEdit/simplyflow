@@ -25,6 +25,14 @@ The above page will display a page with a H1 element with 'The real title' as co
 
 The databinding layer implemented here parses the DOM to see if any of the `data-flow-field`,`data-flow-list` or `data-flow-map` attributes are used. If so, it will add an effect for each that listens for any changes. When the referenced data is changed, the effect is called, and that updates the DOM, but only for the data that is changed. This is called fine-grained updates.
 
+
+## Relation to `app()`
+
+The beginner-facing `app()` API uses this binding layer internally with
+`attribute: 'data-simply'`, `root: app.data` and `container: app.container`.
+Use the lower-level `bind()` API directly when you want a custom binding setup
+or a different attribute prefix.
+
 ## Options
 
 - root

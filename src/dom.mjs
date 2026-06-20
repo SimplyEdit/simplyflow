@@ -202,7 +202,7 @@ export function trackDomList(element)
  * @param HTMLElement element - the element to track
  * @returns Proxy
  */
-export function trackDomField(element, props, valueIsString) {
+export function trackDomField(element, props, valueIsString, stringProperty = 'innerHTML') {
     if (domSignals.has(element)) {
         return
     }
@@ -215,15 +215,40 @@ export function trackDomField(element, props, valueIsString) {
     //TODO: run reverse transformers (extract)
     batch(() => { // avoids cyclical dependencies - check why
         throttledEffect(() => {
-            let updateValue = s.innerHTML //FIXME: incorrect: in an anchor this could be s.href - use extract here
+            let updateValue = s[stringProperty]
             if (!valueIsString) {
                 updateValue = getProperties(s, ...props)
             }
             untracked(() => { // don't track changes in data, only in the dom
+                // Rendering a primitive value into the DOM usually turns it into
+                // a string. Do not write that string straight back to the data
+                // when it still represents the current value. This keeps numbers
+                // and booleans stable after one-way rendering in a two-way bind.
+                const currentValue = getValueByPath(this.options.root, path)
+                if (valueIsString && !Object.is(currentValue, updateValue) && String(currentValue) === updateValue) {
+                    return
+                }
                 // don't trigger this effect when the data changes (root.path)
                 setValueByPath(this.options.root, path, updateValue)
             })
         }, 50)
     })
     return s
+}
+
+
+/**
+ * Finds the closest ancestor, including `el` itself, that has `attr` and
+ * returns that attribute value.
+ *
+ * This helper is used by the app/command layer and lives in this module so
+ * SimplyFlow has one DOM utility module after merging SimplyView.
+ *
+ * @param {Element} el - Element to start searching from.
+ * @param {string} attr - Attribute name to find.
+ * @returns {string|undefined} The attribute value, or undefined if not found.
+ */
+export function findAttribute(el, attr) {
+    return el.closest('['+attr+']')
+        ?.getAttribute(attr)
 }
