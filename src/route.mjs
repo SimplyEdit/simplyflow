@@ -177,7 +177,7 @@ export class SimplyRoute
     addListener(action, route, callback)
     {
         if (['goto','match','call','finish'].indexOf(action)==-1) {
-            throw new Error('Unknown action '+action)
+            throw new TypeError(`simplyflow/route: unknown listener type "${action}"`)
         }
         if (!this.listeners[action][route]) {
             this.listeners[action][route] = []
@@ -188,7 +188,7 @@ export class SimplyRoute
     removeListener(action, route, callback)
     {
         if (['goto','match','call','finish'].indexOf(action)==-1) {
-            throw new Error('Unknown action '+action)
+            throw new TypeError(`simplyflow/route: unknown listener type "${action}"`)
         }
         if (!this.listeners[action][route]) {
             return

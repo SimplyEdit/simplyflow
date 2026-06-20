@@ -156,14 +156,14 @@ describe('command API', () => {
     expect(calls).toEqual(['custom', 'manual'])
   })
 
-  it('logs undefined commands without throwing', () => {
+  it('warns for unknown commands without throwing', () => {
     document.body.innerHTML = `<div id="app"><button data-simply-command="missing">Missing</button></div>`
-    const error = jest.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     const container = document.getElementById('app')
     commands({ app: { container }, commands: {} })
 
     expect(() => container.querySelector('button').click()).not.toThrow()
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('undefined command missing'), expect.any(HTMLButtonElement))
+    expect(warn).toHaveBeenCalledWith('simplyflow/command: unknown command "missing"', { cause: expect.any(HTMLButtonElement) })
   })
 })
 

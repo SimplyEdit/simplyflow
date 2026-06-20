@@ -2407,7 +2407,7 @@
     }
     addListener(action, route, callback) {
       if (["goto", "match", "call", "finish"].indexOf(action) == -1) {
-        throw new Error("Unknown action " + action);
+        throw new TypeError(`simplyflow/route: unknown listener type "${action}"`);
       }
       if (!this.listeners[action][route]) {
         this.listeners[action][route] = [];
@@ -2416,7 +2416,7 @@
     }
     removeListener(action, route, callback) {
       if (["goto", "match", "call", "finish"].indexOf(action) == -1) {
-        throw new Error("Unknown action " + action);
+        throw new TypeError(`simplyflow/route: unknown listener type "${action}"`);
       }
       if (!this.listeners[action][route]) {
         return;
@@ -2500,7 +2500,7 @@
           return;
         }
         if (!this[command.name]) {
-          console.error("simply.command: undefined command " + command.name, command.source);
+          console.warn(`simplyflow/command: unknown command "${command.name}"`, { cause: command.source });
           return;
         }
         const shouldContinue = this[command.name].call(options.app, command.source, command.value);
@@ -2517,13 +2517,13 @@
     }
     call(command, el, value) {
       if (!this[command]) {
-        console.error("simply.command: undefined command " + command);
+        console.warn(`simplyflow/command: unknown command "${command}"`);
         return;
       }
       return this[command].call(this.app, el, value);
     }
     action(name) {
-      console.warn("deprecated call to `this.commands.action`");
+      console.warn("simplyflow/command: this.commands.action() is deprecated; use this.app.actions.<name>() instead");
       let params = Array.from(arguments).slice();
       params.shift();
       return this.app.actions[name](...params);
@@ -2835,7 +2835,7 @@
           case "actions":
             this.actions = actions({ app: this, actions: options.actions });
             this.action = function(name) {
-              console.warn("deprecated call to `this.action`");
+              console.warn("simplyflow/app: this.action() is deprecated; use this.actions.<name>() instead");
               const params = Array.from(arguments).slice();
               params.shift();
               return this.actions[name](...params);
@@ -2845,7 +2845,6 @@
           case "__proto__":
             break;
           default:
-            console.log('simply.app: unknown initialization option "' + key + '", added as-is');
             this[key] = options[key];
             break;
         }
@@ -2881,7 +2880,7 @@
     if (!templates) {
       return;
     }
-    for (const name in templates) {
+    for (const name of Object.keys(templates)) {
       const element2 = document.createElement("div");
       element2.innerHTML = templates[name];
       let template = container.querySelector("template#" + name);
@@ -2899,7 +2898,7 @@
     if (!styles) {
       return;
     }
-    for (const name in styles) {
+    for (const name of Object.keys(styles)) {
       let style = container.querySelector("style#" + name + ".css");
       if (!style) {
         style = document.createElement("style");
@@ -3027,7 +3026,7 @@
         if (typeof onDestroy == "function") {
           node[Symbol.onDestroy] = onDestroy;
         } else if (typeof onDestroy != "undefined") {
-          console.warn("activate listener may only return a de-activate function, instead got", onDestroy);
+          console.warn("simplyflow/activate: listener may only return a cleanup function", { cause: onDestroy });
         }
       }
     }
@@ -3195,17 +3194,22 @@
     }, []);
     for (let link of remainingLinks) {
       if (!link.href) {
-        return;
-      }
-      const response = await fetch(link.href);
-      if (!response.ok) {
-        console.log("simply-include: failed to load " + link.href);
         continue;
       }
-      console.log("simply-include: loaded " + link.href);
-      const html2 = await response.text();
-      include.html(html2, link);
-      link.parentNode.removeChild(link);
+      try {
+        const response = await fetch(link.href);
+        if (!response.ok) {
+          console.warn(`simplyflow/include: failed to load "${link.href}" (${response.status})`);
+          link.rel = "simply-include-error";
+          continue;
+        }
+        const html2 = await response.text();
+        include.html(html2, link);
+        link.parentNode?.removeChild(link);
+      } catch (error) {
+        console.warn(`simplyflow/include: failed to load "${link.href}"`, { cause: error });
+        link.rel = "simply-include-error";
+      }
     }
   };
   var handleChanges2 = throttle(() => {
@@ -3247,6 +3251,9 @@
     },
     set: function(dataset, pointer, value) {
       const parent = path.get(dataset, path.parent(pointer));
+      if (parent == null) {
+        throw new TypeError(`simplyflow/path: cannot set "${pointer}" because its parent path does not exist`);
+      }
       parent[path.pop(pointer)] = value;
     },
     pop: function(pointer) {

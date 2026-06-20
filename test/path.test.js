@@ -12,6 +12,13 @@ describe('path API', () => {
     expect(path.get(data, 'missing')).toBeNull()
   })
 
+
+  it('throws a clear error when setting through a missing parent path', () => {
+    expect(() => path.set({}, 'person.name', 'Ada')).toThrow(
+      'simplyflow/path: cannot set "person.name" because its parent path does not exist'
+    )
+  })
+
   it('pushes, pops, finds parents and sets nested values', () => {
     const data = { person: { name: 'Ada' } }
 

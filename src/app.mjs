@@ -54,7 +54,7 @@ class SimplyApp
                 case 'actions':
                     this.actions = actions({app: this, actions: options.actions})
                     this.action = function(name) { // backwards compatible with SimplyView2
-                        console.warn('deprecated call to `this.action`')
+                        console.warn('simplyflow/app: this.action() is deprecated; use this.actions.<name>() instead')
                         const params = Array.from(arguments).slice()
                         params.shift()
                         return this.actions[name](...params)
@@ -65,7 +65,8 @@ class SimplyApp
                     // ignore this to avoid prototype pollution
                     break
                 default:
-                    console.log('simply.app: unknown initialization option "'+key+'", added as-is')
+                    // Unknown options become app properties. This keeps the app layer extensible
+                    // without logging during normal startup.
                     this[key] = options[key]
                     break
             }
@@ -110,7 +111,7 @@ function installHtml(container, templates)
     if (!templates) {
         return
     }
-    for (const name in templates) {
+    for (const name of Object.keys(templates)) {
         const element = document.createElement('div')
         element.innerHTML = templates[name]
         let template = container.querySelector('template#'+name)
@@ -130,7 +131,7 @@ function installCss(container, styles)
     if (!styles) {
         return
     }
-    for (const name in styles) {
+    for (const name of Object.keys(styles)) {
         let style = container.querySelector('style#'+name+'.css')
         if (!style) {
             style = document.createElement('style')

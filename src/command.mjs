@@ -18,7 +18,7 @@ class SimplyCommands {
 				return
 			}
 			if (!this[command.name]) {
-                console.error('simply.command: undefined command '+command.name, command.source);
+                console.warn(`simplyflow/command: unknown command "${command.name}"`, { cause: command.source });
                 return
 			}
             const shouldContinue = this[command.name].call(options.app, command.source, command.value)
@@ -37,14 +37,14 @@ class SimplyCommands {
 
     call(command, el, value) {
         if (!this[command]) {
-            console.error('simply.command: undefined command '+command);
+            console.warn(`simplyflow/command: unknown command "${command}"`);
             return
         }
         return this[command].call(this.app, el, value)
     }
 
     action(name) {
-        console.warn('deprecated call to `this.commands.action`')
+        console.warn('simplyflow/command: this.commands.action() is deprecated; use this.app.actions.<name>() instead')
         let params = Array.from(arguments).slice()
         params.shift()
         return this.app.actions[name](...params)

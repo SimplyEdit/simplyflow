@@ -18,6 +18,9 @@ const path = {
 	},
 	set: function(dataset, pointer, value) {
 		const parent = path.get(dataset, path.parent(pointer))
+		if (parent == null) {
+			throw new TypeError(`simplyflow/path: cannot set "${pointer}" because its parent path does not exist`)
+		}
 		parent[path.pop(pointer)] = value
 	},
 	pop: function(pointer) {

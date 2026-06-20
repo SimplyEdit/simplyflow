@@ -39,7 +39,7 @@ function callListeners(node) {
             if (typeof onDestroy == 'function') {
                 node[Symbol.onDestroy] = onDestroy
             } else if (typeof onDestroy != 'undefined') {
-                console.warn('activate listener may only return a de-activate function, instead got', onDestroy)
+                console.warn('simplyflow/activate: listener may only return a cleanup function', { cause: onDestroy })
             }
         }
     }

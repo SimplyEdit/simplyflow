@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals'
 import { include } from '../src/include.mjs'
 
 const wait = (ms = 80) => new Promise(resolve => setTimeout(resolve, ms))
@@ -12,9 +13,28 @@ afterEach(() => {
   document.body.innerHTML = ''
   document.head.innerHTML = ''
   include.cacheBuster = null
+  jest.restoreAllMocks()
+  delete globalThis.fetch
 })
 
 describe('include API', () => {
+  it('warns instead of logging when an include link cannot be loaded', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {})
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: false, status: 404 })
+
+    const link = document.createElement('link')
+    link.rel = 'simply-include'
+    link.href = 'https://example.com/missing.html'
+    document.body.append(link)
+
+    await wait(120)
+
+    expect(warn).toHaveBeenCalledWith('simplyflow/include: failed to load "https://example.com/missing.html" (404)')
+    expect(log).not.toHaveBeenCalled()
+    expect(link.rel).toBe('simply-include-error')
+  })
+
   it('imports stylesheet nodes and HTML before the include link', () => {
     const link = document.createElement('link')
     link.rel = 'test-include'
@@ -48,6 +68,7 @@ describe('include API', () => {
     expect(document.body.textContent).toContain('Loaded')
     include.cacheBuster = null
   })
+
   it('waits for blocking external scripts before inserting following scripts', async () => {
     const link = document.createElement('link')
     link.rel = 'test-include'
@@ -94,6 +115,4 @@ describe('include API', () => {
     expect(scripts[0].hasAttribute('async')).toBe(true)
     expect(scripts[1].textContent).toContain('window.afterAsync = true')
   })
-
 })
-

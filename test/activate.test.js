@@ -54,7 +54,7 @@ describe('activate API', () => {
       return 'not a function'
     })
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('activate listener may only return'), 'not a function')
+    expect(warn).toHaveBeenCalledWith('simplyflow/activate: listener may only return a cleanup function', { cause: 'not a function' })
   })
 })
 

@@ -119,8 +119,8 @@ describe('route API', () => {
   it('throws for unknown listener actions and supports the legacy routes(app, options) call shape', () => {
     const router = routes({}, { routes: { '/': () => 'root' } })
     expect(router.match('/')).toBe('root')
-    expect(() => router.addListener('unknown', '/', () => {})).toThrow('Unknown action unknown')
-    expect(() => router.removeListener('unknown', '/', () => {})).toThrow('Unknown action unknown')
+    expect(() => router.addListener('unknown', '/', () => {})).toThrow('simplyflow/route: unknown listener type "unknown"')
+    expect(() => router.removeListener('unknown', '/', () => {})).toThrow('simplyflow/route: unknown listener type "unknown"')
   })
 })
 

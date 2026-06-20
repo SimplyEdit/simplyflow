@@ -147,20 +147,22 @@ const includeLinks = async (links) => {
 
     for (let link of remainingLinks) {
         if (!link.href) {
-            return
-        }
-        // fetch the html
-        const response = await fetch(link.href)
-        if (!response.ok) {
-            console.log('simply-include: failed to load '+link.href);
             continue
         }
-        console.log('simply-include: loaded '+link.href);
-        const html = await response.text()
-        // if succesfull import the html
-        include.html(html, link)
-        // remove the include link
-        link.parentNode.removeChild(link)
+        try {
+            const response = await fetch(link.href)
+            if (!response.ok) {
+                console.warn(`simplyflow/include: failed to load "${link.href}" (${response.status})`)
+                link.rel = 'simply-include-error'
+                continue
+            }
+            const html = await response.text()
+            include.html(html, link)
+            link.parentNode?.removeChild(link)
+        } catch (error) {
+            console.warn(`simplyflow/include: failed to load "${link.href}"`, { cause: error })
+            link.rel = 'simply-include-error'
+        }
     }
 }
 
