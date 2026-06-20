@@ -1,15 +1,14 @@
-function throttle( callbackFunction, intervalTime ) {
+function throttle(callbackFunction, intervalTime)
+{
     let eventId = 0
-    return () => {
-        const myArguments = arguments
-        if ( eventId ) {
+    return function throttledCallback(...params) {
+        if (eventId) {
             return
-        } else {
-            eventId = globalThis.setTimeout( () => {
-                callbackFunction.apply(this, myArguments)
-                eventId = 0
-            }, intervalTime )
         }
+        eventId = globalThis.setTimeout(() => {
+            eventId = 0
+            callbackFunction.apply(this, params)
+        }, intervalTime)
     }
 }
 
@@ -19,22 +18,20 @@ const runWhenIdle = (() => {
             globalThis.requestIdleCallback(callback, {timeout: 500})
         }
     }
-    return globalThis.requestAnimationFrame
+    return globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0))
 })()
 
-function rebaseHref(relative, base) {
-    let url = new URL(relative, base)
-    if (include.cacheBuster) {
-        url.searchParams.set('cb',include.cacheBuster)
+function rebaseHref(relative, base, cacheBuster)
+{
+    const url = new URL(relative, base)
+    if (cacheBuster) {
+        url.searchParams.set('cb', cacheBuster)
     }
     return url.href
 }
 
-let observer
-let head = globalThis.document.querySelector('head')
-let scriptLocations = []
-
-function cloneScript(script, base) {
+function cloneScript(script, base, cacheBuster)
+{
     const clone = globalThis.document.createElement('script')
     for (const attr of script.attributes) {
         clone.setAttribute(attr.name, attr.value)
@@ -42,26 +39,29 @@ function cloneScript(script, base) {
     clone.removeAttribute('data-simply-location')
 
     if (clone.hasAttribute('src')) {
-        clone.src = rebaseHref(clone.getAttribute('src'), base)
+        clone.src = rebaseHref(clone.getAttribute('src'), base, cacheBuster)
     } else {
         clone.textContent = script.textContent
     }
     return clone
 }
 
-function insertScript(script, placeholder) {
+function insertScript(script, placeholder)
+{
     placeholder.parentNode.insertBefore(script, placeholder)
     placeholder.parentNode.removeChild(placeholder)
 }
 
-function shouldWaitForScript(script) {
+function shouldWaitForScript(script)
+{
     // Async scripts are explicitly independent. Every other external script from
     // an include is treated as ordered, including scripts that used `defer`;
     // dynamically inserted `defer` scripts do not reliably model parser defer.
     return script.hasAttribute('src') && !script.hasAttribute('async')
 }
 
-function insertAndWaitForScript(script, placeholder) {
+function insertAndWaitForScript(script, placeholder)
+{
     return new Promise((resolve) => {
         const done = () => {
             script.removeEventListener('load', done)
@@ -74,13 +74,51 @@ function insertAndWaitForScript(script, placeholder) {
     })
 }
 
-export const include = {
-    cacheBuster: null,
-    scripts: async (scripts, base) => {
+function findIncludeLinks(container)
+{
+    const selector = 'link[rel="simply-include"],link[rel="simply-include-once"]'
+    const links = Array.from(container.querySelectorAll(selector))
+    if (container.matches?.(selector)) {
+        links.unshift(container)
+    }
+    return links
+}
+
+class SimplyIncludes
+{
+    constructor(options={})
+    {
+        this.container = options.container || globalThis.document
+        this.cacheBuster = options.cacheBuster ?? defaultCacheBuster
+        this.included = Object.create(null)
+        this.scriptLocations = []
+        this.destroyed = false
+        this.handleChanges = throttle(() => {
+            runWhenIdle(() => {
+                if (!this.destroyed) {
+                    this.includeLinks(findIncludeLinks(this.container))
+                }
+            })
+        }, 10)
+        if (options.observe !== false) {
+            this.observer = new MutationObserver(this.handleChanges)
+            this.observer.observe(this.container, {
+                subtree: true,
+                childList: true,
+            })
+            this.handleChanges()
+        }
+    }
+
+    async scripts(scripts, base)
+    {
         const arr = scripts.slice()
         for (const script of arr) {
-            const clone = cloneScript(script, base)
-            const node = scriptLocations[script.dataset.simplyLocation]
+            if (this.destroyed) {
+                return
+            }
+            const clone = cloneScript(script, base, this.cacheBuster)
+            const node = this.scriptLocations[script.dataset.simplyLocation]
             if (!node?.parentNode) {
                 continue
             }
@@ -97,91 +135,105 @@ export const include = {
                 insertScript(clone, node)
             }
         }
-    },
-    html: (html, link) => {
-        let fragment = globalThis.document.createRange().createContextualFragment(html)
+    }
+
+    html(html, link)
+    {
+        const fragment = globalThis.document.createRange().createContextualFragment(html)
         const stylesheets = fragment.querySelectorAll('link[rel="stylesheet"],style')
-        // add all stylesheets to head
-        for (let stylesheet of stylesheets) {
+        for (const stylesheet of stylesheets) {
             const href = stylesheet.getAttribute('href')
             if (href) {
-                stylesheet.href = rebaseHref(href, link.href)
+                stylesheet.href = rebaseHref(href, link.href, this.cacheBuster)
             }
-            head.appendChild(stylesheet)
+            globalThis.document.head.appendChild(stylesheet)
         }
-        // remove the scripts from the fragment, as they will not run in the
-        // order in which they are defined
-        let scriptsFragment = globalThis.document.createDocumentFragment()
+
+        // Scripts imported through a fragment do not execute reliably in document order.
+        // Placeholders preserve their positions while scripts are reinserted sequentially.
+        const scriptsFragment = globalThis.document.createDocumentFragment()
         const scripts = fragment.querySelectorAll('script')
         if (scripts.length) {
-            for (let script of scripts) {
-                let placeholder = globalThis.document.createComment(script.src || 'inline script')
+            for (const script of scripts) {
+                const placeholder = globalThis.document.createComment(script.src || 'inline script')
                 script.parentNode.insertBefore(placeholder, script)
-                script.dataset.simplyLocation = scriptLocations.length
-                scriptLocations.push(placeholder)
+                script.dataset.simplyLocation = this.scriptLocations.length
+                this.scriptLocations.push(placeholder)
                 scriptsFragment.appendChild(script)
             }
-            globalThis.setTimeout(function() {
-                include.scripts(Array.from(scriptsFragment.children), link ? link.href : globalThis.location.href )
+            globalThis.setTimeout(() => {
+                this.scripts(Array.from(scriptsFragment.children), link ? link.href : globalThis.location.href)
             }, 10)
         }
-        // add the remainder before the include link
-        link.parentNode.insertBefore(fragment, link ? link : null)
 
+        link.parentNode.insertBefore(fragment, link)
     }
-}
 
-let included = {}
-const includeLinks = async (links) => {
-    // mark them as in progress, so handleChanges doesn't find them again
-    let remainingLinks = [].reduce.call(links, (remainder, link) => {
-        if (link.rel=='simply-include-once' && included[link.href]) {
-            link.parentNode.removeChild(link)
-        } else {
-            included[link.href]=true
-            link.rel = 'simply-include-loading'
-            remainder.push(link)
-        }
-        return remainder
-    }, [])
+    async includeLinks(links)
+    {
+        const remainingLinks = links.reduce((remainder, link) => {
+            if (link.rel === 'simply-include-once' && this.included[link.href]) {
+                link.parentNode.removeChild(link)
+            } else {
+                this.included[link.href] = true
+                link.rel = 'simply-include-loading'
+                remainder.push(link)
+            }
+            return remainder
+        }, [])
 
-    for (let link of remainingLinks) {
-        if (!link.href) {
-            continue
-        }
-        try {
-            const response = await fetch(link.href)
-            if (!response.ok) {
-                console.warn(`simplyflow/include: failed to load "${link.href}" (${response.status})`)
-                link.rel = 'simply-include-error'
+        for (const link of remainingLinks) {
+            if (this.destroyed || !link.href) {
                 continue
             }
-            const html = await response.text()
-            include.html(html, link)
-            link.parentNode?.removeChild(link)
-        } catch (error) {
-            console.warn(`simplyflow/include: failed to load "${link.href}"`, { cause: error })
-            link.rel = 'simply-include-error'
+            try {
+                const response = await fetch(link.href)
+                if (!response.ok) {
+                    console.warn(`simplyflow/include: failed to load "${link.href}" (${response.status})`)
+                    link.rel = 'simply-include-error'
+                    continue
+                }
+                const html = await response.text()
+                if (this.destroyed || !link.parentNode) {
+                    continue
+                }
+                this.html(html, link)
+                link.parentNode?.removeChild(link)
+            } catch (error) {
+                console.warn(`simplyflow/include: failed to load "${link.href}"`, { cause: error })
+                link.rel = 'simply-include-error'
+            }
         }
+    }
+
+    destroy()
+    {
+        this.destroyed = true
+        this.observer?.disconnect()
+        this.observer = undefined
     }
 }
 
-const handleChanges = throttle(() => {
-    runWhenIdle(() => {
-        var links = globalThis.document.querySelectorAll('link[rel="simply-include"],link[rel="simply-include-once"]')
-        if (links.length) {
-            includeLinks(links)
-        }
-    })
-})
-
-const observe = () => {
-    observer = new MutationObserver(handleChanges)
-    observer.observe(globalThis.document, {
-        subtree: true,
-        childList: true,
-    })
+export function includes(options={})
+{
+    return new SimplyIncludes(options)
 }
 
-observe()
-handleChanges() // check if there are include links in the dom already
+let defaultCacheBuster = null
+const defaultInclude = () => new SimplyIncludes({
+    container: globalThis.document,
+    cacheBuster: defaultCacheBuster,
+    observe: false
+})
+
+export const include = {
+    get cacheBuster() {
+        return defaultCacheBuster
+    },
+    set cacheBuster(value) {
+        defaultCacheBuster = value
+    },
+    scripts: (scripts, base) => defaultInclude().scripts(scripts, base),
+    html: (html, link) => defaultInclude().html(html, link),
+    links: (links) => defaultInclude().includeLinks(Array.from(links))
+}

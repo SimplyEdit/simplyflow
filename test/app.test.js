@@ -11,6 +11,8 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = ''
   history.replaceState({}, '', '/')
+  jest.restoreAllMocks()
+  delete globalThis.fetch
 })
 
 describe('app API', () => {
@@ -178,6 +180,52 @@ describe('app API', () => {
     testApp.destroy()
   })
 
+
+
+
+  it('loads includes inside the app container and binds included content', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '<span data-simply-field="title"></span>'
+    })
+    document.body.innerHTML = `
+      <div id="app">
+        <link rel="simply-include" href="https://example.com/card.html">
+      </div>`
+    const container = document.getElementById('app')
+    const testApp = app({
+      container,
+      data: {
+        title: 'Included title'
+      }
+    })
+
+    await wait(140)
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://example.com/card.html')
+    expect(container.querySelector('span').innerHTML).toBe('Included title')
+    testApp.destroy()
+  })
+
+  it('stops loading new includes after app destroy', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '<section>Loaded</section>'
+    })
+    const container = document.createElement('div')
+    document.body.append(container)
+    const testApp = app({ container, data: {} })
+    testApp.destroy()
+
+    const link = document.createElement('link')
+    link.rel = 'simply-include'
+    link.href = 'https://example.com/after-destroy.html'
+    container.append(link)
+    await wait(140)
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(link.rel).toBe('simply-include')
+  })
 
   it('uses app-level behaviors for data-simply-behavior elements', async () => {
     document.body.innerHTML = `<div id="app"><button data-simply-behavior="focusButton">Focus</button></div>`

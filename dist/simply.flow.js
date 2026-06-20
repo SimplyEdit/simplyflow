@@ -1077,7 +1077,7 @@
     let oldContentHTML = el.innerHTML;
     let oldContentText = el.innerText;
     if (!observers.has(el)) {
-      const observer2 = new MutationObserver((mutationList, observer3) => {
+      const observer = new MutationObserver((mutationList, observer2) => {
         const changes = {};
         for (const mutation of mutationList) {
           if (mutation.type === "attributes") {
@@ -1114,8 +1114,8 @@
           notifySet(signal3, makeContext(prop, { was: changes[prop], now: el[prop] }));
         }
       });
-      observer2.observe(el, options);
-      observers.set(el, observer2);
+      observer.observe(el, options);
+      observers.set(el, observer);
       if (el.matches("input, textarea, select")) {
         let prevValue = el.value;
         el.addEventListener("change", (evt) => {
@@ -2242,20 +2242,20 @@
         }
         this.parentNode.removeChild(this);
       } else {
-        const observe2 = () => {
-          const observer2 = new MutationObserver(() => {
+        const observe = () => {
+          const observer = new MutationObserver(() => {
             template = document.getElementById(templateId);
             if (template) {
-              observer2.disconnect();
+              observer.disconnect();
               this.replaceWith(this);
             }
           });
-          observer2.observe(globalThis.document, {
+          observer.observe(globalThis.document, {
             subtree: true,
             childList: true
           });
         };
-        observe2();
+        observe();
       }
     }
   };
@@ -3039,6 +3039,204 @@
     return nodes;
   }
 
+  // src/include.mjs
+  function throttle(callbackFunction, intervalTime) {
+    let eventId = 0;
+    return function throttledCallback(...params) {
+      if (eventId) {
+        return;
+      }
+      eventId = globalThis.setTimeout(() => {
+        eventId = 0;
+        callbackFunction.apply(this, params);
+      }, intervalTime);
+    };
+  }
+  var runWhenIdle = (() => {
+    if (globalThis.requestIdleCallback) {
+      return (callback) => {
+        globalThis.requestIdleCallback(callback, { timeout: 500 });
+      };
+    }
+    return globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 0));
+  })();
+  function rebaseHref(relative, base, cacheBuster) {
+    const url = new URL(relative, base);
+    if (cacheBuster) {
+      url.searchParams.set("cb", cacheBuster);
+    }
+    return url.href;
+  }
+  function cloneScript(script, base, cacheBuster) {
+    const clone2 = globalThis.document.createElement("script");
+    for (const attr of script.attributes) {
+      clone2.setAttribute(attr.name, attr.value);
+    }
+    clone2.removeAttribute("data-simply-location");
+    if (clone2.hasAttribute("src")) {
+      clone2.src = rebaseHref(clone2.getAttribute("src"), base, cacheBuster);
+    } else {
+      clone2.textContent = script.textContent;
+    }
+    return clone2;
+  }
+  function insertScript(script, placeholder) {
+    placeholder.parentNode.insertBefore(script, placeholder);
+    placeholder.parentNode.removeChild(placeholder);
+  }
+  function shouldWaitForScript(script) {
+    return script.hasAttribute("src") && !script.hasAttribute("async");
+  }
+  function insertAndWaitForScript(script, placeholder) {
+    return new Promise((resolve) => {
+      const done = () => {
+        script.removeEventListener("load", done);
+        script.removeEventListener("error", done);
+        resolve();
+      };
+      script.addEventListener("load", done);
+      script.addEventListener("error", done);
+      insertScript(script, placeholder);
+    });
+  }
+  function findIncludeLinks(container) {
+    const selector = 'link[rel="simply-include"],link[rel="simply-include-once"]';
+    const links = Array.from(container.querySelectorAll(selector));
+    if (container.matches?.(selector)) {
+      links.unshift(container);
+    }
+    return links;
+  }
+  var SimplyIncludes = class {
+    constructor(options = {}) {
+      this.container = options.container || globalThis.document;
+      this.cacheBuster = options.cacheBuster ?? defaultCacheBuster;
+      this.included = /* @__PURE__ */ Object.create(null);
+      this.scriptLocations = [];
+      this.destroyed = false;
+      this.handleChanges = throttle(() => {
+        runWhenIdle(() => {
+          if (!this.destroyed) {
+            this.includeLinks(findIncludeLinks(this.container));
+          }
+        });
+      }, 10);
+      if (options.observe !== false) {
+        this.observer = new MutationObserver(this.handleChanges);
+        this.observer.observe(this.container, {
+          subtree: true,
+          childList: true
+        });
+        this.handleChanges();
+      }
+    }
+    async scripts(scripts, base) {
+      const arr = scripts.slice();
+      for (const script of arr) {
+        if (this.destroyed) {
+          return;
+        }
+        const clone2 = cloneScript(script, base, this.cacheBuster);
+        const node = this.scriptLocations[script.dataset.simplyLocation];
+        if (!node?.parentNode) {
+          continue;
+        }
+        const waitForLoad = shouldWaitForScript(clone2);
+        if (waitForLoad) {
+          clone2.async = false;
+          await insertAndWaitForScript(clone2, node);
+        } else {
+          insertScript(clone2, node);
+        }
+      }
+    }
+    html(html2, link) {
+      const fragment = globalThis.document.createRange().createContextualFragment(html2);
+      const stylesheets = fragment.querySelectorAll('link[rel="stylesheet"],style');
+      for (const stylesheet of stylesheets) {
+        const href = stylesheet.getAttribute("href");
+        if (href) {
+          stylesheet.href = rebaseHref(href, link.href, this.cacheBuster);
+        }
+        globalThis.document.head.appendChild(stylesheet);
+      }
+      const scriptsFragment = globalThis.document.createDocumentFragment();
+      const scripts = fragment.querySelectorAll("script");
+      if (scripts.length) {
+        for (const script of scripts) {
+          const placeholder = globalThis.document.createComment(script.src || "inline script");
+          script.parentNode.insertBefore(placeholder, script);
+          script.dataset.simplyLocation = this.scriptLocations.length;
+          this.scriptLocations.push(placeholder);
+          scriptsFragment.appendChild(script);
+        }
+        globalThis.setTimeout(() => {
+          this.scripts(Array.from(scriptsFragment.children), link ? link.href : globalThis.location.href);
+        }, 10);
+      }
+      link.parentNode.insertBefore(fragment, link);
+    }
+    async includeLinks(links) {
+      const remainingLinks = links.reduce((remainder, link) => {
+        if (link.rel === "simply-include-once" && this.included[link.href]) {
+          link.parentNode.removeChild(link);
+        } else {
+          this.included[link.href] = true;
+          link.rel = "simply-include-loading";
+          remainder.push(link);
+        }
+        return remainder;
+      }, []);
+      for (const link of remainingLinks) {
+        if (this.destroyed || !link.href) {
+          continue;
+        }
+        try {
+          const response = await fetch(link.href);
+          if (!response.ok) {
+            console.warn(`simplyflow/include: failed to load "${link.href}" (${response.status})`);
+            link.rel = "simply-include-error";
+            continue;
+          }
+          const html2 = await response.text();
+          if (this.destroyed || !link.parentNode) {
+            continue;
+          }
+          this.html(html2, link);
+          link.parentNode?.removeChild(link);
+        } catch (error) {
+          console.warn(`simplyflow/include: failed to load "${link.href}"`, { cause: error });
+          link.rel = "simply-include-error";
+        }
+      }
+    }
+    destroy() {
+      this.destroyed = true;
+      this.observer?.disconnect();
+      this.observer = void 0;
+    }
+  };
+  function includes(options = {}) {
+    return new SimplyIncludes(options);
+  }
+  var defaultCacheBuster = null;
+  var defaultInclude = () => new SimplyIncludes({
+    container: globalThis.document,
+    cacheBuster: defaultCacheBuster,
+    observe: false
+  });
+  var include = {
+    get cacheBuster() {
+      return defaultCacheBuster;
+    },
+    set cacheBuster(value) {
+      defaultCacheBuster = value;
+    },
+    scripts: (scripts, base) => defaultInclude().scripts(scripts, base),
+    html: (html2, link) => defaultInclude().html(html2, link),
+    links: (links) => defaultInclude().includeLinks(Array.from(links))
+  };
+
   // src/highlight.mjs
   function html(strings, ...values) {
     const outputArray = values.map(
@@ -3129,6 +3327,7 @@
         container: this.container,
         attribute: "data-simply"
       });
+      this.includes = includes({ container: this.container });
       accesskeys({ app: this });
     }
     get app() {
@@ -3145,6 +3344,10 @@
       if (this.behaviors) {
         this.behaviors.destroy();
         this.behaviors = void 0;
+      }
+      if (this.includes) {
+        this.includes.destroy();
+        this.includes = void 0;
       }
     }
   };
@@ -3277,167 +3480,6 @@
     }
   }
 
-  // src/include.mjs
-  function throttle(callbackFunction, intervalTime) {
-    let eventId = 0;
-    return () => {
-      const myArguments = arguments;
-      if (eventId) {
-        return;
-      } else {
-        eventId = globalThis.setTimeout(() => {
-          callbackFunction.apply(this, myArguments);
-          eventId = 0;
-        }, intervalTime);
-      }
-    };
-  }
-  var runWhenIdle = (() => {
-    if (globalThis.requestIdleCallback) {
-      return (callback) => {
-        globalThis.requestIdleCallback(callback, { timeout: 500 });
-      };
-    }
-    return globalThis.requestAnimationFrame;
-  })();
-  function rebaseHref(relative, base) {
-    let url = new URL(relative, base);
-    if (include.cacheBuster) {
-      url.searchParams.set("cb", include.cacheBuster);
-    }
-    return url.href;
-  }
-  var observer;
-  var head = globalThis.document.querySelector("head");
-  var scriptLocations = [];
-  function cloneScript(script, base) {
-    const clone2 = globalThis.document.createElement("script");
-    for (const attr of script.attributes) {
-      clone2.setAttribute(attr.name, attr.value);
-    }
-    clone2.removeAttribute("data-simply-location");
-    if (clone2.hasAttribute("src")) {
-      clone2.src = rebaseHref(clone2.getAttribute("src"), base);
-    } else {
-      clone2.textContent = script.textContent;
-    }
-    return clone2;
-  }
-  function insertScript(script, placeholder) {
-    placeholder.parentNode.insertBefore(script, placeholder);
-    placeholder.parentNode.removeChild(placeholder);
-  }
-  function shouldWaitForScript(script) {
-    return script.hasAttribute("src") && !script.hasAttribute("async");
-  }
-  function insertAndWaitForScript(script, placeholder) {
-    return new Promise((resolve) => {
-      const done = () => {
-        script.removeEventListener("load", done);
-        script.removeEventListener("error", done);
-        resolve();
-      };
-      script.addEventListener("load", done);
-      script.addEventListener("error", done);
-      insertScript(script, placeholder);
-    });
-  }
-  var include = {
-    cacheBuster: null,
-    scripts: async (scripts, base) => {
-      const arr = scripts.slice();
-      for (const script of arr) {
-        const clone2 = cloneScript(script, base);
-        const node = scriptLocations[script.dataset.simplyLocation];
-        if (!node?.parentNode) {
-          continue;
-        }
-        const waitForLoad = shouldWaitForScript(clone2);
-        if (waitForLoad) {
-          clone2.async = false;
-          await insertAndWaitForScript(clone2, node);
-        } else {
-          insertScript(clone2, node);
-        }
-      }
-    },
-    html: (html2, link) => {
-      let fragment = globalThis.document.createRange().createContextualFragment(html2);
-      const stylesheets = fragment.querySelectorAll('link[rel="stylesheet"],style');
-      for (let stylesheet of stylesheets) {
-        const href = stylesheet.getAttribute("href");
-        if (href) {
-          stylesheet.href = rebaseHref(href, link.href);
-        }
-        head.appendChild(stylesheet);
-      }
-      let scriptsFragment = globalThis.document.createDocumentFragment();
-      const scripts = fragment.querySelectorAll("script");
-      if (scripts.length) {
-        for (let script of scripts) {
-          let placeholder = globalThis.document.createComment(script.src || "inline script");
-          script.parentNode.insertBefore(placeholder, script);
-          script.dataset.simplyLocation = scriptLocations.length;
-          scriptLocations.push(placeholder);
-          scriptsFragment.appendChild(script);
-        }
-        globalThis.setTimeout(function() {
-          include.scripts(Array.from(scriptsFragment.children), link ? link.href : globalThis.location.href);
-        }, 10);
-      }
-      link.parentNode.insertBefore(fragment, link ? link : null);
-    }
-  };
-  var included = {};
-  var includeLinks = async (links) => {
-    let remainingLinks = [].reduce.call(links, (remainder, link) => {
-      if (link.rel == "simply-include-once" && included[link.href]) {
-        link.parentNode.removeChild(link);
-      } else {
-        included[link.href] = true;
-        link.rel = "simply-include-loading";
-        remainder.push(link);
-      }
-      return remainder;
-    }, []);
-    for (let link of remainingLinks) {
-      if (!link.href) {
-        continue;
-      }
-      try {
-        const response = await fetch(link.href);
-        if (!response.ok) {
-          console.warn(`simplyflow/include: failed to load "${link.href}" (${response.status})`);
-          link.rel = "simply-include-error";
-          continue;
-        }
-        const html2 = await response.text();
-        include.html(html2, link);
-        link.parentNode?.removeChild(link);
-      } catch (error) {
-        console.warn(`simplyflow/include: failed to load "${link.href}"`, { cause: error });
-        link.rel = "simply-include-error";
-      }
-    }
-  };
-  var handleChanges = throttle(() => {
-    runWhenIdle(() => {
-      var links = globalThis.document.querySelectorAll('link[rel="simply-include"],link[rel="simply-include-once"]');
-      if (links.length) {
-        includeLinks(links);
-      }
-    });
-  });
-  var observe = () => {
-    observer = new MutationObserver(handleChanges);
-    observer.observe(globalThis.document, {
-      subtree: true,
-      childList: true
-    });
-  };
-  observe();
-  handleChanges();
-
   // src/path.mjs
   var path = {
     get(dataset, pointer) {
@@ -3502,6 +3544,7 @@
     commands,
     command: commands,
     include,
+    includes,
     shortcuts,
     path: path_default,
     routes,

@@ -7,7 +7,7 @@ import { app } from './app.mjs'
 import { actions } from './action.mjs'
 import { behaviors } from './behavior.mjs'
 import { commands } from './command.mjs'
-import { include } from './include.mjs'
+import { include, includes } from './include.mjs'
 import { shortcuts } from './shortcut.mjs'
 import path from './path.mjs'
 import { routes, SimplyRoute } from './route.mjs'
@@ -29,6 +29,7 @@ Object.assign(globalThis.simply, {
     commands,
     command: commands,
     include,
+    includes,
     shortcuts,
     path,
     routes,
@@ -46,6 +47,7 @@ export {
     actions,
     commands,
     include,
+    includes,
     shortcuts,
     path,
     routes,

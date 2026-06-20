@@ -71,6 +71,14 @@ const page = simply.app({
 })
 ```
 
+HTML fragments can be included inside an app container without a build step:
+
+```html
+<link rel="simply-include" href="header.html">
+```
+
+The include observer is scoped to the app and stops when `app.destroy()` is called.
+
 Keyboard shortcuts can be added with the `shortcuts` option:
 
 ```javascript
@@ -138,6 +146,7 @@ bind({ root: data })
 - [Actions](docs/action.md)
 - [Routes](docs/route.md)
 - [Behaviors](docs/behavior.md)
+- [Includes](docs/include.md)
 
 Or check the [examples](examples/) for more information.
 

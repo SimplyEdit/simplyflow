@@ -1,15 +1,20 @@
 import { jest } from '@jest/globals'
-import { include } from '../src/include.mjs'
+import { include, includes } from '../src/include.mjs'
 
 const wait = (ms = 80) => new Promise(resolve => setTimeout(resolve, ms))
+let controllers = []
 
 beforeEach(() => {
   document.body.innerHTML = ''
   document.head.innerHTML = ''
   include.cacheBuster = null
+  controllers = []
 })
 
 afterEach(() => {
+  for (const controller of controllers) {
+    controller.destroy()
+  }
   document.body.innerHTML = ''
   document.head.innerHTML = ''
   include.cacheBuster = null
@@ -18,16 +23,79 @@ afterEach(() => {
 })
 
 describe('include API', () => {
+  it('does not observe the whole document as a module side effect', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '<section>Loaded</section>'
+    })
+
+    const link = document.createElement('link')
+    link.rel = 'simply-include'
+    link.href = 'https://example.com/component.html'
+    document.body.append(link)
+
+    await wait(120)
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(link.rel).toBe('simply-include')
+  })
+
+  it('loads include links inside an include controller container', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '<section id="loaded">Loaded</section>'
+    })
+
+    const container = document.createElement('div')
+    const link = document.createElement('link')
+    link.rel = 'simply-include'
+    link.href = 'https://example.com/component.html'
+    container.append(link)
+    document.body.append(container)
+
+    controllers.push(includes({ container }))
+    await wait(120)
+
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://example.com/component.html')
+    expect(container.querySelector('#loaded').textContent).toBe('Loaded')
+    expect(container.querySelector('link[rel="simply-include"]')).toBeNull()
+  })
+
+  it('stops observing when an include controller is destroyed', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '<section>Loaded</section>'
+    })
+
+    const container = document.createElement('div')
+    document.body.append(container)
+    const controller = includes({ container })
+    controllers.push(controller)
+    controller.destroy()
+
+    const link = document.createElement('link')
+    link.rel = 'simply-include'
+    link.href = 'https://example.com/component.html'
+    container.append(link)
+    await wait(120)
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(link.rel).toBe('simply-include')
+  })
+
   it('warns instead of logging when an include link cannot be loaded', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     const log = jest.spyOn(console, 'log').mockImplementation(() => {})
     globalThis.fetch = jest.fn().mockResolvedValue({ ok: false, status: 404 })
 
+    const container = document.createElement('div')
     const link = document.createElement('link')
     link.rel = 'simply-include'
     link.href = 'https://example.com/missing.html'
-    document.body.append(link)
+    container.append(link)
+    document.body.append(container)
 
+    controllers.push(includes({ container }))
     await wait(120)
 
     expect(warn).toHaveBeenCalledWith('simplyflow/include: failed to load "https://example.com/missing.html" (404)')

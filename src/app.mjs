@@ -5,6 +5,7 @@ import { commands } from './command.mjs'
 import { actions } from './action.mjs'
 import { shortcuts, accesskeys } from './shortcut.mjs'
 import { behaviors } from './behavior.mjs'
+import { includes } from './include.mjs'
 import { html, css } from './highlight.mjs'
 import { findAttribute } from './dom.mjs'
 import { closest } from './suggest.mjs'
@@ -99,6 +100,8 @@ class SimplyApp
             attribute: 'data-simply'
         })
 
+        this.includes = includes({ container: this.container })
+
         accesskeys({ app: this })
     }
 
@@ -120,6 +123,10 @@ class SimplyApp
         if (this.behaviors) {
             this.behaviors.destroy()
             this.behaviors = undefined
+        }
+        if (this.includes) {
+            this.includes.destroy()
+            this.includes = undefined
         }
     }
 }

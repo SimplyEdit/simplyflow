@@ -1,7 +1,7 @@
 # SimplyFlow app API
 
 `app()` is the beginner-facing API for building a small reactive web application.
-It combines reactive `data`, DOM binding, commands, actions, routes, keyboard shortcuts and optional inline templates/styles setup.
+It combines reactive `data`, DOM binding, commands, actions, routes, keyboard shortcuts, behaviors, includes and optional inline templates/styles setup.
 
 ```javascript
 import { app } from '../src/flow.mjs'
@@ -232,6 +232,13 @@ The app API uses `data-simply-*` attributes. They map directly to the lower-leve
 - `data-simply-command="name"` runs a command.
 - `data-simply-value="value"` passes a value to a command.
 - `data-simply-behavior="name"` attaches a reusable behavior to an element.
+- `<link rel="simply-include" href="file.html">` includes HTML inside the app container.
+
+Includes are scoped to the app container. When `app.destroy()` is called, SimplyFlow stops watching for new include links.
+
+```html
+<link rel="simply-include" href="header.html">
+```
 
 Use `data-simply-edit` on ordinary editable controls such as text inputs, textareas and single selects:
 
@@ -266,6 +273,7 @@ Example list:
 - `app.routes` - route object, if routes were configured.
 - `app.shortcuts` - shortcut object, if shortcuts were configured.
 - `app.behaviors` - behavior controller, if behaviors were configured.
+- `app.includes` - include controller for the app container.
 - `app.binding` - the underlying bind instance.
 
-Use `app.destroy()` to destroy the underlying binding and any active behaviors.
+Use `app.destroy()` to destroy the underlying binding, active behaviors and the app include observer.

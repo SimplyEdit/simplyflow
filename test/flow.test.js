@@ -1,4 +1,4 @@
-import simply, { app, commands, actions, routes, path, shortcuts, behaviors, findAttribute } from '../src/flow.mjs'
+import simply, { app, commands, actions, routes, path, shortcuts, behaviors, include, includes, findAttribute } from '../src/flow.mjs'
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -13,6 +13,8 @@ describe('merged app-layer exports', () => {
     expect(simply.routes).toBe(routes)
     expect(simply.shortcuts).toBe(shortcuts)
     expect(simply.behaviors).toBe(behaviors)
+    expect(simply.include).toBe(include)
+    expect(simply.includes).toBe(includes)
     expect(simply.path).toBe(path)
     expect(simply.findAttribute).toBe(findAttribute)
   })
