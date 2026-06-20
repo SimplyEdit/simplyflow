@@ -79,8 +79,9 @@ export function sort(options={}) {
 				if (!sort.sortBy) {
 					return 0
 				}
-				const larger = sort.direction == 'asc' ? 1 : -1
-				const smaller = sort.direction == 'asc' ? -1 : 1
+				const direction = sort.sortDirection || sort.direction || 'asc'
+				const larger = direction == 'asc' ? 1 : -1
+				const smaller = direction == 'asc' ? -1 : 1
 				if (typeof a?.[sortBy] === 'undefined') {
 					if (typeof b?.[sortBy] === 'undefined') {
 						return 0
@@ -103,8 +104,13 @@ export function sort(options={}) {
 		// either the data or the sort options change
 		return throttledEffect(() => {
 			const sort = this.state.options.sort
-			if (sort?.sortBy && sort?.direction) {
-				return data.current.toSorted(sort?.sortFn)
+			const direction = sort?.sortDirection || sort?.direction
+			if (sort?.sortBy && direction) {
+				// Read through the signal proxy so replacing `.sortFn` is tracked,
+				// then call the raw comparator with the model as `this`.
+				const trackedSortFn = sort.sortFn
+				const sortFn = sort[DEP.XRAY]?.sortFn || trackedSortFn
+				return data.current.toSorted((a, b) => sortFn.call(this, a, b))
 			}
 			return data.current
 		}, 50)
@@ -194,13 +200,16 @@ export function filter(options) {
  * and property in the dataset with the same name, will be filtered out.
  */
 export function columns(options={}) {
-	if (!options
-		|| typeof options!=='object'
-		|| Object.keys(options).length===0) {
+	const columnOptions = options?.columns && typeof options.columns === 'object'
+		? options.columns
+		: options
+	if (!columnOptions
+		|| typeof columnOptions!=='object'
+		|| Object.keys(columnOptions).length===0) {
 		throw new Error('columns requires options to be an object with at least one property')
 	}
 	return function(data) {
-		this.state.options.columns = options
+		this.state.options.columns = columnOptions
 		return throttledEffect(() => {
 			return data.current.map(input => {
 				let result = {}
