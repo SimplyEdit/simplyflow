@@ -36,12 +36,79 @@
   };
 
   // src/state.mjs
+  var MAP_READS_KEY = /* @__PURE__ */ new Set(["get", "has"]);
+  var MAP_READS_ITERATION = /* @__PURE__ */ new Set(["keys", "values", "entries", "forEach", Symbol.iterator]);
+  var MAP_WRITES = /* @__PURE__ */ new Set(["set", "delete", "clear"]);
+  var SET_WRITES = /* @__PURE__ */ new Set(["add", "delete", "clear"]);
+  var SET_ITERATION_PROPERTIES = {
+    entries: {},
+    forEach: {},
+    has: {},
+    keys: {},
+    values: {},
+    [Symbol.iterator]: {}
+  };
+  function isObjectLike(value) {
+    return value !== null && (typeof value === "object" || typeof value === "function");
+  }
+  function isSignal(value) {
+    return Boolean(isObjectLike(value) && value[DEP.SIGNAL]);
+  }
+  function targetSignal(target) {
+    return signals.get(target);
+  }
+  function readTarget(target, property) {
+    return target?.[property];
+  }
+  function bindMethod(target, receiver, value) {
+    if (target instanceof HTMLElement || target instanceof Number || target instanceof String || target instanceof Boolean) {
+      return value.bind(target);
+    }
+    return value.bind(receiver);
+  }
+  function collectRemovedArrayValues(target, nextLength) {
+    const values = /* @__PURE__ */ new Map();
+    if (!Array.isArray(target) || nextLength >= target.length) {
+      return values;
+    }
+    for (let index = nextLength; index < target.length; index++) {
+      if (Object.hasOwn(target, index)) {
+        values.set(index, target[index]);
+      }
+    }
+    return values;
+  }
+  function addArrayLengthChanges(context, target, oldLength, removedValues = /* @__PURE__ */ new Map()) {
+    if (!Array.isArray(target) || oldLength === target.length) {
+      return;
+    }
+    context.set(DEP.LENGTH, { was: oldLength, now: target.length });
+    context.set(DEP.ITERATE, {});
+    for (const [index, oldValue] of removedValues) {
+      context.set(String(index), { delete: true, was: oldValue, now: void 0 });
+    }
+  }
+  function notifyContext(receiver, context) {
+    if (context.size) {
+      notifySet(receiver, context);
+    }
+  }
+  function wrapArrayMethod(target, property, receiver, value) {
+    return (...args) => {
+      const oldLength = target.length;
+      const result = value.apply(receiver, args);
+      if (oldLength !== target.length) {
+        notifySet(receiver, makeContext(DEP.LENGTH, { was: oldLength, now: target.length }));
+      }
+      return result;
+    };
+  }
   function wrapMapMethod(target, property, receiver, value) {
     return (...args) => {
-      if (property === "get" || property === "has") {
+      if (MAP_READS_KEY.has(property)) {
         notifyGet(receiver, args[0]);
       }
-      if (["keys", "values", "entries", "forEach", Symbol.iterator].includes(property)) {
+      if (MAP_READS_ITERATION.has(property)) {
         notifyGet(receiver, DEP.ITERATE);
       }
       const oldSize = target.size;
@@ -62,154 +129,116 @@
       if (oldSize !== target.size) {
         context.set(DEP.SIZE, { was: oldSize, now: target.size });
       }
-      if (["set", "delete", "clear"].includes(property) || oldSize !== target.size) {
+      if (MAP_WRITES.has(property) || oldSize !== target.size) {
         context.set(DEP.ITERATE, {});
       }
-      if (context.size) {
-        notifySet(receiver, context);
-      }
-      return result;
-    };
-  }
-  function wrapArrayMethod(target, property, receiver, value) {
-    return (...args) => {
-      let l = target.length;
-      let result = value.apply(receiver, args);
-      if (l != target.length) {
-        notifySet(receiver, makeContext(DEP.LENGTH, { was: l, now: target.length }));
-      }
+      notifyContext(receiver, context);
       return result;
     };
   }
   function wrapSetMethod(target, property, receiver, value) {
     return (...args) => {
-      let s = target.size;
-      let result = value.apply(target, args);
-      if (s != target.size) {
-        notifySet(receiver, makeContext(DEP.SIZE, { was: s, now: target.size }));
+      const oldSize = target.size;
+      const result = value.apply(target, args);
+      if (oldSize !== target.size) {
+        notifySet(receiver, makeContext(DEP.SIZE, { was: oldSize, now: target.size }));
       }
-      if (["set", "add", "clear", "delete"].includes(property)) {
-        notifySet(receiver, makeContext({ entries: {}, forEach: {}, has: {}, keys: {}, values: {}, [Symbol.iterator]: {} }));
+      if (SET_WRITES.has(property)) {
+        notifySet(receiver, makeContext(SET_ITERATION_PROPERTIES));
       }
       return result;
     };
   }
-  function addArrayLengthChanges(context, target, oldLength, removedValues = /* @__PURE__ */ new Map()) {
-    if (!Array.isArray(target) || oldLength === target.length) {
-      return;
-    }
-    context.set(DEP.LENGTH, { was: oldLength, now: target.length });
-    context.set(DEP.ITERATE, {});
-    for (const [index, oldValue] of removedValues) {
-      context.set(String(index), { delete: true, was: oldValue, now: void 0 });
-    }
-  }
-  function removedArrayValues(target, nextLength) {
-    const result = /* @__PURE__ */ new Map();
-    if (!Array.isArray(target) || nextLength >= target.length) {
-      return result;
-    }
-    for (let index = nextLength; index < target.length; index++) {
-      if (Object.hasOwn(target, index)) {
-        result.set(index, target[index]);
-      }
-    }
-    return result;
+  function propertyValueChanged(descriptor, oldDescriptor, oldValue, newDescriptor, newValue) {
+    return Object.hasOwn(descriptor, "value") && !Object.is(oldValue, newValue) || Object.hasOwn(descriptor, "get") && oldDescriptor?.get !== newDescriptor?.get || Object.hasOwn(descriptor, "set") && oldDescriptor?.set !== newDescriptor?.set;
   }
   var signalHandler = {
-    get: (target, property, receiver) => {
+    get(target, property, receiver) {
       if (property === DEP.XRAY) {
         return target;
       }
       if (property === DEP.SIGNAL) {
         return true;
       }
-      const value = target?.[property];
+      const value = readTarget(target, property);
       notifyGet(receiver, property);
       if (typeof value === "function") {
         if (Array.isArray(target)) {
           return wrapArrayMethod(target, property, receiver, value);
-        } else if (target instanceof Map) {
-          return wrapMapMethod(target, property, receiver, value);
-        } else if (target instanceof Set) {
-          return wrapSetMethod(target, property, receiver, value);
-        } else if (target instanceof HTMLElement || target instanceof Number || target instanceof String || target instanceof Boolean) {
-          return value.bind(target);
-        } else {
-          return value.bind(receiver);
         }
+        if (target instanceof Map) {
+          return wrapMapMethod(target, property, receiver, value);
+        }
+        if (target instanceof Set) {
+          return wrapSetMethod(target, property, receiver, value);
+        }
+        return bindMethod(target, receiver, value);
       }
-      if (value && typeof value == "object") {
-        return signal(value);
-      }
-      return value;
+      return isObjectLike(value) ? signal(value) : value;
     },
-    set: (target, property, value, receiver) => {
+    set(target, property, value, receiver) {
       const hadOwn = Object.hasOwn(target, property);
       const oldLength = Array.isArray(target) ? target.length : void 0;
-      const removedValues = property === "length" ? removedArrayValues(target, Number(value)) : /* @__PURE__ */ new Map();
-      const current = target[property];
+      const removedValues = property === DEP.LENGTH ? collectRemovedArrayValues(target, Number(value)) : /* @__PURE__ */ new Map();
+      const oldValue = target[property];
       target[property] = value;
-      const hasOwnNow = Object.hasOwn(target, property);
-      const now = target[property];
+      const hasOwn = Object.hasOwn(target, property);
+      const newValue = target[property];
       const context = /* @__PURE__ */ new Map();
-      if (!Object.is(current, now) || !hadOwn && hasOwnNow) {
-        context.set(property, { was: current, now });
+      if (!Object.is(oldValue, newValue) || !hadOwn && hasOwn) {
+        context.set(property, { was: oldValue, now: newValue });
       }
-      if (!hadOwn && hasOwnNow) {
+      if (!hadOwn && hasOwn) {
         context.set(DEP.ITERATE, {});
       }
       addArrayLengthChanges(context, target, oldLength, removedValues);
-      if (context.size) {
-        notifySet(receiver, context);
-      }
+      notifyContext(receiver, context);
       return true;
     },
-    has: (target, property) => {
-      let receiver = signals.get(target);
+    has(target, property) {
+      const receiver = targetSignal(target);
       if (receiver) {
         notifyGet(receiver, property);
       }
       return Reflect.has(target, property);
     },
-    deleteProperty: (target, property) => {
+    deleteProperty(target, property) {
       const hadOwn = Object.hasOwn(target, property);
       if (!hadOwn) {
         return true;
       }
-      const current = target[property];
+      const oldValue = target[property];
       const oldLength = Array.isArray(target) ? target.length : void 0;
       const result = Reflect.deleteProperty(target, property);
-      if (result) {
-        const receiver = signals.get(target);
-        const context = makeContext(property, { delete: true, was: current, now: void 0 });
-        context.set(DEP.ITERATE, { delete: true, property });
-        addArrayLengthChanges(context, target, oldLength);
-        notifySet(receiver, context);
+      if (!result) {
+        return result;
       }
+      const receiver = targetSignal(target);
+      const context = makeContext(property, { delete: true, was: oldValue, now: void 0 });
+      context.set(DEP.ITERATE, { delete: true, property });
+      addArrayLengthChanges(context, target, oldLength);
+      notifySet(receiver, context);
       return result;
     },
-    defineProperty: (target, property, descriptor) => {
+    defineProperty(target, property, descriptor) {
       const hadOwn = Object.hasOwn(target, property);
       const oldDescriptor = Object.getOwnPropertyDescriptor(target, property);
       const oldValue = target[property];
       const oldLength = Array.isArray(target) ? target.length : void 0;
-      const removedValues = property === "length" && Object.hasOwn(descriptor, "value") ? removedArrayValues(target, Number(descriptor.value)) : /* @__PURE__ */ new Map();
+      const removedValues = property === DEP.LENGTH && Object.hasOwn(descriptor, "value") ? collectRemovedArrayValues(target, Number(descriptor.value)) : /* @__PURE__ */ new Map();
       const result = Reflect.defineProperty(target, property, descriptor);
       if (!result) {
         return result;
       }
-      const receiver = signals.get(target);
-      const hasOwnNow = Object.hasOwn(target, property);
+      const hasOwn = Object.hasOwn(target, property);
       const newDescriptor = Object.getOwnPropertyDescriptor(target, property);
       const newValue = target[property];
       const context = /* @__PURE__ */ new Map();
-      if (!hadOwn && hasOwnNow) {
+      if (!hadOwn && hasOwn) {
         context.set(property, { was: oldValue, now: newValue });
         context.set(DEP.ITERATE, {});
-      } else if (hadOwn && hasOwnNow) {
-        const descriptorChangesValue = Object.hasOwn(descriptor, "value") && !Object.is(oldValue, newValue) || Object.hasOwn(descriptor, "get") && oldDescriptor?.get !== newDescriptor?.get || Object.hasOwn(descriptor, "set") && oldDescriptor?.set !== newDescriptor?.set;
-        if (descriptorChangesValue) {
+      } else if (hadOwn && hasOwn) {
+        if (propertyValueChanged(descriptor, oldDescriptor, oldValue, newDescriptor, newValue)) {
           context.set(property, { was: oldValue, now: newValue });
         }
         if (oldDescriptor?.enumerable !== newDescriptor?.enumerable) {
@@ -217,31 +246,29 @@
         }
       }
       addArrayLengthChanges(context, target, oldLength, removedValues);
-      if (context.size) {
-        notifySet(receiver, context);
-      }
+      notifyContext(targetSignal(target), context);
       return result;
     },
-    ownKeys: (target) => {
-      let receiver = signals.get(target);
+    ownKeys(target) {
+      const receiver = targetSignal(target);
       notifyGet(receiver, DEP.ITERATE);
       return Reflect.ownKeys(target);
     }
   };
   var signals = /* @__PURE__ */ new WeakMap();
-  function signal(v = {}) {
-    if (v === null || typeof v !== "object" && typeof v !== "function") {
+  function signal(value = {}) {
+    if (!isObjectLike(value)) {
       throw new TypeError(
-        `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof v}`
+        `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof value}`
       );
     }
-    if (v[DEP.SIGNAL]) {
-      return v;
+    if (isSignal(value)) {
+      return value;
     }
-    if (!signals.has(v)) {
-      signals.set(v, new Proxy(v, signalHandler));
+    if (!signals.has(value)) {
+      signals.set(value, new Proxy(value, signalHandler));
     }
-    return signals.get(v);
+    return signals.get(value);
   }
   var tracers = [];
   var tracing = false;
@@ -254,85 +281,66 @@
         tracing = false;
       }
     }
-    if (!target || !target[DEP.SIGNAL]) {
-      throw new TypeError(
-        "simplyflow/state: trace() expects either a function or a signal"
-      );
+    if (!isSignal(target)) {
+      throw new TypeError("simplyflow/state: trace() expects either a function or a signal");
     }
-    const listeners = getListeners(target, prop);
-    return listeners.map((listener) => {
-      return {
-        effect: listener.effectType,
-        fn: listener.effectFunction,
-        signal: signals.get(listener.effectFunction)
-      };
-    });
+    return getListeners(target, prop).map((listener) => ({
+      effect: listener.effectType,
+      fn: listener.effectFunction,
+      signal: signals.get(listener.effectFunction)
+    }));
   }
   function addTracer(tracer) {
     if (!tracer || typeof tracer !== "object") {
       throw new TypeError("simplyflow/state: addTracer() expects a tracer object");
     }
     if (!tracer.get && !tracer.set) {
-      throw new Error('simply.state: addTracer: missing "get" or "set" property in tracer', tracer);
+      throw new Error('simplyflow/state: addTracer: missing "get" or "set" property in tracer');
     }
     if (tracer.get && typeof tracer.get !== "function") {
-      throw new Error('simply.state: addTracer: "get" is not a function', tracer);
+      throw new Error('simplyflow/state: addTracer: "get" is not a function');
     }
     if (tracer.set && typeof tracer.set !== "function") {
-      throw new Error('simply.state: addTracer: "set" is not a function', tracer);
+      throw new Error('simplyflow/state: addTracer: "set" is not a function');
     }
     tracers.push(tracer);
   }
-  function callTracers(getset, ...params) {
+  function callTracers(kind, ...params) {
     for (const tracer of tracers) {
-      if (tracer[getset]) {
-        tracer[getset](...params);
-      }
+      tracer[kind]?.(...params);
     }
   }
   var batchedListeners = /* @__PURE__ */ new Set();
-  var batchMode = 0;
+  var batchDepth = 0;
   function notifySet(self, context = /* @__PURE__ */ new Map()) {
-    if (!self || !self[DEP.SIGNAL]) {
+    if (!isSignal(self)) {
       throw new TypeError("simplyflow/state: notifySet() expects a signal as first argument");
     }
     if (!(context instanceof Map)) {
       throw new TypeError("simplyflow/state: notifySet() expects context to be a Map; use makeContext()");
     }
-    let listeners = [];
+    const listeners = /* @__PURE__ */ new Set();
     context.forEach((change, property) => {
-      let propListeners = getListeners(self, property);
-      if (propListeners?.length) {
-        for (let listener of propListeners) {
-          addContext(listener, makeContext(property, change));
-        }
-        listeners = listeners.concat(propListeners);
+      for (const listener of getListeners(self, property)) {
+        addContext(listener, makeContext(property, change));
+        listeners.add(listener);
       }
     });
-    listeners = new Set(listeners.filter(Boolean));
-    if (listeners) {
-      if (batchMode) {
-        batchedListeners = batchedListeners.union(listeners);
-      } else {
-        const currentEffect = computeStack[computeStack.length - 1];
-        for (let listener of Array.from(listeners)) {
-          if (listener != currentEffect && listener?.needsUpdate) {
-            if (tracing && tracers.length) {
-              callTracers("set", self, context, listener);
-            }
-            listener();
-          }
-          clearContext(listener);
-        }
-      }
+    if (!listeners.size) {
+      return;
     }
+    if (batchDepth) {
+      for (const listener of listeners) {
+        batchedListeners.add(listener);
+      }
+      return;
+    }
+    runListeners(listeners, self, context);
   }
   function makeContext(property, change) {
-    let context = /* @__PURE__ */ new Map();
+    const context = /* @__PURE__ */ new Map();
     if (property instanceof Map) {
-      property.forEach((change2, prop) => {
-        context.set(prop, change2);
-      });
+      property.forEach((change2, prop) => context.set(prop, change2));
       return context;
     }
     if (property !== null && typeof property === "object") {
@@ -348,9 +356,7 @@
     if (!listener.context) {
       listener.context = context;
     } else {
-      context.forEach((change, property) => {
-        listener.context.set(property, change);
-      });
+      context.forEach((change, property) => listener.context.set(property, change));
     }
     listener.needsUpdate = true;
   }
@@ -359,25 +365,26 @@
     delete listener.needsUpdate;
   }
   function notifyGet(self, property) {
-    let currentCompute = computeStack[computeStack.length - 1];
-    if (currentCompute) {
-      if (tracing && tracers.length) {
-        callTracers("get", self, property);
-      }
-      setListeners(self, property, currentCompute);
+    const currentCompute = computeStack[computeStack.length - 1];
+    if (!currentCompute) {
+      return;
     }
+    if (tracing && tracers.length) {
+      callTracers("get", self, property);
+    }
+    setListeners(self, property, currentCompute);
   }
   var listenersMap = /* @__PURE__ */ new WeakMap();
   var computeMap = /* @__PURE__ */ new WeakMap();
   function getListeners(self, property) {
-    let listeners = listenersMap.get(self);
+    const listeners = listenersMap.get(self);
     return listeners ? Array.from(listeners.get(property) || []) : [];
   }
   function setListeners(self, property, compute) {
     if (!listenersMap.has(self)) {
       listenersMap.set(self, /* @__PURE__ */ new Map());
     }
-    let listeners = listenersMap.get(self);
+    const listeners = listenersMap.get(self);
     if (!listeners.has(property)) {
       listeners.set(property, /* @__PURE__ */ new Set());
     }
@@ -385,152 +392,167 @@
     if (!computeMap.has(compute)) {
       computeMap.set(compute, /* @__PURE__ */ new Map());
     }
-    let connectedSignals = computeMap.get(compute);
-    if (!connectedSignals.has(property)) {
-      connectedSignals.set(property, /* @__PURE__ */ new Set());
+    const dependencies = computeMap.get(compute);
+    if (!dependencies.has(property)) {
+      dependencies.set(property, /* @__PURE__ */ new Set());
     }
-    connectedSignals.get(property).add(self);
+    dependencies.get(property).add(self);
   }
   function clearListeners(compute) {
-    const connectedSignals = computeMap.get(compute);
-    if (!connectedSignals) {
+    const dependencies = computeMap.get(compute);
+    if (!dependencies) {
       return;
     }
-    connectedSignals.forEach((signals2, property) => {
+    dependencies.forEach((signals2, property) => {
       signals2.forEach((signal3) => {
         const listeners = listenersMap.get(signal3);
-        if (listeners?.has(property)) {
-          listeners.get(property).delete(compute);
-        }
+        listeners?.get(property)?.delete(compute);
       });
     });
     computeMap.delete(compute);
   }
   var computeStack = [];
   var effectStack = [];
-  var effectMap = /* @__PURE__ */ new WeakMap();
   var signalStack = [];
+  var effectMap = /* @__PURE__ */ new WeakMap();
   function assertFunction(fn, name) {
     if (typeof fn !== "function") {
       throw new TypeError(`simplyflow/state: ${name}() expects a function`);
     }
   }
-  function effect(fn) {
-    assertFunction(fn, "effect");
-    if (effectStack.findIndex((f) => fn == f) !== -1) {
+  function assertNotRecursive(fn) {
+    if (effectStack.includes(fn)) {
       throw new Error("Recursive update() call", { cause: fn });
     }
-    effectStack.push(fn);
+  }
+  function effectSignal(fn) {
     let connectedSignal = signals.get(fn);
     if (!connectedSignal) {
-      connectedSignal = signal({
-        current: null
-      });
+      connectedSignal = signal({ current: null });
       signals.set(fn, connectedSignal);
     }
-    const computeEffect = function computeEffect2() {
-      if (signalStack.findIndex((s) => s == connectedSignal) !== -1) {
-        throw new Error("Cyclical dependency in update() call", { cause: fn });
-      }
-      clearListeners(computeEffect2);
-      computeEffect2.effectFunction = fn;
-      computeEffect2.effectType = effect;
-      computeStack.push(computeEffect2);
-      signalStack.push(connectedSignal);
-      let result;
-      try {
-        result = fn(computeEffect2, computeStack, signalStack);
-      } finally {
-        computeStack.pop();
-        signalStack.pop();
-        if (result instanceof Promise) {
-          result.then((result2) => {
-            connectedSignal.current = result2;
-          });
-        } else {
-          connectedSignal.current = result;
+    return connectedSignal;
+  }
+  function setEffectResult(connectedSignal, result) {
+    if (result instanceof Promise) {
+      result.then((value) => {
+        connectedSignal.current = value;
+      });
+    } else {
+      connectedSignal.current = result;
+    }
+  }
+  function runTracked(compute, connectedSignal, fn, effectType, args = [compute, computeStack, signalStack]) {
+    if (signalStack.includes(connectedSignal)) {
+      throw new Error("Cyclical dependency in update() call", { cause: fn });
+    }
+    clearListeners(compute);
+    compute.effectFunction = fn;
+    compute.effectType = effectType;
+    computeStack.push(compute);
+    signalStack.push(connectedSignal);
+    let result;
+    try {
+      result = fn(...args);
+    } finally {
+      computeStack.pop();
+      signalStack.pop();
+      setEffectResult(connectedSignal, result);
+    }
+  }
+  function runListeners(listeners, signal3, context) {
+    const currentEffect = computeStack[computeStack.length - 1];
+    for (const listener of Array.from(listeners)) {
+      if (listener !== currentEffect && listener?.needsUpdate) {
+        if (signal3 && tracing && tracers.length) {
+          callTracers("set", signal3, context, listener);
         }
+        listener();
       }
+      clearContext(listener);
+    }
+  }
+  function effect(fn) {
+    assertFunction(fn, "effect");
+    assertNotRecursive(fn);
+    effectStack.push(fn);
+    const connectedSignal = effectSignal(fn);
+    const compute = function computeEffect() {
+      runTracked(compute, connectedSignal, fn, effect);
     };
-    computeEffect.fn = fn;
-    effectMap.set(connectedSignal, computeEffect);
-    computeEffect();
+    compute.fn = fn;
+    effectMap.set(connectedSignal, compute);
+    compute();
     return connectedSignal;
   }
   function destroy(connectedSignal) {
-    if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
+    if (!isSignal(connectedSignal)) {
       throw new TypeError("simplyflow/state: destroy() expects an effect signal");
     }
-    const computeEffect = effectMap.get(connectedSignal);
-    if (!computeEffect) {
+    const compute = effectMap.get(connectedSignal);
+    if (!compute) {
       return;
     }
-    if (computeEffect.destroy) {
-      computeEffect.destroy();
-    }
-    clearListeners(computeEffect);
-    if (computeEffect.fn) {
-      signals.delete(computeEffect.fn);
-      const effectIndex = effectStack.findIndex((fn) => fn === computeEffect.fn);
-      if (effectIndex !== -1) {
-        effectStack.splice(effectIndex, 1);
+    compute.destroy?.();
+    clearListeners(compute);
+    if (compute.fn) {
+      signals.delete(compute.fn);
+      const index = effectStack.findIndex((fn) => fn === compute.fn);
+      if (index !== -1) {
+        effectStack.splice(index, 1);
       }
     }
     effectMap.delete(connectedSignal);
   }
   function batch(fn) {
     assertFunction(fn, "batch");
-    batchMode++;
+    batchDepth++;
     let result;
     try {
       result = fn();
     } finally {
-      const finishBatch = () => {
-        batchMode--;
-        if (!batchMode) {
+      const finish = () => {
+        batchDepth--;
+        if (!batchDepth) {
           runBatchedListeners();
         }
       };
       if (result instanceof Promise) {
-        result.then(finishBatch, finishBatch);
+        result.then(finish, finish);
       } else {
-        finishBatch();
+        finish();
       }
     }
     return result;
   }
   function runBatchedListeners() {
-    let copyBatchedListeners = Array.from(batchedListeners);
+    const listeners = batchedListeners;
     batchedListeners = /* @__PURE__ */ new Set();
-    const currentEffect = computeStack[computeStack.length - 1];
-    for (let listener of copyBatchedListeners) {
-      if (listener != currentEffect && listener?.needsUpdate) {
-        listener();
-      }
-      clearContext(listener);
-    }
+    runListeners(listeners);
   }
   function throttledEffect(fn, throttleTime) {
     assertFunction(fn, "throttledEffect");
     if (!Number.isFinite(throttleTime) || throttleTime < 0) {
-      throw new TypeError(
-        `simplyflow/state: throttledEffect() expects throttleTime to be a non-negative number`
-      );
+      throw new TypeError("simplyflow/state: throttledEffect() expects throttleTime to be a non-negative number");
     }
-    if (effectStack.findIndex((f) => fn == f) !== -1) {
-      throw new Error("Recursive update() call", { cause: fn });
-    }
+    assertNotRecursive(fn);
     effectStack.push(fn);
-    let connectedSignal = signals.get(fn);
-    if (!connectedSignal) {
-      connectedSignal = signal({
-        current: null
-      });
-      signals.set(fn, connectedSignal);
-    }
+    const connectedSignal = effectSignal(fn);
     let throttledUntil = 0;
     let hasChange = true;
     let timeout = null;
+    const compute = function computeEffect() {
+      const now = Date.now();
+      if (throttledUntil > now) {
+        hasChange = true;
+        schedule();
+        return;
+      }
+      runTracked(compute, connectedSignal, fn, throttledEffect);
+      hasChange = false;
+      throttledUntil = Date.now() + throttleTime;
+      schedule();
+    };
     function schedule() {
       if (timeout) {
         return;
@@ -539,91 +561,44 @@
       timeout = globalThis.setTimeout(() => {
         timeout = null;
         if (hasChange) {
-          computeEffect();
+          compute();
         }
       }, delay);
     }
-    const computeEffect = function computeEffect2() {
-      const now = Date.now();
-      if (throttledUntil > now) {
-        hasChange = true;
-        schedule();
-        return;
-      }
-      if (signalStack.findIndex((s) => s == connectedSignal) !== -1) {
-        throw new Error("Cyclical dependency in update() call", { cause: fn });
-      }
-      clearListeners(computeEffect2);
-      computeEffect2.effectFunction = fn;
-      computeEffect2.effectType = throttledEffect;
-      computeStack.push(computeEffect2);
-      signalStack.push(connectedSignal);
-      let result;
-      try {
-        result = fn(computeEffect2, computeStack, signalStack);
-      } finally {
-        hasChange = false;
-        computeStack.pop();
-        signalStack.pop();
-        if (result instanceof Promise) {
-          result.then((result2) => {
-            connectedSignal.current = result2;
-          });
-        } else {
-          connectedSignal.current = result;
-        }
-      }
-      throttledUntil = Date.now() + throttleTime;
-      schedule();
-    };
-    computeEffect.fn = fn;
-    computeEffect.destroy = () => {
+    compute.fn = fn;
+    compute.destroy = () => {
       if (timeout) {
         globalThis.clearTimeout(timeout);
         timeout = null;
       }
       hasChange = false;
     };
-    effectMap.set(connectedSignal, computeEffect);
-    computeEffect();
+    effectMap.set(connectedSignal, compute);
+    compute();
     return connectedSignal;
   }
   function clockEffect(fn, clock) {
     assertFunction(fn, "clockEffect");
     if (!clock || typeof clock !== "object" || typeof clock.time !== "number") {
-      throw new TypeError(
-        `simplyflow/state: clockEffect() expects a clock object with a numeric .time property`
-      );
+      throw new TypeError("simplyflow/state: clockEffect() expects a clock object with a numeric .time property");
     }
-    let connectedSignal = signals.get(fn);
-    if (!connectedSignal) {
-      connectedSignal = signal({
-        current: null
-      });
-      signals.set(fn, connectedSignal);
-    }
+    const connectedSignal = effectSignal(fn);
     let lastTick = -1;
     let hasChanged = true;
-    const computeEffect = function computeEffect2() {
+    const compute = function computeEffect() {
       if (lastTick < clock.time) {
         if (hasChanged) {
-          clearListeners(computeEffect2);
-          computeEffect2.effectFunction = fn;
-          computeEffect2.effectType = clockEffect;
-          computeStack.push(computeEffect2);
+          clearListeners(compute);
+          compute.effectFunction = fn;
+          compute.effectType = clockEffect;
+          computeStack.push(compute);
           lastTick = clock.time;
           let result;
           try {
-            result = fn(computeEffect2, computeStack);
+            result = fn(compute, computeStack);
           } finally {
             computeStack.pop();
-            if (result instanceof Promise) {
-              result.then((result2) => {
-                connectedSignal.current = result2;
-              });
-            } else {
-              connectedSignal.current = result;
-            }
+            setEffectResult(connectedSignal, result);
             hasChanged = false;
           }
         } else {
@@ -633,63 +608,53 @@
         hasChanged = true;
       }
     };
-    computeEffect.fn = fn;
-    effectMap.set(connectedSignal, computeEffect);
-    computeEffect();
+    compute.fn = fn;
+    effectMap.set(connectedSignal, compute);
+    compute();
     return connectedSignal;
   }
   function untracked(fn) {
     assertFunction(fn, "untracked");
-    const pos = computeStack.length - 1;
-    const remember = computeStack[pos];
-    computeStack[pos] = false;
+    const index = computeStack.length - 1;
+    const current = computeStack[index];
+    computeStack[index] = false;
     try {
       return fn();
     } finally {
-      computeStack[pos] = remember;
+      computeStack[index] = current;
     }
   }
   function clone(value, deep = false) {
-    let seen = /* @__PURE__ */ new Map();
-    const innerClone = function(value2) {
+    const seen = /* @__PURE__ */ new Map();
+    function cloneValue(value2) {
       if (seen.has(value2)) {
         return seen.get(value2);
       }
-      switch (typeof value2) {
-        case "object":
-          if (!value2) {
-            return value2;
-          }
-          if (Array.isArray(value2)) {
-            const result = [];
-            if (!deep) {
-              return value2.slice();
-            }
-            seen.set(value2, result);
-            for (let i = 0; i < value2.length; i++) {
-              result[i] = innerClone(value2[i]);
-            }
-            return result;
-          } else if (!value2.constructor || value2.constructor === Object) {
-            let result = {};
-            if (!value2.constructor) {
-              result = /* @__PURE__ */ Object.create(null);
-            }
-            seen.set(value2, result);
-            for (const key in value2) {
-              result[key] = deep ? innerClone(value2[key]) : value2[key];
-            }
-            return result;
-          } else {
-            return value2;
-          }
-          break;
-        default:
-          return value2;
-          break;
+      if (value2 === null || typeof value2 !== "object") {
+        return value2;
       }
-    };
-    return innerClone(value);
+      if (Array.isArray(value2)) {
+        if (!deep) {
+          return value2.slice();
+        }
+        const result = [];
+        seen.set(value2, result);
+        for (let index = 0; index < value2.length; index++) {
+          result[index] = cloneValue(value2[index]);
+        }
+        return result;
+      }
+      if (!value2.constructor || value2.constructor === Object) {
+        const result = value2.constructor ? {} : /* @__PURE__ */ Object.create(null);
+        seen.set(value2, result);
+        for (const key in value2) {
+          result[key] = deep ? cloneValue(value2[key]) : value2[key];
+        }
+        return result;
+      }
+      return value2;
+    }
+    return cloneValue(value);
   }
 
   // src/bind.transformers.mjs
