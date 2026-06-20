@@ -79,6 +79,34 @@ actions: {
 
 Inside an action, `this` is the app instance.
 
+### `start`
+
+An optional function that runs after the app is created and before route initialization. Use it to load initial data or start the app.
+
+```javascript
+app({
+  data: { contacts: [] },
+
+  async start() {
+    this.data.contacts = await this.api.get('contacts.json')
+  }
+})
+```
+
+If `start()` returns a promise, routes are initialized after that promise settles successfully.
+
+### `onError`
+
+An optional function that receives errors thrown by actions or `start()`.
+
+```javascript
+app({
+  onError(error, context) {
+    console.error('The app could not finish an operation:', error)
+  }
+})
+```
+
 ### `routes`
 
 Routes map URLs to actions or functions.

@@ -29,8 +29,7 @@ export default {
 			this.state.anchor.visible = false
 		}
 	},
-	hooks: {
-		start: function() {
+	start: function() {
 			this.container.insertAdjacentHTML('beforeend','<simply-render rel="anchor"></simply-render>')
 			this.state.anchor = {
 				element: this.container.querySelector('.anchor'),
@@ -81,7 +80,6 @@ export default {
 				}
 			})
 
-		}
 	}
 }
 

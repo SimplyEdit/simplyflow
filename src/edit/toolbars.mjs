@@ -279,8 +279,7 @@ html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline" popo
 			this.state.toolbar.hidePopover()
 		}
 	},
-	hooks: {
-		start: function() {
+	start: function() {
 	        this.state.toolbar = this.container.querySelector('simply-edit-focus-toolbar')
 	        if (!this.state.toolbar) {
 				this.container.insertAdjacentHTML('beforeend','<simply-render rel="simply-toolbar-float"></simply-render>')
@@ -307,7 +306,6 @@ html`<div class="simply-toolbar simply-toolbar-float simply-toolbar-inline" popo
 					simply.command({ app: this, container: toolbar.shadowRoot, commands: this.commands})
 				}, 100)
 	        }
-		}
 	},
 	components: {
 		anchor

@@ -1,6 +1,6 @@
 # Actions
 
-Actions contain application behavior. They are usually called by commands, routes or hooks.
+Actions contain application behavior. They are usually called by commands, routes or `start()`.
 
 ```javascript
 app({
@@ -15,4 +15,4 @@ app({
 
 Inside an action, `this` is the app instance.
 
-If `hooks.error` is configured, thrown errors and rejected promises from actions are passed to that hook.
+If `onError(error, context)` is configured on the app, thrown errors and rejected promises from actions are passed to it. The second argument is the action function that failed.

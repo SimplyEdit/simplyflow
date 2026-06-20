@@ -12,7 +12,8 @@ const APP_OPTIONS = [
     'data',
     'html',
     'css',
-    'hooks',
+    'start',
+    'onError',
     'components',
     'baseURL',
     'root',
@@ -37,7 +38,8 @@ class SimplyApp
 
         this.container = options.container || document.body
         this.data = signal(options.data || {})
-        this.hooks = options.hooks
+        this.start = options.start
+        this.onError = options.onError
         this.components = options.components
         this.baseURL = options.baseURL || options.root
 
@@ -50,7 +52,8 @@ class SimplyApp
                 case 'data':
                 case 'html':
                 case 'css':
-                case 'hooks':
+                case 'start':
+                case 'onError':
                 case 'components':
                 case 'baseURL':
                 case 'root':
@@ -225,18 +228,32 @@ function initRoutes(app) {
     }
 }
 
+
+function handleAppError(app, error, context)
+{
+    if (app.onError) {
+        return app.onError.call(app, error, context)
+    }
+    throw error
+}
+
 export function app(options={})
 {
     const app = new SimplyApp(options)
-    if (app.hooks?.start) {
-        const promise = app.hooks.start.call(app)
-        if (promise instanceof Promise) {
-            promise.then(() => initRoutes(app))
+    if (!app.start) {
+        initRoutes(app)
+        return app
+    }
+
+    try {
+        const result = app.start.call(app)
+        if (result instanceof Promise) {
+            result.then(() => initRoutes(app)).catch(error => handleAppError(app, error, app.start))
         } else {
             initRoutes(app)
         }
-    } else {
-        initRoutes(app)
+    } catch (error) {
+        handleAppError(app, error, app.start)
     }
     return app
 }
@@ -280,8 +297,9 @@ function mergeComponents(options, components) {
         options.components[name] = component
         for (const key of Object.keys(component)) {
             switch(key) {
-                case 'hooks':
-                    // don't merge these; app.hooks.start controls startup for now
+                case 'start':
+                case 'onError':
+                    // App lifecycle functions are app-level behavior, not merged component state.
                 case 'components':
                     // already handled
                     break

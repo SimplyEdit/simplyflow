@@ -14,12 +14,12 @@ export function actions(options, optionsCompat)
 					const result = target(...argumentsList)
 					if (result instanceof Promise) {
 						return result.catch(err => {
-							return options.app.hooks.error.call(this, err, target)
+							return options.app.onError.call(this, err, target)
 						})							
 					}
 					return result
 				} catch(err) {
-					return options.app.hooks.error.call(this, err, target)
+					return options.app.onError.call(this, err, target)
 				}
 			}
 		}
@@ -30,7 +30,7 @@ export function actions(options, optionsCompat)
 				if (!target[property]) {
 					return undefined
 				}
-				if (options.app.hooks?.error) {
+				if (options.app.onError) {
 					return new Proxy(target[property].bind(options.app), functionHandler)
 				} else {
 					return target[property].bind(options.app)

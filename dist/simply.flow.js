@@ -2648,12 +2648,12 @@
             const result = target(...argumentsList);
             if (result instanceof Promise) {
               return result.catch((err) => {
-                return options.app.hooks.error.call(this, err, target);
+                return options.app.onError.call(this, err, target);
               });
             }
             return result;
           } catch (err) {
-            return options.app.hooks.error.call(this, err, target);
+            return options.app.onError.call(this, err, target);
           }
         }
       };
@@ -2662,7 +2662,7 @@
           if (!target[property]) {
             return void 0;
           }
-          if (options.app.hooks?.error) {
+          if (options.app.onError) {
             return new Proxy(target[property].bind(options.app), functionHandler);
           } else {
             return target[property].bind(options.app);
@@ -2807,7 +2807,8 @@
     "data",
     "html",
     "css",
-    "hooks",
+    "start",
+    "onError",
     "components",
     "baseURL",
     "root",
@@ -2827,7 +2828,8 @@
       }
       this.container = options.container || document.body;
       this.data = signal(options.data || {});
-      this.hooks = options.hooks;
+      this.start = options.start;
+      this.onError = options.onError;
       this.components = options.components;
       this.baseURL = options.baseURL || options.root;
       installHtml(this.container, options.html);
@@ -2838,7 +2840,8 @@
           case "data":
           case "html":
           case "css":
-          case "hooks":
+          case "start":
+          case "onError":
           case "components":
           case "baseURL":
           case "root":
@@ -2982,17 +2985,27 @@
       });
     }
   }
+  function handleAppError(app2, error, context) {
+    if (app2.onError) {
+      return app2.onError.call(app2, error, context);
+    }
+    throw error;
+  }
   function app(options = {}) {
     const app2 = new SimplyApp(options);
-    if (app2.hooks?.start) {
-      const promise = app2.hooks.start.call(app2);
-      if (promise instanceof Promise) {
-        promise.then(() => initRoutes(app2));
+    if (!app2.start) {
+      initRoutes(app2);
+      return app2;
+    }
+    try {
+      const result = app2.start.call(app2);
+      if (result instanceof Promise) {
+        result.then(() => initRoutes(app2)).catch((error) => handleAppError(app2, error, app2.start));
       } else {
         initRoutes(app2);
       }
-    } else {
-      initRoutes(app2);
+    } catch (error) {
+      handleAppError(app2, error, app2.start);
     }
     return app2;
   }
@@ -3032,8 +3045,9 @@
       options.components[name] = component;
       for (const key of Object.keys(component)) {
         switch (key) {
-          case "hooks":
-          // don't merge these; app.hooks.start controls startup for now
+          case "start":
+          case "onError":
+          // App lifecycle functions are app-level behavior, not merged component state.
           case "components":
             break;
           default:

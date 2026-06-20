@@ -23,14 +23,12 @@ describe('action API', () => {
     expect(api.missing).toBeUndefined()
   })
 
-  it('routes synchronous and asynchronous action errors to hooks.error', async () => {
+  it('routes synchronous and asynchronous action errors to onError', async () => {
     const errors = []
     const testApp = {
-      hooks: {
-        error(error, action) {
-          errors.push({ error, action })
-          return 'handled'
-        }
+      onError(error, action) {
+        errors.push({ error, action })
+        return 'handled'
       }
     }
     const api = actions({

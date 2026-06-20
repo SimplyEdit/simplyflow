@@ -28,7 +28,7 @@ export function edit(rootElement)
         document.removeEventListener(this.selectionListener)
       }
     },
-    keyboard: {
+    keys: {
       default: {
         'Control+ ': function() {
           if (this.state.anchor.visible) {
@@ -105,22 +105,17 @@ export function edit(rootElement)
         }
       }
     },
-    hooks: {
-      start: function() {
-        // make sure this.state is a signal before calling start hooks of components
-        // and simply.bind - move to default start() hook in app.mjs (when simplyflow is in simplyview)
+    start: function() {
+        // Keep this experimental editor state separate from app.data for now.
         this.state = simply.state.signal(this.state),
         simply.bind({
           root: this.state
         })
-        // move this code to default start() hook in app.mja, run it before
-        // the app.hooks.start function
         for (let component in this.components) {
-          if (this.components[component].hooks?.start) {
-            this.components[component].hooks.start.apply(this)
+          if (this.components[component].start) {
+            this.components[component].start.apply(this)
           }
         }
-      }
     },
     components: {
       toolbars

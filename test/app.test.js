@@ -213,7 +213,7 @@ describe('app integration details', () => {
     testApp.destroy()
   })
 
-  it('waits for an async start hook before initializing routes', async () => {
+  it('waits for async start before initializing routes', async () => {
     const container = document.createElement('div')
     document.body.append(container)
     const calls = []
@@ -221,13 +221,11 @@ describe('app integration details', () => {
     const testApp = app({
       container,
       baseURL: '/',
-      hooks: {
-        start: async function() {
-          calls.push('start')
-          await wait(0)
-          history.replaceState({}, '', '/ready')
-          calls.push('started')
-        }
+      async start() {
+        calls.push('start')
+        await wait(0)
+        history.replaceState({}, '', '/ready')
+        calls.push('started')
       },
       routes: {
         '/ready': function() {
@@ -236,11 +234,32 @@ describe('app integration details', () => {
       }
     })
 
-    // Route initialization is scheduled after the async start hook settles.
+    // Route initialization is scheduled after async start settles.
     await wait()
     expect(calls[0]).toBe('start')
     expect(calls).toContain('started')
     expect(calls.some(call => Array.isArray(call) && call[0] === 'route')).toBe(true)
+    testApp.destroy()
+  })
+
+  it('routes start errors to onError', async () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const errors = []
+
+    const testApp = app({
+      container,
+      start() {
+        throw new Error('start failed')
+      },
+      onError(error, context) {
+        errors.push({ error, context })
+      }
+    })
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0].error.message).toBe('start failed')
+    expect(errors[0].context).toBe(testApp.start)
     testApp.destroy()
   })
   it('copies custom app options without warning so actions can use app services', async () => {
