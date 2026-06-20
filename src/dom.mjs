@@ -35,6 +35,15 @@ const domSignalHandler = {
         }
         return value
     },
+    set: (target, property, value, receiver) => {
+        const current = target[property]
+        target[property] = value
+        const now = target[property]
+        if (!Object.is(current, now)) {
+            notifySet(receiver, makeContext(property, { was: current, now }))
+        }
+        return true
+    },
     has: (target, property) => {
         let receiver = signals.get(target)
         if (receiver) {
