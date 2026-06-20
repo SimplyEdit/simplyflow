@@ -7,7 +7,13 @@ const path = {
 			return dataset
 		}
 		return pointer.split('.').reduce(function(acc, name) {
-	        return (acc && acc[name] ? acc[name] : null)
+	        if (acc == null) {
+	            return null
+	        }
+	        if (!Reflect.has(Object(acc), name)) {
+	            return null
+	        }
+	        return acc[name]
 	    }, dataset)
 	},
 	set: function(dataset, pointer, value) {
@@ -31,6 +37,7 @@ const path = {
 			pointer = path.parent(pointer)
 			result.unshift(pointer)
 		}
+		return result
 	}
 }
 

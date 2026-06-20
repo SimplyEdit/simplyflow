@@ -12,6 +12,7 @@ export class SimplyRoute
 {
     constructor(options={})
     {
+        this.options = options
         this.baseURL = options.baseURL || '/'
         this.app = options.app || {}
         this.addMissingSlash = !!options.addMissingSlash
@@ -186,7 +187,7 @@ export class SimplyRoute
 
     removeListener(action, route, callback)
     {
-        if (['match','call','finish'].indexOf(action)==-1) {
+        if (['goto','match','call','finish'].indexOf(action)==-1) {
             throw new Error('Unknown action '+action)
         }
         if (!this.listeners[action][route]) {

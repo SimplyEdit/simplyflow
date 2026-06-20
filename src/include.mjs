@@ -93,7 +93,7 @@ export const include = {
                         importScript()
                     })
             } else {
-                clone.src = rebaseHref(clone.src, base)
+                clone.src = rebaseHref(clone.getAttribute('src'), base)
                 if (!clone.hasAttribute('async') && !clone.hasAttribute('defer')) {
                     clone.async = false //important! do not use clone.setAttribute('async', false) - it has no effect
                 }
@@ -113,8 +113,9 @@ export const include = {
         const stylesheets = fragment.querySelectorAll('link[rel="stylesheet"],style')
         // add all stylesheets to head
         for (let stylesheet of stylesheets) {
-            if (stylesheet.href) {
-                stylesheet.href = rebaseHref(stylesheet.href, link.href)
+            const href = stylesheet.getAttribute('href')
+            if (href) {
+                stylesheet.href = rebaseHref(href, link.href)
             }
             head.appendChild(stylesheet)
         }

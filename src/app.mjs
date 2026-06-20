@@ -27,7 +27,7 @@ class SimplyApp
         installHtml(this.container, options.html)
         installCss(this.container, options.css)
 
-        for (const key in options) {
+        for (const key of Object.keys(options)) {
             switch(key) {
                 case 'container':
                 case 'data':
@@ -182,7 +182,7 @@ if (!globalThis.css) {
 
 function mergeOptions(options, otherOptions)
 {
-    for (const key in otherOptions) {
+    for (const key of Object.keys(otherOptions)) {
         switch(typeof otherOptions[key]) {
             case 'object':
                 if (!otherOptions[key]) {
@@ -201,7 +201,7 @@ function mergeOptions(options, otherOptions)
 }
 
 function mergeComponents(options, components) {
-    for (const name in components) {
+    for (const name of Object.keys(components)) {
         const component = components[name]
         if (component.components) {
             mergeComponents(options, component.components)
@@ -210,7 +210,7 @@ function mergeComponents(options, components) {
             options.components = {}
         }
         options.components[name] = component
-        for (const key in component) {
+        for (const key of Object.keys(component)) {
             switch(key) {
                 case 'hooks':
                     // don't merge these; app.hooks.start controls startup for now

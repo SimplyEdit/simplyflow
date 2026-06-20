@@ -2265,6 +2265,7 @@
   }
   var SimplyRoute = class {
     constructor(options = {}) {
+      this.options = options;
       this.baseURL = options.baseURL || "/";
       this.app = options.app || {};
       this.addMissingSlash = !!options.addMissingSlash;
@@ -2414,7 +2415,7 @@
       this.listeners[action][route].push(callback);
     }
     removeListener(action, route, callback) {
-      if (["match", "call", "finish"].indexOf(action) == -1) {
+      if (["goto", "match", "call", "finish"].indexOf(action) == -1) {
         throw new Error("Unknown action " + action);
       }
       if (!this.listeners[action][route]) {
@@ -2807,7 +2808,7 @@
       this.baseURL = options.baseURL || options.root;
       installHtml(this.container, options.html);
       installCss(this.container, options.css);
-      for (const key in options) {
+      for (const key of Object.keys(options)) {
         switch (key) {
           case "container":
           case "data":
@@ -2944,7 +2945,7 @@
     globalThis.css = css;
   }
   function mergeOptions(options, otherOptions) {
-    for (const key in otherOptions) {
+    for (const key of Object.keys(otherOptions)) {
       switch (typeof otherOptions[key]) {
         case "object":
           if (!otherOptions[key]) {
@@ -2962,7 +2963,7 @@
     }
   }
   function mergeComponents(options, components) {
-    for (const name in components) {
+    for (const name of Object.keys(components)) {
       const component = components[name];
       if (component.components) {
         mergeComponents(options, component.components);
@@ -2971,7 +2972,7 @@
         options.components = {};
       }
       options.components[name] = component;
-      for (const key in component) {
+      for (const key of Object.keys(component)) {
         switch (key) {
           case "hooks":
           // don't merge these; app.hooks.start controls startup for now
@@ -3155,7 +3156,7 @@
             importScript();
           });
         } else {
-          clone2.src = rebaseHref(clone2.src, base);
+          clone2.src = rebaseHref(clone2.getAttribute("src"), base);
           if (!clone2.hasAttribute("async") && !clone2.hasAttribute("defer")) {
             clone2.async = false;
           }
@@ -3174,8 +3175,9 @@
       let fragment = globalThis.document.createRange().createContextualFragment(html2);
       const stylesheets = fragment.querySelectorAll('link[rel="stylesheet"],style');
       for (let stylesheet of stylesheets) {
-        if (stylesheet.href) {
-          stylesheet.href = rebaseHref(stylesheet.href, link.href);
+        const href = stylesheet.getAttribute("href");
+        if (href) {
+          stylesheet.href = rebaseHref(href, link.href);
         }
         head.appendChild(stylesheet);
       }
@@ -3251,7 +3253,13 @@
         return dataset;
       }
       return pointer.split(".").reduce(function(acc, name) {
-        return acc && acc[name] ? acc[name] : null;
+        if (acc == null) {
+          return null;
+        }
+        if (!Reflect.has(Object(acc), name)) {
+          return null;
+        }
+        return acc[name];
       }, dataset);
     },
     set: function(dataset, pointer, value) {
@@ -3275,6 +3283,7 @@
         pointer = path.parent(pointer);
         result.unshift(pointer);
       }
+      return result;
     }
   };
   var path_default = path;
