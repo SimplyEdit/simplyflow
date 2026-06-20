@@ -1,3 +1,11 @@
+import { closest } from './suggest.mjs'
+const COMMAND_OPTIONS = [
+    'commands',
+    'handlers',
+    'app',
+    'container'
+]
+
 class SimplyCommands {
 	constructor(options={}) {
 		if (!options.app) {
@@ -18,10 +26,10 @@ class SimplyCommands {
 				return
 			}
 			if (!this[command.name]) {
-                console.warn(`simplyflow/command: unknown command "${command.name}"`, { cause: command.source });
+                warnUnknownCommand(this, command.name, command.source)
                 return
 			}
-            const shouldContinue = this[command.name].call(options.app, command.source, command.value)
+            const shouldContinue = this[command.name].call(options.app, command.source, command.value, evt)
             if (shouldContinue!==true) {
                 evt.preventDefault()
                 evt.stopPropagation()
@@ -35,12 +43,12 @@ class SimplyCommands {
         options.app.container.addEventListener('input', commandHandler)
 	}
 
-    call(command, el, value) {
+    call(command, el, value, event) {
         if (!this[command]) {
-            console.warn(`simplyflow/command: unknown command "${command}"`);
+            warnUnknownCommand(this, command, el)
             return
         }
-        return this[command].call(this.app, el, value)
+        return this[command].call(this.app, el, value, event)
     }
 
     action(name) {
@@ -152,3 +160,36 @@ const defaultHandlers = [
         }
     }
 ]
+
+const unknownCommandWarnings = new WeakMap()
+
+function warnUnknownCommand(commands, command, source)
+{
+    let warned = unknownCommandWarnings.get(commands)
+    if (!warned) {
+        warned = new Set()
+        unknownCommandWarnings.set(commands, warned)
+    }
+    if (warned.has(command)) {
+        return
+    }
+    warned.add(command)
+
+    const suggestion = closest(command, commandNames(commands))
+    const suffix = suggestion ? `. Did you mean "${suggestion}"?` : ''
+    if (source) {
+        console.warn(`simplyflow/command: unknown command "${command}"${suffix}`, { cause: source })
+    } else {
+        console.warn(`simplyflow/command: unknown command "${command}"${suffix}`)
+    }
+}
+
+function commandNames(commands)
+{
+    return Object.keys(commands).filter(command => {
+        return !command.startsWith('$') &&
+            !COMMAND_OPTIONS.includes(command) &&
+            typeof commands[command] === 'function'
+    })
+}
+

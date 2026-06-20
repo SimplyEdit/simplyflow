@@ -6,6 +6,7 @@ import { actions } from './action.mjs'
 import { keys, accesskeys } from './key.mjs'
 import { html, css } from './highlight.mjs'
 import { findAttribute } from './dom.mjs'
+import { closest } from './suggest.mjs'
 
 const APP_OPTIONS = [
     'container',
@@ -56,10 +57,6 @@ class SimplyApp
                 case 'onError':
                 case 'components':
                 case 'baseURL':
-                case 'root':
-                case 'bind':
-                    // Historical experimental app option. App-level binding is
-                    // no longer configurable; use lower-level bind() directly.
                     break
                 case 'commands':
                     this.commands = commands({ app: this, container: this.container, commands: options.commands})
@@ -161,55 +158,10 @@ function installStyles(container, styles)
 
 function warnLikelyOptionTypo(key)
 {
-    const suggestion = closestAppOption(key)
+    const suggestion = closest(key, APP_OPTIONS)
     if (suggestion) {
         console.warn(`simplyflow/app: unknown option "${key}". Did you mean "${suggestion}"? The option was still added to the app as "app.${key}".`)
     }
-}
-
-function closestAppOption(key)
-{
-    // Short custom names like `api` or `db` are common extension points and
-    // too short for useful typo detection.
-    if (key.length < 4) {
-        return
-    }
-
-    let closest
-    let closestDistance = Infinity
-    for (const option of APP_OPTIONS) {
-        const distance = editDistance(key, option)
-        if (distance < closestDistance) {
-            closest = option
-            closestDistance = distance
-        }
-    }
-    return closestDistance <= 2 ? closest : undefined
-}
-
-function editDistance(a, b)
-{
-    if (Math.abs(a.length - b.length) > 2) {
-        return 3
-    }
-
-    const previous = Array.from({ length: b.length + 1 }, (_, index) => index)
-    const current = new Array(b.length + 1)
-
-    for (let ai = 1; ai <= a.length; ai++) {
-        current[0] = ai
-        for (let bi = 1; bi <= b.length; bi++) {
-            const cost = a[ai - 1] === b[bi - 1] ? 0 : 1
-            current[bi] = Math.min(
-                previous[bi] + 1,
-                current[bi - 1] + 1,
-                previous[bi - 1] + cost
-            )
-        }
-        previous.splice(0, previous.length, ...current)
-    }
-
-    return previous[b.length]
 }
 
 function initRoutes(app) {

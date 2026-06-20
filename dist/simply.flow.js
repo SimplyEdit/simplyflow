@@ -2489,7 +2489,51 @@
     return routeInfo;
   }
 
+  // src/suggest.mjs
+  function closest(name, options, { maxDistance = 2, minLength = 4 } = {}) {
+    if (name.length < minLength) {
+      return;
+    }
+    let result;
+    let resultDistance = Infinity;
+    for (const option of options) {
+      const distance = editDistance(name, option, maxDistance);
+      if (distance < resultDistance) {
+        result = option;
+        resultDistance = distance;
+      }
+    }
+    return resultDistance <= maxDistance ? result : void 0;
+  }
+  function editDistance(a, b, maxDistance = 2) {
+    const tooFar = maxDistance + 1;
+    if (Math.abs(a.length - b.length) > maxDistance) {
+      return tooFar;
+    }
+    const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+    const current = new Array(b.length + 1);
+    for (let ai = 1; ai <= a.length; ai++) {
+      current[0] = ai;
+      for (let bi = 1; bi <= b.length; bi++) {
+        const cost = a[ai - 1] === b[bi - 1] ? 0 : 1;
+        current[bi] = Math.min(
+          previous[bi] + 1,
+          current[bi - 1] + 1,
+          previous[bi - 1] + cost
+        );
+      }
+      previous.splice(0, previous.length, ...current);
+    }
+    return previous[b.length];
+  }
+
   // src/command.mjs
+  var COMMAND_OPTIONS = [
+    "commands",
+    "handlers",
+    "app",
+    "container"
+  ];
   var SimplyCommands = class {
     constructor(options = {}) {
       if (!options.app) {
@@ -2509,10 +2553,10 @@
           return;
         }
         if (!this[command.name]) {
-          console.warn(`simplyflow/command: unknown command "${command.name}"`, { cause: command.source });
+          warnUnknownCommand(this, command.name, command.source);
           return;
         }
-        const shouldContinue = this[command.name].call(options.app, command.source, command.value);
+        const shouldContinue = this[command.name].call(options.app, command.source, command.value, evt);
         if (shouldContinue !== true) {
           evt.preventDefault();
           evt.stopPropagation();
@@ -2524,12 +2568,12 @@
       options.app.container.addEventListener("change", commandHandler);
       options.app.container.addEventListener("input", commandHandler);
     }
-    call(command, el, value) {
+    call(command, el, value, event) {
       if (!this[command]) {
-        console.warn(`simplyflow/command: unknown command "${command}"`);
+        warnUnknownCommand(this, command, el);
         return;
       }
-      return this[command].call(this.app, el, value);
+      return this[command].call(this.app, el, value, event);
     }
     action(name) {
       console.warn("simplyflow/command: this.commands.action() is deprecated; use this.app.actions.<name>() instead");
@@ -2633,6 +2677,30 @@
       }
     }
   ];
+  var unknownCommandWarnings = /* @__PURE__ */ new WeakMap();
+  function warnUnknownCommand(commands2, command, source) {
+    let warned = unknownCommandWarnings.get(commands2);
+    if (!warned) {
+      warned = /* @__PURE__ */ new Set();
+      unknownCommandWarnings.set(commands2, warned);
+    }
+    if (warned.has(command)) {
+      return;
+    }
+    warned.add(command);
+    const suggestion = closest(command, commandNames(commands2));
+    const suffix = suggestion ? `. Did you mean "${suggestion}"?` : "";
+    if (source) {
+      console.warn(`simplyflow/command: unknown command "${command}"${suffix}`, { cause: source });
+    } else {
+      console.warn(`simplyflow/command: unknown command "${command}"${suffix}`);
+    }
+  }
+  function commandNames(commands2) {
+    return Object.keys(commands2).filter((command) => {
+      return !command.startsWith("$") && !COMMAND_OPTIONS.includes(command) && typeof commands2[command] === "function";
+    });
+  }
 
   // src/action.mjs
   function actions(options, optionsCompat) {
@@ -2930,45 +2998,10 @@
     }
   }
   function warnLikelyOptionTypo(key) {
-    const suggestion = closestAppOption(key);
+    const suggestion = closest(key, APP_OPTIONS);
     if (suggestion) {
       console.warn(`simplyflow/app: unknown option "${key}". Did you mean "${suggestion}"? The option was still added to the app as "app.${key}".`);
     }
-  }
-  function closestAppOption(key) {
-    if (key.length < 4) {
-      return;
-    }
-    let closest;
-    let closestDistance = Infinity;
-    for (const option of APP_OPTIONS) {
-      const distance = editDistance(key, option);
-      if (distance < closestDistance) {
-        closest = option;
-        closestDistance = distance;
-      }
-    }
-    return closestDistance <= 2 ? closest : void 0;
-  }
-  function editDistance(a, b) {
-    if (Math.abs(a.length - b.length) > 2) {
-      return 3;
-    }
-    const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-    const current = new Array(b.length + 1);
-    for (let ai = 1; ai <= a.length; ai++) {
-      current[0] = ai;
-      for (let bi = 1; bi <= b.length; bi++) {
-        const cost = a[ai - 1] === b[bi - 1] ? 0 : 1;
-        current[bi] = Math.min(
-          previous[bi] + 1,
-          current[bi - 1] + 1,
-          previous[bi - 1] + cost
-        );
-      }
-      previous.splice(0, previous.length, ...current);
-    }
-    return previous[b.length];
   }
   function initRoutes(app2) {
     if (app2.routes) {

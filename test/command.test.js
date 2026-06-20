@@ -20,8 +20,8 @@ describe('command API', () => {
     commands({
       app: testApp,
       commands: {
-        save(source, value) {
-          calls.push({ thisValue: this, source, value })
+        save(source, value, event) {
+          calls.push({ thisValue: this, source, value, event })
         }
       }
     })
@@ -35,6 +35,7 @@ describe('command API', () => {
     expect(calls[0].thisValue).toBe(testApp)
     expect(calls[0].source).toBe(container.querySelector('button'))
     expect(calls[0].value).toBe('42')
+    expect(calls[0].event).toBe(evt)
   })
 
   it('lets commands opt into normal browser behavior by returning true', () => {
@@ -130,8 +131,8 @@ describe('command API', () => {
     const calls = []
     const commandApi = commands({ container }, {
       commands: {
-        mark(source, value) {
-          calls.push(value)
+        mark(source, value, event) {
+          calls.push({ value, event })
         }
       },
       handlers: []
@@ -151,19 +152,31 @@ describe('command API', () => {
     const special = container.querySelector('[data-special-command]')
     special.dataset.simplyCommand = special.dataset.specialCommand
     special.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }))
-    commandApi.call('mark', special, 'manual')
+    const manualEvent = new Event('manual')
+    commandApi.call('mark', special, 'manual', manualEvent)
 
-    expect(calls).toEqual(['custom', 'manual'])
+    expect(calls).toEqual([
+      { value: 'custom', event: expect.any(MouseEvent) },
+      { value: 'manual', event: manualEvent }
+    ])
   })
 
-  it('warns for unknown commands without throwing', () => {
-    document.body.innerHTML = `<div id="app"><button data-simply-command="missing">Missing</button></div>`
+  it('warns once for unknown commands and suggests close command names', () => {
+    document.body.innerHTML = `<div id="app"><button data-simply-command="svae">Save</button></div>`
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     const container = document.getElementById('app')
-    commands({ app: { container }, commands: {} })
+    commands({
+      app: { container },
+      commands: {
+        save() {}
+      }
+    })
 
-    expect(() => container.querySelector('button').click()).not.toThrow()
-    expect(warn).toHaveBeenCalledWith('simplyflow/command: unknown command "missing"', { cause: expect.any(HTMLButtonElement) })
+    const button = container.querySelector('button')
+    expect(() => button.click()).not.toThrow()
+    expect(() => button.click()).not.toThrow()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn).toHaveBeenCalledWith('simplyflow/command: unknown command "svae". Did you mean "save"?', { cause: button })
   })
 })
 

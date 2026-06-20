@@ -36,7 +36,11 @@ By default commands run for:
 A command receives:
 
 ```javascript
-command(element, value)
+command(element, value, event)
 ```
 
-For forms, `value` is an object containing the form fields. For buttons and links, `value` is `data-simply-value`, `href` or `value`.
+- `element` is the element that has `data-simply-command`.
+- `value` is the command value. For forms, this is an object containing the form fields. For buttons and links, it is `data-simply-value`, `href` or `value`.
+- `event` is the original DOM event. Use it only when the command needs event details such as modifier keys or pointer information.
+
+Unknown commands log a warning once. If the name looks like a typo of one of your commands, SimplyFlow suggests the closest command name.
