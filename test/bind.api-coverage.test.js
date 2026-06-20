@@ -593,3 +593,32 @@ describe('bind API contract coverage', () => {
   })
 
 })
+
+describe('bind API oversight fixes', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('destroy stops field effects and removes public trace entries', async () => {
+    document.body.innerHTML = '<h1 data-flow-field="title"></h1>'
+    const data = signal({ title: 'Before' })
+    const databind = bind({ container: document.body, root: data })
+
+    await wait()
+    const heading = document.querySelector('h1')
+    expect(heading.innerHTML).toBe('Before')
+    expect(trace('title')).toHaveLength(1)
+
+    data.title = 'After one update'
+    await wait()
+    expect(heading.innerHTML).toBe('After one update')
+    expect(trace('title')).toHaveLength(1)
+
+    databind.destroy()
+    expect(trace('title')).toEqual([])
+
+    data.title = 'After destroy'
+    await wait()
+    expect(heading.innerHTML).toBe('After one update')
+  })
+})

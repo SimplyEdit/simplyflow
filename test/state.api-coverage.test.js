@@ -207,3 +207,138 @@ describe('state API contract coverage', () => {
     expect(clone(42, true)).toBe(42)
   })
 })
+
+describe('state API oversight fixes', () => {
+  it('reacts when Object.defineProperty changes an existing value or enumerability', () => {
+    const state = signal({ visible: 1, hidden: 2 })
+    const visible = effect(() => state.visible)
+    const keys = effect(() => Object.keys(state).join(','))
+
+    expect(visible.current).toBe(1)
+    expect(keys.current).toBe('visible,hidden')
+
+    Object.defineProperty(state, 'visible', {
+      value: 3,
+      enumerable: true,
+      configurable: true
+    })
+    expect(visible.current).toBe(3)
+
+    Object.defineProperty(state, 'hidden', {
+      value: 2,
+      enumerable: false,
+      configurable: true
+    })
+    expect(keys.current).toBe('visible')
+  })
+
+  it('reacts when deleting an own property whose value is undefined', () => {
+    const state = signal({ maybe: undefined })
+    const hasMaybe = effect(() => 'maybe' in state)
+    const keys = effect(() => Object.keys(state).join(','))
+
+    expect(hasMaybe.current).toBe(true)
+    expect(keys.current).toBe('maybe')
+
+    delete state.maybe
+
+    expect(hasMaybe.current).toBe(false)
+    expect(keys.current).toBe('')
+  })
+
+  it('keeps the in operator and same-value inherited assignments transparent', () => {
+    const raw = Object.create({ inherited: true })
+    const state = signal(raw)
+    const hasInherited = effect(() => 'inherited' in state)
+    const keys = effect(() => Object.keys(state).join(','))
+
+    expect(hasInherited.current).toBe(true)
+    expect(keys.current).toBe('')
+
+    state.inherited = true
+
+    expect(Object.hasOwn(raw, 'inherited')).toBe(true)
+    expect(hasInherited.current).toBe(true)
+    expect(keys.current).toBe('inherited')
+  })
+
+  it('reacts when direct array length assignment removes indexed items', () => {
+    const state = signal(['a', 'b', 'c'])
+    const third = effect(() => state[2])
+    const rendered = effect(() => [...state].join(','))
+
+    expect(third.current).toBe('c')
+    expect(rendered.current).toBe('a,b,c')
+
+    state.length = 1
+
+    expect(third.current).toBeUndefined()
+    expect(rendered.current).toBe('a')
+  })
+
+  it('reacts for Map entry readers when Map.clear removes their key', () => {
+    const map = signal(new Map([
+      ['a', 1],
+      ['b', 2]
+    ]))
+    const a = effect(() => map.get('a'))
+    const hasB = effect(() => map.has('b'))
+
+    expect(a.current).toBe(1)
+    expect(hasB.current).toBe(true)
+
+    map.clear()
+
+    expect(a.current).toBeUndefined()
+    expect(hasB.current).toBe(false)
+  })
+
+  it('leaves batch mode when an async batch rejects', async () => {
+    const state = signal({ value: 1 })
+    const result = effect(() => state.value)
+
+    await expect(batch(async () => {
+      state.value = 2
+      throw new Error('boom')
+    })).rejects.toThrow('boom')
+
+    expect(result.current).toBe(2)
+
+    state.value = 3
+    expect(result.current).toBe(3)
+  })
+
+  it('destroy stops throttled and clock effects and allows an effect function to be reused', () => {
+    jest.useFakeTimers()
+    try {
+      const state = signal({ value: 1 })
+      const throttled = throttledEffect(() => state.value, 10)
+
+      destroy(throttled)
+      state.value = 2
+      jest.advanceTimersByTime(20)
+
+      expect(throttled.current).toBe(1)
+    } finally {
+      jest.useRealTimers()
+    }
+
+    const state = signal({ value: 1 })
+    const clock = signal({ time: 0 })
+    const clocked = clockEffect(() => state.value, clock)
+
+    destroy(clocked)
+    state.value = 2
+    clock.time++
+
+    expect(clocked.current).toBe(1)
+
+    const fn = () => state.value
+    const first = effect(fn)
+    destroy(first)
+    const second = effect(fn)
+
+    expect(second.current).toBe(2)
+    destroy(second)
+  })
+})

@@ -256,3 +256,73 @@ describe('model API contract coverage', () => {
     expect(scrollbar.style.height).toBe('30px')
   })
 })
+
+describe('model API oversight fixes', () => {
+  it('honors the documented sortDirection option and tracks later sortDirection changes', async () => {
+    const m = model({
+      data: [
+        { id: 1, score: 10 },
+        { id: 2, score: 30 },
+        { id: 3, score: 20 }
+      ]
+    })
+
+    m.addEffect(sort({ sortBy: 'score', sortDirection: 'desc' }))
+    await wait()
+    expect(m.view.current.map(row => row.id)).toEqual([2, 3, 1])
+
+    m.state.options.sort.sortDirection = 'asc'
+    await wait()
+    expect(m.view.current.map(row => row.id)).toEqual([1, 3, 2])
+  })
+
+  it('calls custom sort functions with the model as this and reacts when sortFn is replaced', async () => {
+    const m = model({
+      data: [
+        { id: 1, score: 10 },
+        { id: 2, score: 30 },
+        { id: 3, score: 20 }
+      ]
+    })
+
+    m.addEffect(sort({
+      sortBy: 'score',
+      sortDirection: 'asc',
+      sortFn(a, b) {
+        return a[this.state.options.sort.sortBy] - b[this.state.options.sort.sortBy]
+      }
+    }))
+
+    await wait()
+    expect(m.view.current.map(row => row.id)).toEqual([1, 3, 2])
+
+    m.state.options.sort.sortFn = function descending(a, b) {
+      return b[this.state.options.sort.sortBy] - a[this.state.options.sort.sortBy]
+    }
+    await wait()
+
+    expect(m.view.current.map(row => row.id)).toEqual([2, 3, 1])
+  })
+
+  it('accepts the documented columns({ columns: ... }) option shape', async () => {
+    const m = model({
+      data: [
+        { id: 1, name: 'Ada', internal: 'x' }
+      ]
+    })
+
+    m.addEffect(columns({
+      columns: {
+        id: {},
+        name: {},
+        internal: { hidden: true }
+      }
+    }))
+
+    await wait()
+
+    expect(m.view.current).toEqual([
+      { id: 1, name: 'Ada' }
+    ])
+  })
+})

@@ -223,3 +223,23 @@ describe('flow entrypoint API', () => {
     delete globalThis.simply
   })
 })
+
+describe('dom signal API oversight fixes', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('reacts when a DOM property is assigned through the DOM signal proxy', () => {
+    const inputEl = document.createElement('input')
+    inputEl.value = 'start'
+    const input = domSignal(inputEl)
+    const value = effect(() => input.value)
+
+    expect(value.current).toBe('start')
+
+    input.value = 'changed'
+
+    expect(inputEl.value).toBe('changed')
+    expect(value.current).toBe('changed')
+  })
+})

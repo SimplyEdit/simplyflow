@@ -45,18 +45,28 @@
         notifyGet(receiver, DEP.ITERATE);
       }
       const oldSize = target.size;
+      const clearedEntries = property === "clear" ? Array.from(target.entries()) : [];
       const result = value.apply(target, args);
+      const context = /* @__PURE__ */ new Map();
       if (property === "set") {
-        notifySet(receiver, makeContext(args[0], { now: args[1] }));
+        context.set(args[0], { now: args[1] });
       }
       if (property === "delete") {
-        notifySet(receiver, makeContext(args[0], { delete: true }));
+        context.set(args[0], { delete: true });
+      }
+      if (property === "clear") {
+        for (const [key, oldValue] of clearedEntries) {
+          context.set(key, { delete: true, was: oldValue, now: void 0 });
+        }
       }
       if (oldSize !== target.size) {
-        notifySet(receiver, makeContext(DEP.SIZE, {}));
+        context.set(DEP.SIZE, { was: oldSize, now: target.size });
       }
       if (["set", "delete", "clear"].includes(property) || oldSize !== target.size) {
-        notifySet(receiver, makeContext(DEP.ITERATE, {}));
+        context.set(DEP.ITERATE, {});
+      }
+      if (context.size) {
+        notifySet(receiver, context);
       }
       return result;
     };
@@ -83,6 +93,28 @@
       }
       return result;
     };
+  }
+  function addArrayLengthChanges(context, target, oldLength, removedValues = /* @__PURE__ */ new Map()) {
+    if (!Array.isArray(target) || oldLength === target.length) {
+      return;
+    }
+    context.set(DEP.LENGTH, { was: oldLength, now: target.length });
+    context.set(DEP.ITERATE, {});
+    for (const [index, oldValue] of removedValues) {
+      context.set(String(index), { delete: true, was: oldValue, now: void 0 });
+    }
+  }
+  function removedArrayValues(target, nextLength) {
+    const result = /* @__PURE__ */ new Map();
+    if (!Array.isArray(target) || nextLength >= target.length) {
+      return result;
+    }
+    for (let index = nextLength; index < target.length; index++) {
+      if (Object.hasOwn(target, index)) {
+        result.set(index, target[index]);
+      }
+    }
+    return result;
   }
   var signalHandler = {
     get: (target, property, receiver) => {
@@ -113,14 +145,23 @@
       return value;
     },
     set: (target, property, value, receiver) => {
-      let current = target[property];
-      if (current !== value) {
-        target[property] = value;
-        notifySet(receiver, makeContext(property, { was: current, now: value }));
+      const hadOwn = Object.hasOwn(target, property);
+      const oldLength = Array.isArray(target) ? target.length : void 0;
+      const removedValues = property === "length" ? removedArrayValues(target, Number(value)) : /* @__PURE__ */ new Map();
+      const current = target[property];
+      target[property] = value;
+      const hasOwnNow = Object.hasOwn(target, property);
+      const now = target[property];
+      const context = /* @__PURE__ */ new Map();
+      if (!Object.is(current, now) || !hadOwn && hasOwnNow) {
+        context.set(property, { was: current, now });
       }
-      if (typeof current === "undefined") {
-        notifySet(receiver, makeContext(DEP.ITERATE, {}));
-        notifySet(receiver, makeContext(DEP.LENGTH, {}));
+      if (!hadOwn && hasOwnNow) {
+        context.set(DEP.ITERATE, {});
+      }
+      addArrayLengthChanges(context, target, oldLength, removedValues);
+      if (context.size) {
+        notifySet(receiver, context);
       }
       return true;
     },
@@ -129,27 +170,55 @@
       if (receiver) {
         notifyGet(receiver, property);
       }
-      return Object.hasOwn(target, property);
+      return Reflect.has(target, property);
     },
     deleteProperty: (target, property) => {
-      if (typeof target[property] !== "undefined") {
-        let current = target[property];
-        delete target[property];
-        let receiver = signals.get(target);
-        notifySet(receiver, makeContext(property, { delete: true, was: current }));
-        notifySet(
-          receiver,
-          makeContext(DEP.ITERATE, { delete: true, property })
-        );
+      const hadOwn = Object.hasOwn(target, property);
+      if (!hadOwn) {
+        return true;
       }
-      return true;
+      const current = target[property];
+      const oldLength = Array.isArray(target) ? target.length : void 0;
+      const result = Reflect.deleteProperty(target, property);
+      if (result) {
+        const receiver = signals.get(target);
+        const context = makeContext(property, { delete: true, was: current, now: void 0 });
+        context.set(DEP.ITERATE, { delete: true, property });
+        addArrayLengthChanges(context, target, oldLength);
+        notifySet(receiver, context);
+      }
+      return result;
     },
     defineProperty: (target, property, descriptor) => {
-      const isNewProperty = typeof target[property] === "undefined";
-      const result = Object.defineProperty(target, property, descriptor);
-      if (isNewProperty) {
-        let receiver = signals.get(target);
-        notifySet(receiver, makeContext(DEP.ITERATE, {}));
+      const hadOwn = Object.hasOwn(target, property);
+      const oldDescriptor = Object.getOwnPropertyDescriptor(target, property);
+      const oldValue = target[property];
+      const oldLength = Array.isArray(target) ? target.length : void 0;
+      const removedValues = property === "length" && Object.hasOwn(descriptor, "value") ? removedArrayValues(target, Number(descriptor.value)) : /* @__PURE__ */ new Map();
+      const result = Reflect.defineProperty(target, property, descriptor);
+      if (!result) {
+        return result;
+      }
+      const receiver = signals.get(target);
+      const hasOwnNow = Object.hasOwn(target, property);
+      const newDescriptor = Object.getOwnPropertyDescriptor(target, property);
+      const newValue = target[property];
+      const context = /* @__PURE__ */ new Map();
+      if (!hadOwn && hasOwnNow) {
+        context.set(property, { was: oldValue, now: newValue });
+        context.set(DEP.ITERATE, {});
+      } else if (hadOwn && hasOwnNow) {
+        const descriptorChangesValue = Object.hasOwn(descriptor, "value") && !Object.is(oldValue, newValue) || Object.hasOwn(descriptor, "get") && oldDescriptor?.get !== newDescriptor?.get || Object.hasOwn(descriptor, "set") && oldDescriptor?.set !== newDescriptor?.set;
+        if (descriptorChangesValue) {
+          context.set(property, { was: oldValue, now: newValue });
+        }
+        if (oldDescriptor?.enumerable !== newDescriptor?.enumerable) {
+          context.set(DEP.ITERATE, {});
+        }
+      }
+      addArrayLengthChanges(context, target, oldLength, removedValues);
+      if (context.size) {
+        notifySet(receiver, context);
       }
       return result;
     },
@@ -396,9 +465,16 @@
     if (!computeEffect) {
       return;
     }
+    if (computeEffect.destroy) {
+      computeEffect.destroy();
+    }
     clearListeners(computeEffect);
     if (computeEffect.fn) {
       signals.delete(computeEffect.fn);
+      const effectIndex = effectStack.findIndex((fn) => fn === computeEffect.fn);
+      if (effectIndex !== -1) {
+        effectStack.splice(effectIndex, 1);
+      }
     }
     effectMap.delete(connectedSignal);
   }
@@ -409,18 +485,16 @@
     try {
       result = fn();
     } finally {
-      if (result instanceof Promise) {
-        result.then(() => {
-          batchMode--;
-          if (!batchMode) {
-            runBatchedListeners();
-          }
-        });
-      } else {
+      const finishBatch = () => {
         batchMode--;
         if (!batchMode) {
           runBatchedListeners();
         }
+      };
+      if (result instanceof Promise) {
+        result.then(finishBatch, finishBatch);
+      } else {
+        finishBatch();
       }
     }
     return result;
@@ -502,6 +576,15 @@
       throttledUntil = Date.now() + throttleTime;
       schedule();
     };
+    computeEffect.fn = fn;
+    computeEffect.destroy = () => {
+      if (timeout) {
+        globalThis.clearTimeout(timeout);
+        timeout = null;
+      }
+      hasChange = false;
+    };
+    effectMap.set(connectedSignal, computeEffect);
     computeEffect();
     return connectedSignal;
   }
@@ -550,6 +633,8 @@
         hasChanged = true;
       }
     };
+    computeEffect.fn = fn;
+    effectMap.set(connectedSignal, computeEffect);
     computeEffect();
     return connectedSignal;
   }
@@ -655,6 +740,15 @@
         return signal(value);
       }
       return value;
+    },
+    set: (target, property, value, receiver) => {
+      const current = target[property];
+      target[property] = value;
+      const now = target[property];
+      if (!Object.is(current, now)) {
+        notifySet(receiver, makeContext(property, { was: current, now }));
+      }
+      return true;
     },
     has: (target, property) => {
       let receiver = signals.get(target);
@@ -1544,7 +1638,8 @@
       return template;
     }
     destroy() {
-      this.bindings.forEach((binding) => {
+      this.bindings.forEach((binding, element2) => {
+        untrack(element2, this.getBindingPath(element2));
         destroy(binding);
       });
       this.bindings = /* @__PURE__ */ new Map();
@@ -1556,6 +1651,7 @@
   }
   var tracking = /* @__PURE__ */ new Map();
   function track(el, context) {
+    untrack(el);
     if (!tracking.has(context.path)) {
       tracking.set(context.path, [context]);
     } else {
@@ -1563,11 +1659,18 @@
     }
   }
   function untrack(el, path) {
-    let list2 = tracking.get(path);
-    if (list2) {
-      list2 = list2.filter((context) => context.element !== el);
-      tracking.set(path, list2);
+    if (path) {
+      let list2 = tracking.get(path);
+      if (list2) {
+        list2 = list2.filter((context) => context.element !== el);
+        tracking.set(path, list2);
+      }
+      return;
     }
+    tracking.forEach((list2, trackedPath) => {
+      list2 = list2.filter((context) => context.element !== el);
+      tracking.set(trackedPath, list2);
+    });
   }
   function getValueByPath(root, path) {
     let parts = path.split(".");
@@ -1661,8 +1764,9 @@
           if (!sort2.sortBy) {
             return 0;
           }
-          const larger = sort2.direction == "asc" ? 1 : -1;
-          const smaller = sort2.direction == "asc" ? -1 : 1;
+          const direction = sort2.sortDirection || sort2.direction || "asc";
+          const larger = direction == "asc" ? 1 : -1;
+          const smaller = direction == "asc" ? -1 : 1;
           if (typeof a?.[sortBy] === "undefined") {
             if (typeof b?.[sortBy] === "undefined") {
               return 0;
@@ -1683,8 +1787,11 @@
       }, options);
       return throttledEffect(() => {
         const sort2 = this.state.options.sort;
-        if (sort2?.sortBy && sort2?.direction) {
-          return data.current.toSorted(sort2?.sortFn);
+        const direction = sort2?.sortDirection || sort2?.direction;
+        if (sort2?.sortBy && direction) {
+          const trackedSortFn = sort2.sortFn;
+          const sortFn = sort2[DEP.XRAY]?.sortFn || trackedSortFn;
+          return data.current.toSorted((a, b) => sortFn.call(this, a, b));
         }
         return data.current;
       }, 50);
@@ -1736,11 +1843,12 @@
     };
   }
   function columns(options = {}) {
-    if (!options || typeof options !== "object" || Object.keys(options).length === 0) {
+    const columnOptions = options?.columns && typeof options.columns === "object" ? options.columns : options;
+    if (!columnOptions || typeof columnOptions !== "object" || Object.keys(columnOptions).length === 0) {
       throw new Error("columns requires options to be an object with at least one property");
     }
     return function(data) {
-      this.state.options.columns = options;
+      this.state.options.columns = columnOptions;
       return throttledEffect(() => {
         return data.current.map((input2) => {
           let result = {};
