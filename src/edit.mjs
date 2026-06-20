@@ -28,7 +28,7 @@ export function edit(rootElement)
         document.removeEventListener(this.selectionListener)
       }
     },
-    keys: {
+    shortcuts: {
       default: {
         'Control+ ': function() {
           if (this.state.anchor.visible) {

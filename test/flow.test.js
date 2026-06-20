@@ -1,4 +1,4 @@
-import simply, { app, commands, actions, routes, path, findAttribute } from '../src/flow.mjs'
+import simply, { app, commands, actions, routes, path, shortcuts, findAttribute } from '../src/flow.mjs'
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -11,6 +11,7 @@ describe('merged app-layer exports', () => {
     expect(simply.command).toBe(commands)
     expect(simply.action).toBe(actions)
     expect(simply.routes).toBe(routes)
+    expect(simply.shortcuts).toBe(shortcuts)
     expect(simply.path).toBe(path)
     expect(simply.findAttribute).toBe(findAttribute)
   })
@@ -45,6 +46,7 @@ describe('flow entrypoint API', () => {
     expect(simply.existing).toBe(true)
     expect(typeof simply.bind).toBe('function')
     expect(typeof simply.flow.model).toBe('function')
+    expect(typeof simply.shortcuts).toBe('function')
     expect(typeof simply.state.signal).toBe('function')
     expect(typeof simply.dom.signal).toBe('function')
     expect(customElements.get('simply-render')).toBeDefined()

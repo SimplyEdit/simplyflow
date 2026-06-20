@@ -8,7 +8,7 @@ import { actions } from './action.mjs'
 import { activate } from './activate.mjs'
 import { commands } from './command.mjs'
 import { include } from './include.mjs'
-import { keys } from './key.mjs'
+import { shortcuts } from './shortcut.mjs'
 import path from './path.mjs'
 import { routes, SimplyRoute } from './route.mjs'
 import { findAttribute } from './dom.mjs'
@@ -29,8 +29,7 @@ Object.assign(globalThis.simply, {
     commands,
     command: commands,
     include,
-    keys,
-    key: keys,
+    shortcuts,
     path,
     routes,
     route: new SimplyRoute(),
@@ -47,7 +46,7 @@ export {
     actions,
     commands,
     include,
-    keys,
+    shortcuts,
     path,
     routes,
     SimplyRoute,

@@ -3,7 +3,7 @@ import { signal } from './state.mjs'
 import { routes } from './route.mjs'
 import { commands } from './command.mjs'
 import { actions } from './action.mjs'
-import { keys, accesskeys } from './key.mjs'
+import { shortcuts, accesskeys } from './shortcut.mjs'
 import { html, css } from './highlight.mjs'
 import { findAttribute } from './dom.mjs'
 import { closest } from './suggest.mjs'
@@ -19,8 +19,7 @@ const APP_OPTIONS = [
     'baseURL',
     'root',
     'commands',
-    'keys',
-    'keyboard',
+    'shortcuts',
     'routes',
     'actions'
 ]
@@ -61,11 +60,8 @@ class SimplyApp
                 case 'commands':
                     this.commands = commands({ app: this, container: this.container, commands: options.commands})
                     break
-                case 'keys':
-                    this.keys = keys({ app: this, keys: options.keys })
-                    break
-                case 'keyboard': // backwards compatible with older SimplyView keyboard option
-                    this.keys = keys({ app: this, keys: options.keyboard })
+                case 'shortcuts':
+                    this.shortcuts = shortcuts({ app: this, shortcuts: options.shortcuts })
                     break
                 case 'routes':
                     this.routes = routes({ app: this, routes: options.routes})

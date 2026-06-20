@@ -2743,7 +2743,7 @@
     }
   }
 
-  // src/key.mjs
+  // src/shortcut.mjs
   var KEY = Object.freeze({
     Compose: 229,
     Control: 17,
@@ -2751,7 +2751,7 @@
     Alt: 18,
     Shift: 16
   });
-  var SimplyKey = class {
+  var SimplyShortcuts = class {
     constructor(options = {}) {
       if (!options.app) {
         options.app = {};
@@ -2759,32 +2759,32 @@
       if (!options.app.container) {
         options.app.container = document.body;
       }
-      Object.assign(this, options.keys);
+      Object.assign(this, options.shortcuts);
       const keyHandler = (e) => {
-        let keyboards = [];
-        let keyboardElement = e.target.closest("[data-simply-keyboard]");
-        while (keyboardElement) {
-          keyboards.push(keyboardElement.dataset.simplyKeyboard);
-          keyboardElement = keyboardElement.parentNode.closest("[data-simply-keyboard]");
+        let shortcutScopes = [];
+        let shortcutElement = e.target.closest("[data-simply-shortcuts]");
+        while (shortcutElement) {
+          shortcutScopes.push(shortcutElement.dataset.simplyShortcuts);
+          shortcutElement = shortcutElement.parentNode.closest("[data-simply-shortcuts]");
         }
-        if (keyboards[keyboards.length - 1] != "default") {
-          keyboards.push("default");
+        if (shortcutScopes[shortcutScopes.length - 1] != "default") {
+          shortcutScopes.push("default");
         }
-        let keyboard;
+        let shortcutScope;
         let separators = ["+", "-"];
         for (let separator of separators) {
           const keyString = getKeyString(e, separator);
-          for (let i in keyboards) {
-            keyboard = keyboards[i];
-            if (this[keyboard] && typeof this[keyboard][keyString] == "function") {
-              let _continue = this[keyboard][keyString].call(options.app, e);
+          for (let i in shortcutScopes) {
+            shortcutScope = shortcutScopes[i];
+            if (this[shortcutScope] && typeof this[shortcutScope][keyString] == "function") {
+              let _continue = this[shortcutScope][keyString].call(options.app, e);
               if (!_continue) {
                 e.preventDefault();
                 return;
               }
             }
-            if (typeof this[keyboard + "." + keyString] == "function") {
-              let _continue = this[keyboard + "." + keyString].call(options.app, e);
+            if (typeof this[shortcutScope + "." + keyString] == "function") {
+              let _continue = this[shortcutScope + "." + keyString].call(options.app, e);
               if (!_continue) {
                 e.preventDefault();
                 return;
@@ -2813,10 +2813,6 @@
     if (!e.target) {
       return;
     }
-    let selectedKeyboard = "default";
-    if (e.target.closest("[data-simply-keyboard]")) {
-      selectedKeyboard = e.target.closest("[data-simply-keyboard]").dataset.simplyKeyboard;
-    }
     let keyCombination = [];
     if (e.ctrlKey && e.keyCode != KEY.Control) {
       keyCombination.push("Control");
@@ -2833,13 +2829,8 @@
     keyCombination.push(e.key.toLowerCase());
     return keyCombination.join(separator);
   }
-  function keys(options = {}, optionsCompat) {
-    if (optionsCompat) {
-      let app2 = options;
-      options = optionsCompat;
-      options.app = app2;
-    }
-    return new SimplyKey(options);
+  function shortcuts(options = {}) {
+    return new SimplyShortcuts(options);
   }
   function accesskeys(app2) {
     const container = app2.container || document.body;
@@ -2881,8 +2872,7 @@
     "baseURL",
     "root",
     "commands",
-    "keys",
-    "keyboard",
+    "shortcuts",
     "routes",
     "actions"
   ];
@@ -2912,17 +2902,12 @@
           case "onError":
           case "components":
           case "baseURL":
-          case "root":
-          case "bind":
             break;
           case "commands":
             this.commands = commands({ app: this, container: this.container, commands: options.commands });
             break;
-          case "keys":
-            this.keys = keys({ app: this, keys: options.keys });
-            break;
-          case "keyboard":
-            this.keys = keys({ app: this, keys: options.keyboard });
+          case "shortcuts":
+            this.shortcuts = shortcuts({ app: this, shortcuts: options.shortcuts });
             break;
           case "routes":
             this.routes = routes({ app: this, routes: options.routes });
@@ -3400,8 +3385,7 @@
     commands,
     command: commands,
     include,
-    keys,
-    key: keys,
+    shortcuts,
     path: path_default,
     routes,
     route: new SimplyRoute(),

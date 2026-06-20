@@ -54,6 +54,19 @@ const contacts = simply.app({
 
 If an unknown option looks like a typo of a built-in app option, SimplyFlow logs a warning, but still adds the option to the app.
 
+Keyboard shortcuts can be added with the `shortcuts` option:
+
+```javascript
+const notes = simply.app({
+  data: {},
+  shortcuts: {
+    'Control+s'() {
+      this.actions.save()
+    }
+  }
+})
+```
+
 ## Install
 
 ```shell

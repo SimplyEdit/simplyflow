@@ -113,6 +113,38 @@ describe('app API', () => {
     testApp.destroy()
   })
 
+  it('uses shortcuts with the app as this', async () => {
+    document.body.innerHTML = `<div id="app"><input><span data-simply-field="saved"></span></div>`
+    const container = document.getElementById('app')
+    const testApp = app({
+      container,
+      data: {
+        saved: false
+      },
+      shortcuts: {
+        'Control+s'(event) {
+          this.data.saved = true
+          expect(event).toBeInstanceOf(KeyboardEvent)
+        }
+      }
+    })
+
+    container.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 's',
+      ctrlKey: true,
+      keyCode: 83
+    }))
+
+    await wait()
+    expect(testApp.data.saved).toBe(true)
+    expect(container.querySelector('span').innerHTML).toBe('true')
+    expect(testApp.shortcuts).toBeDefined()
+    expect(testApp.keys).toBeUndefined()
+    testApp.destroy()
+  })
+
   it('lets commands call actions that update data', async () => {
     document.body.innerHTML = `
       <div id="app">
@@ -146,20 +178,6 @@ describe('app API', () => {
     testApp.destroy()
   })
 
-  it('ignores the historical app-level bind option', async () => {
-    document.body.innerHTML = `<div id="app"><span data-simply-field="name"></span></div>`
-    const container = document.getElementById('app')
-    const testApp = app({
-      container,
-      data: { name: 'Ada' },
-      bind: false
-    })
-
-    await wait()
-    expect(container.querySelector('span').innerHTML).toBe('Ada')
-    expect(testApp.bind).toBeUndefined()
-    testApp.destroy()
-  })
 })
 
 

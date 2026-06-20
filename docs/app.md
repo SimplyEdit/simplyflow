@@ -119,17 +119,19 @@ routes: {
 }
 ```
 
-### `keys` / `keyboard`
+### `shortcuts`
 
 Keyboard shortcuts call functions with the app as `this`.
 
 ```javascript
-keys: {
+shortcuts: {
   'Control+s'(event) {
     this.actions.save()
   }
 }
 ```
+
+Use `data-simply-shortcuts="name"` on an element to select a named shortcut scope for that part of the page.
 
 ### `templates`
 
@@ -176,7 +178,7 @@ SimplyFlow warns only when an unknown option looks like a typo of a built-in opt
 ### Binding
 
 `app()` always creates a one-way `data-simply` binding for the app container and `app.data`.
-Use `data-simply-edit` for individual fields that should write user edits back to `app.data`. The historical `bind` app option is ignored.
+Use `data-simply-edit` for individual fields that should write user edits back to `app.data`.
 
 ## HTML binding attributes
 
@@ -220,6 +222,7 @@ Example list:
 - `app.commands` - command object.
 - `app.actions` - action object.
 - `app.routes` - route object, if routes were configured.
+- `app.shortcuts` - shortcut object, if shortcuts were configured.
 - `app.binding` - the underlying bind instance.
 
 Use `app.destroy()` to destroy the underlying binding.
