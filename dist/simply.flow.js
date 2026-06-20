@@ -12,11 +12,16 @@
     batch: () => batch,
     clockEffect: () => clockEffect,
     clone: () => clone,
+    createSignal: () => createSignal,
     destroy: () => destroy,
     effect: () => effect,
+    getSignal: () => getSignal,
+    isSignal: () => isSignal,
     makeContext: () => makeContext,
     notifyGet: () => notifyGet,
     notifySet: () => notifySet,
+    raw: () => raw,
+    registerSignal: () => registerSignal,
     signal: () => signal,
     signals: () => signals,
     throttledEffect: () => throttledEffect,
@@ -53,6 +58,12 @@
   }
   function isSignal(value) {
     return Boolean(isObjectLike(value) && value[DEP.SIGNAL]);
+  }
+  function raw(value) {
+    return isSignal(value) ? value[DEP.XRAY] : value;
+  }
+  function getSignal(value) {
+    return isSignal(value) ? value : signals.get(value);
   }
   function targetSignal(target) {
     return signals.get(target);
@@ -154,12 +165,6 @@
   }
   var signalHandler = {
     get(target, property, receiver) {
-      if (property === DEP.XRAY) {
-        return target;
-      }
-      if (property === DEP.SIGNAL) {
-        return true;
-      }
       const value = readTarget(target, property);
       notifyGet(receiver, property);
       if (typeof value === "function") {
@@ -256,19 +261,73 @@
     }
   };
   var signals = /* @__PURE__ */ new WeakMap();
+  function assertSignalTarget(value, name) {
+    if (!isObjectLike(value)) {
+      throw new TypeError(
+        `simplyflow/state: ${name}() expects an object, array, Map, Set, class instance, function, or DOM node; received ${typeof value}`
+      );
+    }
+  }
+  function assertProxyHandler(handler, name) {
+    if (!handler || typeof handler !== "object") {
+      throw new TypeError(`simplyflow/state: ${name}() expects a Proxy handler object`);
+    }
+  }
+  function signalProxyHandler(handler) {
+    return {
+      ...handler,
+      get(target, property, receiver) {
+        if (property === DEP.XRAY) {
+          return target;
+        }
+        if (property === DEP.SIGNAL) {
+          return true;
+        }
+        if (handler.get) {
+          return handler.get(target, property, receiver);
+        }
+        return readTarget(target, property);
+      }
+    };
+  }
+  function registerSignal(target, proxy) {
+    const rawTarget = raw(target);
+    assertSignalTarget(rawTarget, "registerSignal");
+    if (!isSignal(proxy)) {
+      throw new TypeError("simplyflow/state: registerSignal() expects a signal proxy");
+    }
+    const existing = signals.get(rawTarget);
+    if (existing && existing !== proxy) {
+      throw new Error("simplyflow/state: registerSignal() target already has a different signal");
+    }
+    signals.set(rawTarget, proxy);
+    return proxy;
+  }
+  function createSignal(target, handler = {}, init) {
+    assertSignalTarget(target, "createSignal");
+    assertProxyHandler(handler, "createSignal");
+    if (init !== void 0 && typeof init !== "function") {
+      throw new TypeError("simplyflow/state: createSignal() expects init to be a function");
+    }
+    if (isSignal(target)) {
+      return target;
+    }
+    const existing = getSignal(target);
+    if (existing) {
+      return existing;
+    }
+    const proxy = new Proxy(target, signalProxyHandler(handler));
+    registerSignal(target, proxy);
+    init?.(target, proxy);
+    return proxy;
+  }
   function signal(value = {}) {
     if (!isObjectLike(value)) {
       throw new TypeError(
         `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof value}`
       );
     }
-    if (isSignal(value)) {
-      return value;
-    }
-    if (!signals.has(value)) {
-      signals.set(value, new Proxy(value, signalHandler));
-    }
-    return signals.get(value);
+    return createSignal(value, signalHandler);
   }
   var tracers = [];
   var tracing = false;
@@ -690,12 +749,6 @@
   var observers = /* @__PURE__ */ new WeakMap();
   var domSignalHandler = {
     get: (target, property, receiver) => {
-      if (property === DEP.XRAY) {
-        return target;
-      }
-      if (property === DEP.SIGNAL) {
-        return true;
-      }
       const value = target?.[property];
       notifyGet(receiver, property);
       if (typeof value === "function") {
@@ -716,14 +769,14 @@
       return true;
     },
     has: (target, property) => {
-      let receiver = signals.get(target);
+      const receiver = getSignal(target);
       if (receiver) {
         notifyGet(receiver, property);
       }
       return Reflect.has(target, property);
     },
     ownKeys: (target) => {
-      let receiver = signals.get(target);
+      const receiver = getSignal(target);
       if (receiver) {
         notifyGet(receiver, DEP.ITERATE);
       }
@@ -731,14 +784,16 @@
     }
   };
   function signal2(el, options) {
-    if (el[DEP.XRAY]) {
+    if (isSignal(el)) {
       return el;
     }
-    if (!signals.has(el)) {
-      signals.set(el, new Proxy(el, domSignalHandler));
-      domListen(el, signals.get(el), options);
+    const existing = getSignal(el);
+    if (existing) {
+      return existing;
     }
-    return signals.get(el);
+    return createSignal(el, domSignalHandler, (target, proxy) => {
+      domListen(target, proxy, options);
+    });
   }
   function domListen(el, signal3, options) {
     const defaultOptions = {
@@ -1708,7 +1763,7 @@
       }
       const dataSignal = this.effects[this.effects.length - 1];
       const connectedSignal = fn.call(this, dataSignal);
-      if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
+      if (!isSignal(connectedSignal)) {
         throw new Error("addEffect function parameter must return a Signal", { cause: fn });
       }
       this.view = connectedSignal;
@@ -1755,7 +1810,7 @@
         const direction = sort2?.sortDirection || sort2?.direction;
         if (sort2?.sortBy && direction) {
           const trackedSortFn = sort2.sortFn;
-          const sortFn = sort2[DEP.XRAY]?.sortFn || trackedSortFn;
+          const sortFn = raw(sort2).sortFn || trackedSortFn;
           return data.current.toSorted((a, b) => sortFn.call(this, a, b));
         }
         return data.current;
@@ -1800,7 +1855,7 @@
         const filterOptions = this.state.options[options.name];
         if (filterOptions.enabled) {
           const trackedMatches = filterOptions.matches;
-          const matches = filterOptions[DEP.XRAY]?.matches || trackedMatches;
+          const matches = raw(filterOptions).matches || trackedMatches;
           return data.current.filter((row) => matches.call(this, row));
         }
         return data.current;

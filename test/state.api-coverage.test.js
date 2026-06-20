@@ -1,11 +1,17 @@
 import {
   signal,
+  createSignal,
+  registerSignal,
+  getSignal,
+  isSignal,
+  raw,
   effect,
   throttledEffect,
   clockEffect,
   batch,
   trace,
   addTracer,
+  notifyGet,
   notifySet,
   makeContext,
   untracked,
@@ -31,6 +37,82 @@ describe('state API contract coverage', () => {
     expect(signal(target)).toBe(first)
     expect(signal(first)).toBe(first)
     expect(first[DEP.XRAY]).toBe(target)
+  })
+
+
+
+  it('exposes signal identity helpers without requiring DEP symbols', () => {
+    const target = { value: 1 }
+    const state = signal(target)
+
+    expect(isSignal(state)).toBe(true)
+    expect(isSignal(target)).toBe(false)
+    expect(raw(state)).toBe(target)
+    expect(raw(target)).toBe(target)
+    expect(getSignal(target)).toBe(state)
+    expect(getSignal(state)).toBe(state)
+  })
+
+  it('creates custom signal implementations with createSignal()', () => {
+    const target = { value: 1 }
+    const custom = createSignal(target, {
+      get(target, property, receiver) {
+        notifyGet(receiver, property)
+        return target[property]
+      },
+      set(target, property, value, receiver) {
+        const was = target[property]
+        target[property] = value
+        const now = target[property]
+        if (!Object.is(was, now)) {
+          notifySet(receiver, makeContext(property, { was, now }))
+        }
+        return true
+      }
+    })
+
+    const result = effect(() => custom.value * 2)
+
+    expect(isSignal(custom)).toBe(true)
+    expect(raw(custom)).toBe(target)
+    expect(getSignal(target)).toBe(custom)
+    expect(result.current).toBe(2)
+
+    custom.value = 5
+    expect(result.current).toBe(10)
+  })
+
+  it('runs createSignal init only when a new proxy is registered', () => {
+    const target = { value: 1 }
+    const init = jest.fn()
+    const first = createSignal(target, {}, init)
+    const secondInit = jest.fn()
+
+    expect(init).toHaveBeenCalledWith(target, first)
+    expect(createSignal(target, {}, secondInit)).toBe(first)
+    expect(secondInit).not.toHaveBeenCalled()
+    expect(createSignal(first, {}, secondInit)).toBe(first)
+  })
+
+  it('allows low-level signal registration for hand-built proxies', () => {
+    const target = { value: 1 }
+    const proxy = new Proxy(target, {
+      get(target, property, receiver) {
+        if (property === DEP.XRAY) {
+          return target
+        }
+        if (property === DEP.SIGNAL) {
+          return true
+        }
+        notifyGet(receiver, property)
+        return target[property]
+      }
+    })
+
+    expect(registerSignal(target, proxy)).toBe(proxy)
+    expect(getSignal(target)).toBe(proxy)
+    expect(isSignal(proxy)).toBe(true)
+    expect(raw(proxy)).toBe(target)
   })
 
   it('binds methods on boxed primitives and DOM elements to their original target', () => {

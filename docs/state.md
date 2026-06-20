@@ -117,6 +117,98 @@ The returned signal is a completely transparent Proxy for that object, and you s
 
 Signals only have additional effects when used inside an `effect()` function.
 
+
+### Signal identity and extension API
+
+Most code should only need `signal()`, `effect()`, `batch()` and `destroy()`.
+If you are building a specialized signal implementation, such as the DOM signal
+in `dom.mjs`, use the explicit extension API instead of reading the internal
+`signals` WeakMap directly.
+
+```javascript
+import {
+	createSignal,
+	getSignal,
+	isSignal,
+	raw,
+	notifyGet,
+	notifySet,
+	makeContext
+} from 'simplyflow/src/state.mjs'
+```
+
+#### isSignal()
+
+```javascript
+if (isSignal(value)) {
+	// value is already a signal proxy
+}
+```
+
+Returns `true` for signals created by `signal()` or `createSignal()`.
+
+#### raw()
+
+```javascript
+const target = raw(mySignal)
+```
+
+Returns the original target behind a signal. If the value is not a signal, it is
+returned unchanged. Prefer this over reading private symbols from a signal.
+
+#### getSignal()
+
+```javascript
+const existing = getSignal(target)
+```
+
+Returns the already registered signal for a raw target, or the value itself if it
+is already a signal. It returns `undefined` when no signal exists yet.
+
+#### createSignal()
+
+```javascript
+const dom = createSignal(element, {
+	get(target, property, receiver) {
+		notifyGet(receiver, property)
+		return target[property]
+	},
+	set(target, property, value, receiver) {
+		const was = target[property]
+		target[property] = value
+		const now = target[property]
+		if (!Object.is(was, now)) {
+			notifySet(receiver, makeContext(property, { was, now }))
+		}
+		return true
+	}
+}, (target, proxy) => {
+	// Optional one-time setup, for example a MutationObserver.
+})
+```
+
+Creates and registers a signal proxy using a custom Proxy handler. The common
+signal identity behavior is added automatically, so the handler does not need to
+implement the private signal symbols itself. If the target already has a signal,
+that existing signal is returned and the init function is not called.
+
+#### registerSignal()
+
+```javascript
+registerSignal(target, proxy)
+```
+
+Registers a hand-built signal proxy for a target. This is lower-level than
+`createSignal()` and mainly exists for advanced integrations. The proxy must
+identify itself as a signal. Prefer `createSignal()` when possible.
+
+#### signals
+
+The `signals` WeakMap remains exported for backward compatibility, but new code
+should prefer `createSignal()`, `getSignal()`, `isSignal()`, `raw()` and
+`registerSignal()`.
+
+
 ### effect()
 
 ```javascript

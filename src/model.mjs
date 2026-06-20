@@ -1,5 +1,4 @@
-import {signal, effect, throttledEffect, batch} from './state.mjs'
-import { DEP } from './symbols.mjs'
+import { signal, isSignal, raw, throttledEffect, batch } from './state.mjs'
 
 /**
  * This class implements a pluggable data model, where you can
@@ -47,7 +46,7 @@ class SimplyFlowModel {
 		}
 		const dataSignal = this.effects[this.effects.length-1]
 		const connectedSignal = fn.call(this, dataSignal)
-		if (!connectedSignal || !connectedSignal[DEP.SIGNAL]) {
+		if (!isSignal(connectedSignal)) {
 			throw new Error('addEffect function parameter must return a Signal', { cause: fn })
 		}
 		this.view = connectedSignal
@@ -109,7 +108,7 @@ export function sort(options={}) {
 				// Read through the signal proxy so replacing `.sortFn` is tracked,
 				// then call the raw comparator with the model as `this`.
 				const trackedSortFn = sort.sortFn
-				const sortFn = sort[DEP.XRAY]?.sortFn || trackedSortFn
+				const sortFn = raw(sort).sortFn || trackedSortFn
 				return data.current.toSorted((a, b) => sortFn.call(this, a, b))
 			}
 			return data.current
@@ -181,7 +180,7 @@ export function filter(options) {
 				// be bound to the options object, so call the raw function explicitly
 				// with the model as `this`.
 				const trackedMatches = filterOptions.matches
-				const matches = filterOptions[DEP.XRAY]?.matches || trackedMatches
+				const matches = raw(filterOptions).matches || trackedMatches
 				return data.current.filter(row => matches.call(this, row))
 			}
 			return data.current

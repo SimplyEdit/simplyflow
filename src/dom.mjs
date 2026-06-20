@@ -1,8 +1,8 @@
-import { signals, signal as stateSignal, notifyGet, notifySet, makeContext,
-         throttledEffect, effect, untracked, batch } from './state.mjs'
+import { createSignal, getSignal, isSignal, signal as stateSignal, notifyGet, notifySet, makeContext,
+         throttledEffect, untracked, batch } from './state.mjs'
 import { getValueByPath } from './bind.mjs'
 import { setValueByPath, getProperties } from './bind.render.mjs'
-import { DEP } from '../src/symbols.mjs'
+import { DEP } from './symbols.mjs'
 
 /**
  * Tracks element => signal mapping so that each element only has one signal
@@ -19,12 +19,6 @@ const observers = new WeakMap()
  */
 const domSignalHandler = {
     get: (target, property, receiver) => {
-        if (property===DEP.XRAY) {
-            return target // don't notifyGet here, this is only called by set
-        }
-        if (property===DEP.SIGNAL) {
-            return true
-        }
         const value = target?.[property]
         notifyGet(receiver, property)
         if (typeof value === 'function') {
@@ -45,14 +39,16 @@ const domSignalHandler = {
         return true
     },
     has: (target, property) => {
-        let receiver = signals.get(target)
+        const receiver = getSignal(target)
         if (receiver) {
             notifyGet(receiver, property)
         }
         return Reflect.has(target, property)
     },
     ownKeys: (target) => {
-        let receiver = signals.get(target) // receiver is not part of the trap arguments, so retrieve it here
+        // The ownKeys trap has no receiver argument. Recover the stable signal
+        // proxy so Object.keys(domSignal) can track DOM key iteration.
+        const receiver = getSignal(target)
         if (receiver) {
             notifyGet(receiver, DEP.ITERATE)
         }
@@ -70,14 +66,18 @@ const domSignalHandler = {
  * @returns Proxy
  */
 export function signal(el, options) {
-    if (el[DEP.XRAY]) {
+    if (isSignal(el)) {
         return el
     }
-    if (!signals.has(el)) {
-        signals.set(el, new Proxy(el, domSignalHandler))
-        domListen(el, signals.get(el), options)
+
+    const existing = getSignal(el)
+    if (existing) {
+        return existing
     }
-    return signals.get(el)
+
+    return createSignal(el, domSignalHandler, (target, proxy) => {
+        domListen(target, proxy, options)
+    })
 }
 
 /**

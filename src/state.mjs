@@ -17,8 +17,16 @@ function isObjectLike(value) {
     return value !== null && (typeof value === 'object' || typeof value === 'function')
 }
 
-function isSignal(value) {
+export function isSignal(value) {
     return Boolean(isObjectLike(value) && value[DEP.SIGNAL])
+}
+
+export function raw(value) {
+    return isSignal(value) ? value[DEP.XRAY] : value
+}
+
+export function getSignal(value) {
+    return isSignal(value) ? value : signals.get(value)
 }
 
 function targetSignal(target) {
@@ -161,13 +169,6 @@ function propertyValueChanged(descriptor, oldDescriptor, oldValue, newDescriptor
 
 const signalHandler = {
     get(target, property, receiver) {
-        if (property === DEP.XRAY) {
-            return target
-        }
-        if (property === DEP.SIGNAL) {
-            return true
-        }
-
         const value = readTarget(target, property)
         notifyGet(receiver, property)
 
@@ -293,10 +294,85 @@ const signalHandler = {
  * - raw object/function -> signal proxy
  * - user effect function -> computed signal returned by effect()
  *
- * Keeping this exported preserves the existing API. New code should normally
- * use signal(), trace() and destroy() instead of reading this map directly.
+ * @deprecated Prefer createSignal(), getSignal(), registerSignal(), isSignal()
+ * and raw(). This map stays exported for compatibility and for advanced code
+ * that has not yet migrated to the explicit extension API.
  */
 export const signals = new WeakMap()
+
+function assertSignalTarget(value, name) {
+    if (!isObjectLike(value)) {
+        throw new TypeError(
+            `simplyflow/state: ${name}() expects an object, array, Map, Set, class instance, function, or DOM node; received ${typeof value}`
+        )
+    }
+}
+
+function assertProxyHandler(handler, name) {
+    if (!handler || typeof handler !== 'object') {
+        throw new TypeError(`simplyflow/state: ${name}() expects a Proxy handler object`)
+    }
+}
+
+function signalProxyHandler(handler) {
+    // All signal implementations must answer these two private symbol reads in
+    // the same way. Keeping that boilerplate here lets custom signal handlers
+    // focus on their own get/set/observe behavior.
+    return {
+        ...handler,
+        get(target, property, receiver) {
+            if (property === DEP.XRAY) {
+                return target
+            }
+            if (property === DEP.SIGNAL) {
+                return true
+            }
+            if (handler.get) {
+                return handler.get(target, property, receiver)
+            }
+            return readTarget(target, property)
+        }
+    }
+}
+
+export function registerSignal(target, proxy) {
+    const rawTarget = raw(target)
+    assertSignalTarget(rawTarget, 'registerSignal')
+
+    if (!isSignal(proxy)) {
+        throw new TypeError('simplyflow/state: registerSignal() expects a signal proxy')
+    }
+
+    const existing = signals.get(rawTarget)
+    if (existing && existing !== proxy) {
+        throw new Error('simplyflow/state: registerSignal() target already has a different signal')
+    }
+
+    signals.set(rawTarget, proxy)
+    return proxy
+}
+
+export function createSignal(target, handler = {}, init) {
+    assertSignalTarget(target, 'createSignal')
+    assertProxyHandler(handler, 'createSignal')
+    if (init !== undefined && typeof init !== 'function') {
+        throw new TypeError('simplyflow/state: createSignal() expects init to be a function')
+    }
+
+    if (isSignal(target)) {
+        return target
+    }
+
+    const existing = getSignal(target)
+    if (existing) {
+        return existing
+    }
+
+    const proxy = new Proxy(target, signalProxyHandler(handler))
+    registerSignal(target, proxy)
+    init?.(target, proxy)
+    return proxy
+}
 
 /**
  * Creates a transparent reactive proxy for an object, array, Map, Set, DOM
@@ -309,13 +385,7 @@ export function signal(value = {}) {
             `simplyflow/state: signal() expects an object, array, Map, Set, class instance, or function; received ${typeof value}`
         )
     }
-    if (isSignal(value)) {
-        return value
-    }
-    if (!signals.has(value)) {
-        signals.set(value, new Proxy(value, signalHandler))
-    }
-    return signals.get(value)
+    return createSignal(value, signalHandler)
 }
 
 let tracers = []
