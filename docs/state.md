@@ -209,6 +209,55 @@ should prefer `createSignal()`, `getSignal()`, `isSignal()`, `raw()` and
 `registerSignal()`.
 
 
+### clone()
+
+```javascript
+const copy = clone(mySignal)
+```
+
+Creates a non-reactive clone of a value or signal target. The clone is not a
+signal, and changing it will not trigger effects.
+
+`clone(value)` deep-clones by default. This is an API change from earlier
+versions, where `clone(value)` only made a shallow top-level copy unless you
+passed `true`. The old explicit form still works:
+
+```javascript
+const deepCopy = clone(value, true)   // same as clone(value)
+const shallowCopy = clone(value, false)
+```
+
+Deep cloning is now the default because a shallow clone of a signal target can
+still share nested raw objects with the original signal. That can make changes to
+the clone accidentally mutate the original signal target without going through the
+signal proxy.
+
+The built-in clone support covers plain objects, null-prototype objects, arrays,
+Map, Set, Date, RegExp, ArrayBuffer, SharedArrayBuffer, DataView, typed arrays,
+URL, URLSearchParams, Blob, File, standard Error objects and DOM nodes.
+
+Custom class instances are not cloned by copying their public properties. That is
+unsafe for classes with private fields or hidden state. To make a custom class
+cloneable, add a `toClone()` method:
+
+```javascript
+class Person {
+	#name
+
+	constructor(name) {
+		this.#name = name
+	}
+
+	toClone() {
+		return new Person(this.#name)
+	}
+}
+```
+
+If `clone()` encounters an object it cannot clone, it throws a `TypeError`
+instead of returning the original object by reference.
+
+
 ### effect()
 
 ```javascript

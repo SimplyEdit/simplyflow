@@ -260,33 +260,198 @@ describe('state API contract coverage', () => {
     expect(clocked.current).toBe(10)
   })
 
-  it('clones shallow arrays, deep plain objects, null-prototype objects, cycles and primitives predictably', () => {
+  it('deep-clones plain objects, arrays, null-prototype objects, cycles and primitives by default', () => {
     const nested = { value: 1 }
-    const shallowArray = clone([nested])
-    expect(shallowArray).toEqual([nested])
-    expect(shallowArray[0]).toBe(nested)
+    const arrayCopy = clone([nested])
+    expect(arrayCopy).toEqual([nested])
+    expect(arrayCopy[0]).not.toBe(nested)
 
     const object = { nested: { value: 1 } }
-    const objectCopy = clone(object, true)
+    const objectCopy = clone(object)
     expect(objectCopy).toEqual(object)
     expect(objectCopy.nested).not.toBe(object.nested)
 
+    const shallowCopy = clone(object, false)
+    expect(shallowCopy).toEqual(object)
+    expect(shallowCopy.nested).toBe(object.nested)
+
     const nullProto = Object.create(null)
     nullProto.name = 'null-proto'
-    const nullProtoCopy = clone(nullProto, true)
+    const nullProtoCopy = clone(nullProto)
     expect(Object.getPrototypeOf(nullProtoCopy)).toBeNull()
     expect(nullProtoCopy.name).toBe('null-proto')
 
     const cyclical = { name: 'cycle' }
     cyclical.self = cyclical
-    const cycleCopy = clone(cyclical, true)
+    const cycleCopy = clone(cyclical)
     expect(cycleCopy).not.toBe(cyclical)
     expect(cycleCopy.self).toBe(cycleCopy)
 
-    const date = new Date('2020-01-01T00:00:00Z')
-    expect(clone(date, true)).toBe(date)
-    expect(clone(null, true)).toBeNull()
-    expect(clone(42, true)).toBe(42)
+    expect(clone(null)).toBeNull()
+    expect(clone(42)).toBe(42)
+  })
+
+  it('clones standard built-in object types instead of returning shared references', () => {
+    const key = { id: 'key' }
+    const value = { id: 'value' }
+    const source = {
+      map: new Map([[key, value]]),
+      set: new Set([value]),
+      date: new Date('2020-01-01T00:00:00Z'),
+      regexp: /hello/gi,
+      buffer: new ArrayBuffer(4),
+      typed: new Uint16Array([1, 2]),
+      view: new DataView(new Uint8Array([1, 2, 3, 4]).buffer),
+      url: new URL('https://example.com/path?x=1'),
+      params: new URLSearchParams('a=1&b=2')
+    }
+    source.regexp.lastIndex = 2
+    new Uint8Array(source.buffer)[0] = 7
+
+    const copy = clone(source)
+
+    expect(copy).not.toBe(source)
+    expect(copy.map).not.toBe(source.map)
+    expect([...copy.map.keys()][0]).not.toBe(key)
+    expect([...copy.map.values()][0]).not.toBe(value)
+    expect(copy.set).not.toBe(source.set)
+    expect([...copy.set][0]).not.toBe(value)
+    expect(copy.date).not.toBe(source.date)
+    expect(copy.date.getTime()).toBe(source.date.getTime())
+    expect(copy.regexp).not.toBe(source.regexp)
+    expect(copy.regexp.source).toBe(source.regexp.source)
+    expect(copy.regexp.flags).toBe(source.regexp.flags)
+    expect(copy.regexp.lastIndex).toBe(2)
+    expect(copy.buffer).not.toBe(source.buffer)
+    expect(new Uint8Array(copy.buffer)[0]).toBe(7)
+    expect(copy.typed).not.toBe(source.typed)
+    expect([...copy.typed]).toEqual([1, 2])
+    expect(copy.view).not.toBe(source.view)
+    expect(copy.view.getUint8(0)).toBe(1)
+    expect(copy.url).not.toBe(source.url)
+    expect(copy.url.href).toBe(source.url.href)
+    expect(copy.params).not.toBe(source.params)
+    expect(copy.params.toString()).toBe('a=1&b=2')
+  })
+
+  it('clones signals as non-reactive, independent raw values', () => {
+    const state = signal({
+      nested: { value: 1 },
+      map: new Map([['item', { value: 2 }]])
+    })
+    const nestedEffect = effect(() => state.nested.value)
+    const mapEffect = effect(() => state.map.get('item').value)
+
+    const copy = clone(state)
+    copy.nested.value = 10
+    copy.map.get('item').value = 20
+
+    expect(nestedEffect.current).toBe(1)
+    expect(mapEffect.current).toBe(2)
+    expect(state.nested.value).toBe(1)
+    expect(state.map.get('item').value).toBe(2)
+  })
+
+  it('uses toClone for custom classes and throws for unsupported objects', () => {
+    class Secret {
+      #value
+      constructor(value) {
+        this.#value = value
+      }
+      get value() {
+        return this.#value
+      }
+      toClone() {
+        return new Secret(this.#value)
+      }
+    }
+
+    class Unsupported {
+      #value = 1
+      get value() {
+        return this.#value
+      }
+    }
+
+    const original = new Secret(7)
+    const copy = clone(original)
+    expect(copy).toBeInstanceOf(Secret)
+    expect(copy).not.toBe(original)
+    expect(copy.value).toBe(7)
+
+    expect(() => clone(new Unsupported())).toThrow(/cannot clone Unsupported/)
+    expect(() => clone({ item: new Unsupported() })).toThrow(/cannot clone Unsupported/)
+  })
+
+  it('throws instead of cloning custom accessors or broken toClone implementations', () => {
+    const accessorObject = {}
+    Object.defineProperty(accessorObject, 'hidden', {
+      get() {
+        return 1
+      },
+      enumerable: true
+    })
+
+    const broken = {
+      toClone() {
+        return this
+      }
+    }
+
+    expect(() => clone(accessorObject)).toThrow(/cannot clone Object/)
+    expect(() => clone(broken)).toThrow(/toClone\(\) returned the original object/)
+    expect(() => clone({}, 'deep')).toThrow(/expects options/)
+  })
+
+  it('supports option objects, standard errors and DOM nodes', () => {
+    const source = {
+      nested: { value: 1 },
+      error: new TypeError('broken', { cause: new Error('cause') }),
+      element: document.createElement('section')
+    }
+    source.element.innerHTML = '<p>Hello</p>'
+
+    const shallowCopy = clone(source, { deep: false })
+    expect(shallowCopy.nested).toBe(source.nested)
+
+    const copy = clone(source)
+    expect(copy.error).toBeInstanceOf(TypeError)
+    expect(copy.error).not.toBe(source.error)
+    expect(copy.error.message).toBe('broken')
+    expect(copy.error.cause).toBeInstanceOf(Error)
+    expect(copy.error.cause).not.toBe(source.error.cause)
+    expect(copy.element).not.toBe(source.element)
+    expect(copy.element.outerHTML).toBe('<section><p>Hello</p></section>')
+  })
+
+  it('clones optional platform cloneable objects when available', () => {
+    if (typeof SharedArrayBuffer !== 'undefined') {
+      const shared = new SharedArrayBuffer(2)
+      new Uint8Array(shared)[0] = 9
+      const copy = clone(shared)
+      expect(copy).not.toBe(shared)
+      expect(new Uint8Array(copy)[0]).toBe(9)
+    }
+
+    if (typeof Blob !== 'undefined') {
+      const blob = new Blob(['hello'], { type: 'text/plain' })
+      const copy = clone(blob)
+      expect(copy).not.toBe(blob)
+      expect(copy.size).toBe(blob.size)
+      expect(copy.type).toBe(blob.type)
+    }
+
+    if (typeof File !== 'undefined') {
+      const file = new File(['hello'], 'hello.txt', {
+        type: 'text/plain',
+        lastModified: 123
+      })
+      const copy = clone(file)
+      expect(copy).not.toBe(file)
+      expect(copy.name).toBe('hello.txt')
+      expect(copy.type).toBe('text/plain')
+      expect(copy.lastModified).toBe(123)
+    }
   })
 })
 

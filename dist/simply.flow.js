@@ -683,35 +683,200 @@
       computeStack[index] = current;
     }
   }
-  function clone(value, deep = false) {
+  function cloneOptions(options) {
+    if (typeof options === "boolean") {
+      return { deep: options };
+    }
+    if (options === void 0) {
+      return { deep: true };
+    }
+    if (!options || typeof options !== "object") {
+      throw new TypeError("simplyflow/state: clone() expects options to be a boolean or object");
+    }
+    return { deep: options.deep !== false };
+  }
+  function typeName(value) {
+    return value?.constructor?.name || Object.prototype.toString.call(value).slice(8, -1);
+  }
+  function isPlainObject(value) {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  }
+  function isTypedArray(value) {
+    return ArrayBuffer.isView(value) && !(value instanceof DataView);
+  }
+  function isIntegerKey(property) {
+    if (typeof property !== "string" || property === "") {
+      return false;
+    }
+    const index = Number(property);
+    return Number.isInteger(index) && index >= 0 && String(index) === property;
+  }
+  function hasToClone(value) {
+    return typeof value.toClone === "function";
+  }
+  function cannotClone(value, path) {
+    throw new TypeError(
+      `simplyflow/state: clone() cannot clone ${typeName(value)} at ${path}; add a toClone() method for custom objects`
+    );
+  }
+  function cloneDescriptorProperties(source, result, cloneValue, skip = () => false) {
+    const descriptors = Object.getOwnPropertyDescriptors(source);
+    for (const key of Reflect.ownKeys(descriptors)) {
+      if (skip(key)) {
+        delete descriptors[key];
+        continue;
+      }
+      const descriptor = descriptors[key];
+      if (!Object.hasOwn(descriptor, "value")) {
+        cannotClone(source, String(key));
+      }
+      descriptor.value = cloneValue(descriptor.value, String(key));
+    }
+    Object.defineProperties(result, descriptors);
+    return result;
+  }
+  function cloneArrayBuffer(value) {
+    return value.slice(0);
+  }
+  function cloneSharedArrayBuffer(value) {
+    const result = new SharedArrayBuffer(value.byteLength);
+    new Uint8Array(result).set(new Uint8Array(value));
+    return result;
+  }
+  function cloneErrorObject(value, cloneValue, path) {
+    const standardErrors = /* @__PURE__ */ new Set([
+      Error,
+      EvalError,
+      RangeError,
+      ReferenceError,
+      SyntaxError,
+      TypeError,
+      URIError,
+      typeof AggregateError === "undefined" ? void 0 : AggregateError
+    ]);
+    if (!standardErrors.has(value.constructor)) {
+      cannotClone(value, path);
+    }
+    const options = Object.hasOwn(value, "cause") ? { cause: cloneValue(value.cause, "cause") } : void 0;
+    if (typeof AggregateError !== "undefined" && value instanceof AggregateError) {
+      const errors = Array.from(value.errors || [], (error, index) => cloneValue(error, `errors.${index}`));
+      return new AggregateError(errors, value.message, options);
+    }
+    return new value.constructor(value.message, options);
+  }
+  function clone(value, options) {
+    const { deep } = cloneOptions(options);
     const seen = /* @__PURE__ */ new Map();
-    function cloneValue(value2) {
-      if (seen.has(value2)) {
-        return seen.get(value2);
+    function cloneChild(value2, path) {
+      return deep ? cloneValue(value2, path) : raw(value2);
+    }
+    function cloneValue(value2, path = "value") {
+      const source = raw(value2);
+      if (!isObjectLike(source)) {
+        return source;
       }
-      if (value2 === null || typeof value2 !== "object") {
-        return value2;
+      if (seen.has(source)) {
+        return seen.get(source);
       }
-      if (Array.isArray(value2)) {
-        if (!deep) {
-          return value2.slice();
+      if (hasToClone(source)) {
+        const result = raw(source.toClone());
+        if (Object.is(result, source)) {
+          throw new TypeError(`simplyflow/state: clone() toClone() returned the original object at ${path}`);
         }
-        const result = [];
-        seen.set(value2, result);
-        for (let index = 0; index < value2.length; index++) {
-          result[index] = cloneValue(value2[index]);
-        }
+        seen.set(source, result);
         return result;
       }
-      if (!value2.constructor || value2.constructor === Object) {
-        const result = value2.constructor ? {} : /* @__PURE__ */ Object.create(null);
-        seen.set(value2, result);
-        for (const key in value2) {
-          result[key] = deep ? cloneValue(value2[key]) : value2[key];
-        }
+      if (Array.isArray(source)) {
+        const result = new Array(source.length);
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild, (key) => key === "length");
+      }
+      if (isPlainObject(source)) {
+        const result = Object.create(Object.getPrototypeOf(source));
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild);
+      }
+      if (source instanceof Map) {
+        const result = /* @__PURE__ */ new Map();
+        seen.set(source, result);
+        source.forEach((mapValue, mapKey) => {
+          result.set(cloneChild(mapKey, "map key"), cloneChild(mapValue, "map value"));
+        });
+        return cloneDescriptorProperties(source, result, cloneChild);
+      }
+      if (source instanceof Set) {
+        const result = /* @__PURE__ */ new Set();
+        seen.set(source, result);
+        source.forEach((setValue) => result.add(cloneChild(setValue, "set value")));
+        return cloneDescriptorProperties(source, result, cloneChild);
+      }
+      if (source instanceof Date) {
+        const result = new Date(source.getTime());
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild);
+      }
+      if (source instanceof RegExp) {
+        const result = new RegExp(source.source, source.flags);
+        result.lastIndex = source.lastIndex;
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild, (key) => key === "lastIndex");
+      }
+      if (source instanceof ArrayBuffer) {
+        const result = cloneArrayBuffer(source);
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild);
+      }
+      if (typeof SharedArrayBuffer !== "undefined" && source instanceof SharedArrayBuffer) {
+        const result = cloneSharedArrayBuffer(source);
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild);
+      }
+      if (source instanceof DataView) {
+        const buffer = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+        const result = new DataView(buffer);
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild);
+      }
+      if (isTypedArray(source)) {
+        const result = new source.constructor(source);
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild, isIntegerKey);
+      }
+      if (typeof URL !== "undefined" && source instanceof URL) {
+        const result = new URL(source.href);
+        seen.set(source, result);
         return result;
       }
-      return value2;
+      if (typeof URLSearchParams !== "undefined" && source instanceof URLSearchParams) {
+        const result = new URLSearchParams(source);
+        seen.set(source, result);
+        return result;
+      }
+      if (typeof File !== "undefined" && source instanceof File) {
+        const result = new File([source], source.name, {
+          type: source.type,
+          lastModified: source.lastModified
+        });
+        seen.set(source, result);
+        return result;
+      }
+      if (typeof Blob !== "undefined" && source instanceof Blob) {
+        const result = source.slice(0, source.size, source.type);
+        seen.set(source, result);
+        return result;
+      }
+      if (source instanceof Error) {
+        const result = cloneErrorObject(source, cloneChild, path);
+        seen.set(source, result);
+        return cloneDescriptorProperties(source, result, cloneChild, (key) => key === "message" || key === "cause" || key === "errors" || key === "stack");
+      }
+      if (typeof Node !== "undefined" && source instanceof Node && typeof source.cloneNode === "function") {
+        const result = source.cloneNode(deep);
+        seen.set(source, result);
+        return result;
+      }
+      cannotClone(source, path);
     }
     return cloneValue(value);
   }

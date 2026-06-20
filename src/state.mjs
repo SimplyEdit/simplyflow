@@ -838,44 +838,263 @@ export function untracked(fn) {
     }
 }
 
+function cloneOptions(options) {
+    if (typeof options === 'boolean') {
+        return { deep: options }
+    }
+    if (options === undefined) {
+        return { deep: true }
+    }
+    if (!options || typeof options !== 'object') {
+        throw new TypeError('simplyflow/state: clone() expects options to be a boolean or object')
+    }
+    return { deep: options.deep !== false }
+}
+
+function typeName(value) {
+    return value?.constructor?.name || Object.prototype.toString.call(value).slice(8, -1)
+}
+
+function isPlainObject(value) {
+    const prototype = Object.getPrototypeOf(value)
+    return prototype === Object.prototype || prototype === null
+}
+
+function isTypedArray(value) {
+    return ArrayBuffer.isView(value) && !(value instanceof DataView)
+}
+
+function isIntegerKey(property) {
+    if (typeof property !== 'string' || property === '') {
+        return false
+    }
+    const index = Number(property)
+    return Number.isInteger(index) && index >= 0 && String(index) === property
+}
+
+function hasToClone(value) {
+    return typeof value.toClone === 'function'
+}
+
+function cannotClone(value, path) {
+    throw new TypeError(
+        `simplyflow/state: clone() cannot clone ${typeName(value)} at ${path}; add a toClone() method for custom objects`
+    )
+}
+
+function cloneDescriptorProperties(source, result, cloneValue, skip = () => false) {
+    const descriptors = Object.getOwnPropertyDescriptors(source)
+
+    for (const key of Reflect.ownKeys(descriptors)) {
+        if (skip(key)) {
+            delete descriptors[key]
+            continue
+        }
+
+        const descriptor = descriptors[key]
+        // Accessor descriptors may hide state in closures or private fields.
+        // Copying the accessor would not necessarily create an independent clone,
+        // and reading it would execute user code. Custom objects that need this
+        // should expose toClone() so they control how hidden state is copied.
+        if (!Object.hasOwn(descriptor, 'value')) {
+            cannotClone(source, String(key))
+        }
+        descriptor.value = cloneValue(descriptor.value, String(key))
+    }
+
+    Object.defineProperties(result, descriptors)
+    return result
+}
+
+function cloneArrayBuffer(value) {
+    return value.slice(0)
+}
+
+function cloneSharedArrayBuffer(value) {
+    const result = new SharedArrayBuffer(value.byteLength)
+    new Uint8Array(result).set(new Uint8Array(value))
+    return result
+}
+
+function cloneErrorObject(value, cloneValue, path) {
+    const standardErrors = new Set([
+        Error,
+        EvalError,
+        RangeError,
+        ReferenceError,
+        SyntaxError,
+        TypeError,
+        URIError,
+        typeof AggregateError === 'undefined' ? undefined : AggregateError
+    ])
+
+    if (!standardErrors.has(value.constructor)) {
+        cannotClone(value, path)
+    }
+
+    const options = Object.hasOwn(value, 'cause')
+        ? { cause: cloneValue(value.cause, 'cause') }
+        : undefined
+
+    if (typeof AggregateError !== 'undefined' && value instanceof AggregateError) {
+        const errors = Array.from(value.errors || [], (error, index) => cloneValue(error, `errors.${index}`))
+        return new AggregateError(errors, value.message, options)
+    }
+
+    return new value.constructor(value.message, options)
+}
+
 /**
- * Clones plain objects and arrays. Signals are copied as their visible values;
- * non-plain objects such as Date, Map, Set and class instances are returned as-is.
+ * Creates a non-reactive clone of a value or signal target.
+ *
+ * clone(value) now deep-clones by default, because a shallow clone of a signal
+ * target can still share nested raw objects with the original signal. Passing
+ * false keeps the legacy top-level clone behavior for callers that explicitly
+ * want to preserve nested references.
+ *
+ * Built-in cloneable objects such as Array, Object, Map, Set, Date, RegExp,
+ * ArrayBuffer, typed arrays, URL and DOM nodes are copied using their native
+ * representation. Custom objects must provide toClone(); otherwise clone()
+ * throws instead of silently copying public properties or returning a shared
+ * reference.
  */
-export function clone(value, deep = false) {
+export function clone(value, options) {
+    const { deep } = cloneOptions(options)
     const seen = new Map()
 
-    function cloneValue(value) {
-        if (seen.has(value)) {
-            return seen.get(value)
-        }
+    function cloneChild(value, path) {
+        return deep ? cloneValue(value, path) : raw(value)
+    }
 
-        if (value === null || typeof value !== 'object') {
-            return value
-        }
+    function cloneValue(value, path = 'value') {
+        const source = raw(value)
 
-        if (Array.isArray(value)) {
-            if (!deep) {
-                return value.slice()
+        if (!isObjectLike(source)) {
+            return source
+        }
+        if (seen.has(source)) {
+            return seen.get(source)
+        }
+        if (hasToClone(source)) {
+            const result = raw(source.toClone())
+            if (Object.is(result, source)) {
+                throw new TypeError(`simplyflow/state: clone() toClone() returned the original object at ${path}`)
             }
-            const result = []
-            seen.set(value, result)
-            for (let index = 0; index < value.length; index++) {
-                result[index] = cloneValue(value[index])
-            }
+            seen.set(source, result)
             return result
         }
 
-        if (!value.constructor || value.constructor === Object) {
-            const result = value.constructor ? {} : Object.create(null)
-            seen.set(value, result)
-            for (const key in value) {
-                result[key] = deep ? cloneValue(value[key]) : value[key]
-            }
+        if (Array.isArray(source)) {
+            const result = new Array(source.length)
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild, key => key === 'length')
+        }
+
+        if (isPlainObject(source)) {
+            const result = Object.create(Object.getPrototypeOf(source))
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild)
+        }
+
+        if (source instanceof Map) {
+            const result = new Map()
+            seen.set(source, result)
+            source.forEach((mapValue, mapKey) => {
+                result.set(cloneChild(mapKey, 'map key'), cloneChild(mapValue, 'map value'))
+            })
+            return cloneDescriptorProperties(source, result, cloneChild)
+        }
+
+        if (source instanceof Set) {
+            const result = new Set()
+            seen.set(source, result)
+            source.forEach(setValue => result.add(cloneChild(setValue, 'set value')))
+            return cloneDescriptorProperties(source, result, cloneChild)
+        }
+
+        if (source instanceof Date) {
+            const result = new Date(source.getTime())
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild)
+        }
+
+        if (source instanceof RegExp) {
+            const result = new RegExp(source.source, source.flags)
+            result.lastIndex = source.lastIndex
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild, key => key === 'lastIndex')
+        }
+
+        if (source instanceof ArrayBuffer) {
+            const result = cloneArrayBuffer(source)
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild)
+        }
+
+        if (typeof SharedArrayBuffer !== 'undefined' && source instanceof SharedArrayBuffer) {
+            const result = cloneSharedArrayBuffer(source)
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild)
+        }
+
+        if (source instanceof DataView) {
+            const buffer = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength)
+            const result = new DataView(buffer)
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild)
+        }
+
+        if (isTypedArray(source)) {
+            const result = new source.constructor(source)
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild, isIntegerKey)
+        }
+
+        if (typeof URL !== 'undefined' && source instanceof URL) {
+            const result = new URL(source.href)
+            seen.set(source, result)
+            // Browser and jsdom URL objects can store implementation details in
+            // own symbol properties. Copying those would couple the clone back
+            // to the original, so the URL constructor is the complete clone.
             return result
         }
 
-        return value
+        if (typeof URLSearchParams !== 'undefined' && source instanceof URLSearchParams) {
+            const result = new URLSearchParams(source)
+            seen.set(source, result)
+            return result
+        }
+
+        if (typeof File !== 'undefined' && source instanceof File) {
+            const result = new File([source], source.name, {
+                type: source.type,
+                lastModified: source.lastModified
+            })
+            seen.set(source, result)
+            return result
+        }
+
+        if (typeof Blob !== 'undefined' && source instanceof Blob) {
+            const result = source.slice(0, source.size, source.type)
+            seen.set(source, result)
+            return result
+        }
+
+        if (source instanceof Error) {
+            const result = cloneErrorObject(source, cloneChild, path)
+            seen.set(source, result)
+            return cloneDescriptorProperties(source, result, cloneChild, key => (
+                key === 'message' || key === 'cause' || key === 'errors' || key === 'stack'
+            ))
+        }
+
+        if (typeof Node !== 'undefined' && source instanceof Node && typeof source.cloneNode === 'function') {
+            const result = source.cloneNode(deep)
+            seen.set(source, result)
+            return result
+        }
+
+        cannotClone(source, path)
     }
 
     return cloneValue(value)
