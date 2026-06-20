@@ -10,7 +10,7 @@ Create an HTML file like this:
 <head>
   <meta charset="utf-8">
   <title>Dragon Sanctuary</title>
-  <script src="../dist/simply.flow.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simplyflow/dist/simply.flow.js"></script>
 </head>
 <body>
   <main id="sanctuary">

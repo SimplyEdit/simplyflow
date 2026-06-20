@@ -12,6 +12,16 @@ The main idea is simple:
 4. Put changes in `actions`.
 5. SimplyFlow keeps the page in sync.
 
+## Add SimplyFlow to a page
+
+The tutorials use the browser bundle from a CDN. Put this line in the `<head>` of your HTML page:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/simplyflow/dist/simply.flow.js"></script>
+```
+
+After that, `simply.app()` is available in your page scripts.
+
 ## Start here
 
 1. [Meet your first app](01-meet-your-app.md)
