@@ -17,14 +17,35 @@ function isObjectLike(value) {
     return value !== null && (typeof value === 'object' || typeof value === 'function')
 }
 
+/**
+ * Returns true when value is a SimplyFlow signal proxy.
+ *
+ * @param {*} value Value to inspect.
+ * @returns {boolean} True if value is a signal proxy, otherwise false.
+ * @throws {never} Does not intentionally throw.
+ */
 export function isSignal(value) {
     return Boolean(isObjectLike(value) && value[DEP.SIGNAL])
 }
 
+/**
+ * Returns the raw target for a signal, or value unchanged when it is not a signal.
+ *
+ * @param {*} value Signal or ordinary value.
+ * @returns {*} The signal target, or the original value.
+ * @throws {never} Does not intentionally throw.
+ */
 export function raw(value) {
     return isSignal(value) ? value[DEP.XRAY] : value
 }
 
+/**
+ * Returns the existing signal proxy for value, if one has been registered.
+ *
+ * @param {*} value Raw target or signal proxy.
+ * @returns {*} The existing signal proxy, the same signal when value is already a signal, or undefined.
+ * @throws {never} Does not intentionally throw.
+ */
 export function getSignal(value) {
     return isSignal(value) ? value : signals.get(value)
 }
@@ -289,14 +310,12 @@ const signalHandler = {
 }
 
 /**
- * Stable proxy/effect lookup.
+ * Low-level registry for signal proxies and effect result signals.
  *
- * - raw object/function -> signal proxy
- * - user effect function -> computed signal returned by effect()
- *
- * @deprecated Prefer createSignal(), getSignal(), registerSignal(), isSignal()
- * and raw(). This map stays exported for compatibility and for advanced code
- * that has not yet migrated to the explicit extension API.
+ * @type {WeakMap<object|Function, Proxy>}
+ * @returns {WeakMap<object|Function, Proxy>} Maps raw targets to signals, and effect functions to result signals.
+ * @throws {never} Reading this property does not throw.
+ * @deprecated Prefer createSignal(), getSignal(), registerSignal(), isSignal(), and raw().
  */
 export const signals = new WeakMap()
 
@@ -335,6 +354,15 @@ function signalProxyHandler(handler) {
     }
 }
 
+/**
+ * Registers a custom signal proxy for a raw target.
+ *
+ * @param {object|Function} target Raw object, function, class instance, collection, or DOM node to register.
+ * @param {Proxy} proxy Signal proxy that represents target.
+ * @returns {Proxy} The registered proxy.
+ * @throws {TypeError} If target is not object-like or proxy is not a signal.
+ * @throws {Error} If target is already registered with a different signal.
+ */
 export function registerSignal(target, proxy) {
     const rawTarget = raw(target)
     assertSignalTarget(rawTarget, 'registerSignal')
@@ -352,6 +380,16 @@ export function registerSignal(target, proxy) {
     return proxy
 }
 
+/**
+ * Creates or returns a signal proxy using a custom Proxy handler.
+ *
+ * @param {object|Function} target Raw object, function, class instance, collection, or DOM node to wrap.
+ * @param {ProxyHandler<object>} [handler={}] Custom proxy traps for the signal.
+ * @param {Function} [init] Optional initializer called once with (target, proxy).
+ * @returns {Proxy} Existing or newly created signal proxy for target.
+ * @throws {TypeError} If target is not object-like, handler is not an object, or init is not a function.
+ * @throws {*} Re-throws errors from init.
+ */
 export function createSignal(target, handler = {}, init) {
     assertSignalTarget(target, 'createSignal')
     assertProxyHandler(handler, 'createSignal')
@@ -375,9 +413,11 @@ export function createSignal(target, handler = {}, init) {
 }
 
 /**
- * Creates a transparent reactive proxy for an object, array, Map, Set, DOM
- * element, class instance or function. Primitive values are intentionally not
- * supported because reactivity is tracked through property access.
+ * Creates a transparent reactive proxy for an object, collection, class instance, DOM node, or function.
+ *
+ * @param {object|Function} [value={}] Target to wrap.
+ * @returns {Proxy} Existing or newly created signal proxy for value.
+ * @throws {TypeError} If value is not object-like.
  */
 export function signal(value = {}) {
     if (!isObjectLike(value)) {
@@ -392,8 +432,13 @@ let tracers = []
 let tracing = false
 
 /**
- * trace(fn) enables registered tracers while fn runs.
- * trace(signal, property) returns the effects currently depending on property.
+ * Runs a traced function, or returns effects currently depending on a signal property.
+ *
+ * @param {Function|Proxy} target Function to run with tracing enabled, or signal to inspect.
+ * @param {string|symbol|number} [prop] Signal property whose listeners should be returned.
+ * @returns {*} Result of target() for traced functions, or an array of listener descriptions.
+ * @throws {TypeError} If inspecting listeners and target is not a signal.
+ * @throws {*} Re-throws errors from target() when tracing a function.
  */
 export function trace(target, prop) {
     if (typeof target === 'function') {
@@ -417,8 +462,12 @@ export function trace(target, prop) {
 }
 
 /**
- * Adds an observer for dependency tracking. Tracers only run inside trace(fn),
- * which keeps normal signal access fast and avoids accidental global logging.
+ * Adds an observer for dependency tracking events emitted inside trace(fn).
+ *
+ * @param {{get?: Function, set?: Function}} tracer Object with get and/or set callback functions.
+ * @returns {void}
+ * @throws {TypeError} If tracer is not an object.
+ * @throws {Error} If tracer has no callbacks, or if a provided callback is not a function.
  */
 export function addTracer(tracer) {
     if (!tracer || typeof tracer !== 'object') {
@@ -447,6 +496,11 @@ let batchDepth = 0
 
 /**
  * Triggers effects that depend on the changed signal properties in context.
+ *
+ * @param {Proxy} self Signal whose properties changed.
+ * @param {Map<string|symbol|number, object>} [context=new Map()] Change map, usually created with makeContext().
+ * @returns {void}
+ * @throws {TypeError} If self is not a signal or context is not a Map.
  */
 export function notifySet(self, context = new Map()) {
     if (!isSignal(self)) {
@@ -478,6 +532,14 @@ export function notifySet(self, context = new Map()) {
     runListeners(listeners, self, context)
 }
 
+/**
+ * Creates a normalized change context map for notifySet().
+ *
+ * @param {Map|object|string|symbol|number} property Property name, property-to-change object, or existing context Map.
+ * @param {object} [change] Change metadata when property names a single changed property.
+ * @returns {Map<string|symbol|number, object>} Normalized change context.
+ * @throws {never} Does not intentionally throw.
+ */
 export function makeContext(property, change) {
     const context = new Map()
 
@@ -512,6 +574,11 @@ function clearContext(listener) {
 
 /**
  * Records a dependency on self[property] for the currently running effect.
+ *
+ * @param {Proxy} self Signal being read.
+ * @param {string|symbol|number} property Property being read.
+ * @returns {void}
+ * @throws {never} Does not intentionally throw.
  */
 export function notifyGet(self, property) {
     const currentCompute = computeStack[computeStack.length - 1]
@@ -641,8 +708,13 @@ function runListeners(listeners, signal, context) {
 }
 
 /**
- * Runs fn immediately, tracks every signal property it reads, and reruns it
- * synchronously when one of those properties changes.
+ * Runs fn immediately and reruns it synchronously when any signal property it reads changes.
+ *
+ * @param {Function} fn Effect function to run and track.
+ * @returns {Proxy} Signal whose current property contains the latest effect result.
+ * @throws {TypeError} If fn is not a function.
+ * @throws {Error} If fn is already running recursively or creates a cyclic dependency.
+ * @throws {*} Re-throws errors from fn during the initial run.
  */
 export function effect(fn) {
     assertFunction(fn, 'effect')
@@ -660,6 +732,13 @@ export function effect(fn) {
     return connectedSignal
 }
 
+/**
+ * Stops an effect, clears its dependencies, and releases its reusable function mapping.
+ *
+ * @param {Proxy} connectedSignal Signal returned by effect(), throttledEffect(), or clockEffect().
+ * @returns {void}
+ * @throws {TypeError} If connectedSignal is not a signal.
+ */
 export function destroy(connectedSignal) {
     if (!isSignal(connectedSignal)) {
         throw new TypeError('simplyflow/state: destroy() expects an effect signal')
@@ -685,8 +764,12 @@ export function destroy(connectedSignal) {
 }
 
 /**
- * Defers effect execution until the outermost batch has finished. Async batches
- * keep batching active until their returned promise settles.
+ * Runs fn while deferring effect execution until the outermost batch finishes.
+ *
+ * @param {Function} fn Function to run inside the batch.
+ * @returns {*} The value returned by fn.
+ * @throws {TypeError} If fn is not a function.
+ * @throws {*} Re-throws errors from fn.
  */
 export function batch(fn) {
     assertFunction(fn, 'batch')
@@ -719,8 +802,14 @@ function runBatchedListeners() {
 }
 
 /**
- * Like effect(), but after the immediate first run it recomputes at most once
- * per throttleTime milliseconds.
+ * Runs fn as an effect, throttling reruns to at most once per throttleTime milliseconds.
+ *
+ * @param {Function} fn Effect function to run and track.
+ * @param {number} throttleTime Minimum time in milliseconds between reruns after the initial run.
+ * @returns {Proxy} Signal whose current property contains the latest effect result.
+ * @throws {TypeError} If fn is not a function or throttleTime is not a non-negative finite number.
+ * @throws {Error} If fn is already running recursively or creates a cyclic dependency.
+ * @throws {*} Re-throws errors from fn during the initial run.
  */
 export function throttledEffect(fn, throttleTime) {
     assertFunction(fn, 'throttledEffect')
@@ -778,8 +867,13 @@ export function throttledEffect(fn, throttleTime) {
 }
 
 /**
- * Tracks changes like effect(), but only recomputes after the supplied clock's
- * .time value advances. This lets callers coordinate expensive updates.
+ * Tracks fn like an effect, but recomputes only after clock.time advances.
+ *
+ * @param {Function} fn Effect function to run and track.
+ * @param {{time: number}} clock Clock object controlling when pending changes recompute.
+ * @returns {Proxy} Signal whose current property contains the latest effect result.
+ * @throws {TypeError} If fn is not a function or clock lacks a numeric time property.
+ * @throws {*} Re-throws errors from fn during the initial run.
  */
 export function clockEffect(fn, clock) {
     assertFunction(fn, 'clockEffect')
@@ -823,8 +917,12 @@ export function clockEffect(fn, clock) {
 }
 
 /**
- * Runs fn without recording reads as dependencies for the current effect.
- * Writes inside fn still notify effects that already depend on those signals.
+ * Runs fn without recording signal reads as dependencies for the current effect.
+ *
+ * @param {Function} fn Function to run without dependency tracking.
+ * @returns {*} The value returned by fn.
+ * @throws {TypeError} If fn is not a function.
+ * @throws {*} Re-throws errors from fn.
  */
 export function untracked(fn) {
     assertFunction(fn, 'untracked')
@@ -947,16 +1045,15 @@ function cloneErrorObject(value, cloneValue, path) {
 /**
  * Creates a non-reactive clone of a value or signal target.
  *
- * clone(value) now deep-clones by default, because a shallow clone of a signal
- * target can still share nested raw objects with the original signal. Passing
- * false keeps the legacy top-level clone behavior for callers that explicitly
- * want to preserve nested references.
+ * Deep-clones by default so nested signal data is not shared with the source. Built-in cloneable objects use their
+ * native representation. Custom objects must provide toClone(); otherwise clone() throws instead of returning a
+ * shared reference or copying only public properties.
  *
- * Built-in cloneable objects such as Array, Object, Map, Set, Date, RegExp,
- * ArrayBuffer, typed arrays, URL and DOM nodes are copied using their native
- * representation. Custom objects must provide toClone(); otherwise clone()
- * throws instead of silently copying public properties or returning a shared
- * reference.
+ * @param {*} value Value or signal target to clone.
+ * @param {boolean|{deep?: boolean}} [options] false or { deep: false } keeps legacy shallow top-level cloning.
+ * @returns {*} Non-reactive clone of value.
+ * @throws {TypeError} If options are invalid, an unsupported object is encountered, an accessor property is found, or toClone() returns the original object.
+ * @throws {*} Re-throws errors from custom toClone() methods.
  */
 export function clone(value, options) {
     const { deep } = cloneOptions(options)
