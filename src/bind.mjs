@@ -371,7 +371,8 @@ class SimplyBind
 
     destroy()
     {
-        this.bindings.forEach(binding => {
+        this.bindings.forEach((binding, element) => {
+            untrack(element, this.getBindingPath(element))
             destroy(binding)
         })
         this.bindings = new Map()
@@ -397,6 +398,7 @@ export function trace(path)
 }
 
 function track(el, context) {
+    untrack(el)
     if (!tracking.has(context.path)) {
         tracking.set(context.path, [context])
     } else {
@@ -405,11 +407,18 @@ function track(el, context) {
 }
 
 function untrack(el, path) {
-    let list = tracking.get(path)
-    if (list) {
-        list = list.filter(context => context.element !== el)
-        tracking.set(path, list)
+    if (path) {
+        let list = tracking.get(path)
+        if (list) {
+            list = list.filter(context => context.element !== el)
+            tracking.set(path, list)
+        }
+        return
     }
+    tracking.forEach((list, trackedPath) => {
+        list = list.filter(context => context.element !== el)
+        tracking.set(trackedPath, list)
+    })
 }
 
 
