@@ -79,7 +79,8 @@ function domListen(el, signal, options) {
         characterData: true,
         subtree: true,
         attributes: true,
-        attributesOldValue: true
+        attributesOldValue: true,
+        childList: true
     }
     if (!options) {
         options = defaultOptions
@@ -109,6 +110,14 @@ function domListen(el, signal, options) {
                         was: Array.from(el.children) //FIXME; fill in 'now'
                     }
                     changes.length = -1 //FIXME: don't do this :)
+                    if (el.innerHTML != oldContentHTML) {
+                        changes.innerHTML = oldContentHTML
+                        oldContentHTML = el.innerHTML
+                    }
+                    if (el.innerText != oldContentText) {
+                        changes.innerText = oldContentText
+                        oldContentText = el.innerText
+                    }
                 } else {
                     console.log('nothing to do for',el,mutation.type)
                 }
@@ -175,7 +184,7 @@ export function trackDomList(element)
                 }
             })
         })
-    })
+    }, 50)
     return s
 }
 
@@ -205,7 +214,7 @@ export function trackDomField(element, props, valueIsString) {
                 // don't trigger this effect when the data changes (root.path)
                 setValueByPath(this.options.root, path, updateValue)
             })
-        })
+        }, 50)
     })
     return s
 }

@@ -83,7 +83,11 @@ class SimplyBind
                 if (!el.isConnected) {
                     // el is no longer part of this document
                     untrack(el, this.getBindingPath(el))
-                    destroy(this.bindings.get(el))
+                    const binding = this.bindings.get(el)
+                    if (binding) {
+                        destroy(binding)
+                        this.bindings.delete(el)
+                    }
                     // doing this here instead of in a mutationobserver
                     // allows an element to be temporary removed and then inserted
                     // without the binding having to be reset
@@ -194,8 +198,13 @@ class SimplyBind
             ',['+this.options.attribute+'-list]'+
             ',['+this.options.attribute+'-map]):not(template)'
         )
-        if (bindings.length) {
-            applyBindings(bindings)
+        try {
+            if (bindings.length) {
+                applyBindings(bindings)
+            }
+        } catch (error) {
+            this.destroy()
+            throw error
         }
 
     }
@@ -315,7 +324,7 @@ class SimplyBind
             let currentItem
             if (path) {
                 if (path.substr(0,6)==':root.') {
-                    currentItem = getValueByPath(this.options.root, path)
+                    currentItem = getValueByPath(this.options.root, path.substring(6))
                 } else {
                     currentItem = getValueByPath(value, path)
                 }
@@ -398,7 +407,7 @@ function track(el, context) {
 function untrack(el, path) {
     let list = tracking.get(path)
     if (list) {
-        list = list.filter(context => context.element == el)
+        list = list.filter(context => context.element !== el)
         tracking.set(path, list)
     }
 }

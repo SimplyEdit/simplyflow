@@ -411,30 +411,28 @@ export function select(context)
     if (value === null) {
         value = ''
     }
-    if (typeof value!='object') {
-        if (el.multiple) {
-            if (Array.isArray(value)) { //FIXME: cannot be true, since typeof != 'object'
-                for (let option of el.options) {
-                    if (value.indexOf(option.value)===false) {
-                        option.selected = false
-                    } else {
-                        option.selected = true
-                    }
-                }
-            }
-        } else {
-            let option = el.options.find(o => matchValue(o.value,value))
-            if (option) {
-                option.selected = true
+
+    if (Array.isArray(value)) {
+        for (let option of el.options) {
+            option.selected = value.some(selected => matchValue(option.value, selected))
+            if (option.selected) {
                 option.setAttribute('selected', true)
+            } else {
+                option.removeAttribute('selected')
             }
+        }
+    } else if (typeof value!='object') {
+        let option = Array.from(el.options).find(o => matchValue(o.value,value))
+        if (option) {
+            option.selected = true
+            option.setAttribute('selected', true)
         }
     } else { // value is a non-null object
         if (value.options) {
             setSelectOptions(el, value.options)
         }
-        if (value.selected) {
-            select(Object.asssign({}, context, {value:value.selected}))
+        if (typeof value.selected !== 'undefined') {
+            select(Object.assign({}, context, {value:value.selected}))
         }
         setProperties(el, value, 'name', 'id', 'selectedIndex', 'className') // allow innerHTML? if so call element instead
     }
@@ -573,6 +571,12 @@ export function setProperties(el, data, ...properties) {
             el[property] = ''+data[property]
         }
     }
+}
+
+
+function updateProperties(context, properties)
+{
+    trackDomField.call(this, context.element, properties, false)
 }
 
 export function getProperties(el, ...properties) {
