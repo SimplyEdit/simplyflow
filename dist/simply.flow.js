@@ -1300,7 +1300,7 @@
   }
   function arrayByTemplates(context) {
     const attribute = this.options.attribute;
-    const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
+    const attributes = [attribute + "-field", attribute + "-edit", attribute + "-list", attribute + "-map", attribute + "-value-path"];
     const attrQuery = "[" + attributes.join("],[") + "]";
     const keyAttribute = attribute + "-key";
     const items = Array.from(context.element.querySelectorAll(":scope > [" + keyAttribute + "]"));
@@ -1389,7 +1389,7 @@
   }
   function objectByTemplates(context) {
     const attribute = this.options.attribute;
-    const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
+    const attributes = [attribute + "-field", attribute + "-edit", attribute + "-list", attribute + "-map", attribute + "-value-path"];
     const attrQuery = "[" + attributes.join("],[") + "]";
     const keyAttribute = attribute + "-key";
     const items = Array.from(context.element.querySelectorAll(":scope > [" + keyAttribute + "]"));
@@ -1852,12 +1852,33 @@
           binding.setAttribute(attr, parent + bind2);
         }
       }
+      this.applyTemplateCommandValues(clone2, template.links, path2, index);
       if (typeof index !== "undefined") {
         clone2.children[0].setAttribute(attribute + "-key", index);
       }
       clone2.children[0][DEP.TEMPLATE] = template;
       clone2.children[0][DEP.VALUE] = value;
       return clone2;
+    }
+    applyTemplateCommandValues(fragment, links, path2, index) {
+      const valueAttribute = this.options.attribute + "-value";
+      const valuePathAttribute = this.options.attribute + "-value-path";
+      const valueSelector = "[" + valueAttribute + "]";
+      const elements = Array.from(fragment.querySelectorAll(valueSelector));
+      for (const element2 of elements) {
+        let value = element2.getAttribute(valueAttribute);
+        value = this.applyLinks(links, value);
+        const resolved = templateCommandValue(value, path2, index);
+        if (!resolved) {
+          continue;
+        }
+        if (Object.hasOwn(resolved, "path")) {
+          element2.setAttribute(valuePathAttribute, resolved.path);
+        } else {
+          element2.setAttribute(valueAttribute, resolved.value);
+          element2.removeAttribute(valuePathAttribute);
+        }
+      }
     }
     parseLinks(links) {
       let result = {};
@@ -1981,6 +2002,36 @@
       list2 = list2.filter((context) => context.element !== el);
       tracking.set(trackedPath, list2);
     });
+  }
+  function templateCommandValue(value, path2, index) {
+    if (!value || value[0] !== ":") {
+      return null;
+    }
+    if (value === ":key") {
+      return { value: "" + index };
+    }
+    if (value === ":value") {
+      return { path: templateItemPath(path2, index) };
+    }
+    if (value.startsWith(":value.")) {
+      return { path: joinPath(templateItemPath(path2, index), value.substring(":value".length)) };
+    }
+    if (value.startsWith(":root.")) {
+      return { path: value.substring(":root.".length) };
+    }
+    return null;
+  }
+  function templateItemPath(path2, index) {
+    if (typeof index === "undefined") {
+      return path2;
+    }
+    return joinPath(path2, "." + index);
+  }
+  function joinPath(path2, suffix) {
+    if (!path2) {
+      return suffix.replace(/^\./, "");
+    }
+    return path2 + suffix;
   }
   function getValueByPath(root, path2) {
     let parts = path2.split(".");
@@ -2630,6 +2681,54 @@
     return routeInfo;
   }
 
+  // src/path.mjs
+  var path = {
+    get(dataset, pointer) {
+      if (typeof pointer !== "string") {
+        return pointer;
+      }
+      if (!pointer) {
+        return dataset;
+      }
+      return pointer.split(".").reduce(function(acc, name) {
+        if (acc == null) {
+          return null;
+        }
+        if (!Reflect.has(Object(acc), name)) {
+          return null;
+        }
+        return acc[name];
+      }, dataset);
+    },
+    set: function(dataset, pointer, value) {
+      const parent = path.get(dataset, path.parent(pointer));
+      if (parent == null) {
+        throw new TypeError(`simplyflow/path: cannot set "${pointer}" because its parent path does not exist`);
+      }
+      parent[path.pop(pointer)] = value;
+    },
+    pop: function(pointer) {
+      return pointer.split(".").pop();
+    },
+    push: function(pointer, name) {
+      return (pointer ? pointer + "." : "") + name;
+    },
+    parent: function(pointer) {
+      const names = pointer.split(".");
+      names.pop();
+      return names.join(".");
+    },
+    parents: function(dataset, pointer) {
+      let result = [];
+      while (pointer) {
+        pointer = path.parent(pointer);
+        result.unshift(pointer);
+      }
+      return result;
+    }
+  };
+  var path_default = path;
+
   // src/command.mjs
   var COMMAND_OPTIONS = [
     "commands",
@@ -2651,7 +2750,7 @@
         Object.assign(this, options.commands);
       }
       const commandHandler = (evt) => {
-        const command = getCommand(evt, this.$handlers);
+        const command = getCommand(evt, this.$handlers, this.app);
         if (!command) {
           return;
         }
@@ -2694,7 +2793,7 @@
   function commands(options = {}) {
     return new SimplyCommands(options);
   }
-  function getCommand(evt, handlers) {
+  function getCommand(evt, handlers, app2) {
     var el = evt.target.closest("[data-simply-command]");
     if (el) {
       for (let handler of handlers) {
@@ -2703,7 +2802,7 @@
             return {
               name: el.dataset.simplyCommand,
               source: el,
-              value: handler.get(el)
+              value: handler.get(el, app2)
             };
           }
           return null;
@@ -2712,10 +2811,27 @@
     }
     return null;
   }
+  function getConfiguredCommandValue(el, app2) {
+    const pathAttribute = "simplyValuePath";
+    if (Object.hasOwn(el.dataset, pathAttribute)) {
+      return {
+        found: true,
+        value: path_default.get(app2?.data, el.dataset[pathAttribute])
+      };
+    }
+    if (Object.hasOwn(el.dataset, "simplyValue")) {
+      return { found: true, value: el.dataset.simplyValue };
+    }
+    return { found: false, value: void 0 };
+  }
   var defaultHandlers = [
     {
       match: "input,select,textarea",
-      get: function(el) {
+      get: function(el, app2) {
+        const configuredValue = getConfiguredCommandValue(el, app2);
+        if (configuredValue.found) {
+          return configuredValue.value;
+        }
         if (el.tagName === "SELECT" && el.multiple) {
           let values = [];
           for (let option of el.options) {
@@ -2725,7 +2841,7 @@
           }
           return values;
         }
-        return el.dataset.simplyValue || el.value;
+        return el.value;
       },
       check: function(el, evt) {
         return evt.type == "change" || el.dataset.simplyImmediate && evt.type == "input";
@@ -2733,8 +2849,12 @@
     },
     {
       match: "a,button",
-      get: function(el) {
-        return el.dataset.simplyValue || el.href || el.value;
+      get: function(el, app2) {
+        const configuredValue = getConfiguredCommandValue(el, app2);
+        if (configuredValue.found) {
+          return configuredValue.value;
+        }
+        return el.href || el.value;
       },
       check: function(el, evt) {
         return evt.type == "click" && evt.ctrlKey == false && evt.button == 0;
@@ -2767,8 +2887,8 @@
     },
     {
       match: "*",
-      get: function(el) {
-        return el.dataset.simplyValue;
+      get: function(el, app2) {
+        return getConfiguredCommandValue(el, app2).value;
       },
       check: function(el, evt) {
         return evt.type == "click" && evt.ctrlKey == false && evt.button == 0;
@@ -3479,54 +3599,6 @@
       }
     }
   }
-
-  // src/path.mjs
-  var path = {
-    get(dataset, pointer) {
-      if (typeof pointer !== "string") {
-        return pointer;
-      }
-      if (!pointer) {
-        return dataset;
-      }
-      return pointer.split(".").reduce(function(acc, name) {
-        if (acc == null) {
-          return null;
-        }
-        if (!Reflect.has(Object(acc), name)) {
-          return null;
-        }
-        return acc[name];
-      }, dataset);
-    },
-    set: function(dataset, pointer, value) {
-      const parent = path.get(dataset, path.parent(pointer));
-      if (parent == null) {
-        throw new TypeError(`simplyflow/path: cannot set "${pointer}" because its parent path does not exist`);
-      }
-      parent[path.pop(pointer)] = value;
-    },
-    pop: function(pointer) {
-      return pointer.split(".").pop();
-    },
-    push: function(pointer, name) {
-      return (pointer ? pointer + "." : "") + name;
-    },
-    parent: function(pointer) {
-      const names = pointer.split(".");
-      names.pop();
-      return names.join(".");
-    },
-    parents: function(dataset, pointer) {
-      let result = [];
-      while (pointer) {
-        pointer = path.parent(pointer);
-        result.unshift(pointer);
-      }
-      return result;
-    }
-  };
-  var path_default = path;
 
   // src/flow.mjs
   if (!globalThis.simply) {

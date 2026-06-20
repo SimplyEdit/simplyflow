@@ -435,4 +435,124 @@ describe('app integration details', () => {
     warn.mockRestore()
   })
 
+
+  it('passes dynamic command values from list templates', async () => {
+    document.body.innerHTML = `
+      <div id="app">
+        <ul data-simply-list="contacts">
+          <template>
+            <li>
+              <button data-simply-command="select" data-simply-value=":value.id">Select</button>
+              <button data-simply-command="selectItem" data-simply-value=":value">Select item</button>
+              <span data-simply-field="name"></span>
+            </li>
+          </template>
+        </ul>
+      </div>`
+    const container = document.getElementById('app')
+    const selected = []
+    const selectedItems = []
+    const testApp = app({
+      container,
+      data: {
+        contacts: [
+          { id: 'ada', name: 'Ada' },
+          { id: 'grace', name: 'Grace' }
+        ]
+      },
+      commands: {
+        select(el, value) {
+          selected.push(value)
+        },
+        selectItem(el, value) {
+          selectedItems.push(value)
+        }
+      }
+    })
+
+    await wait()
+    const buttons = container.querySelectorAll('button')
+    buttons[0].click()
+    buttons[3].click()
+
+    expect(selected).toEqual(['ada'])
+    expect(selectedItems).toEqual([testApp.data.contacts[1]])
+    testApp.destroy()
+  })
+
+  it('keeps dynamic command value paths correct when list items are reused', async () => {
+    document.body.innerHTML = `
+      <div id="app">
+        <ul data-simply-list="contacts">
+          <template>
+            <li>
+              <button data-simply-command="select" data-simply-value=":value.id">Select</button>
+              <span data-simply-field="name"></span>
+            </li>
+          </template>
+        </ul>
+      </div>`
+    const container = document.getElementById('app')
+    const selected = []
+    const testApp = app({
+      container,
+      data: {
+        contacts: [
+          { id: 'ada', name: 'Ada' },
+          { id: 'grace', name: 'Grace' }
+        ]
+      },
+      commands: {
+        select(el, value) {
+          selected.push(value)
+        }
+      }
+    })
+
+    await wait()
+    const adaButton = container.querySelector('button')
+    testApp.data.contacts.unshift({ id: 'alan', name: 'Alan' })
+    await wait()
+    adaButton.click()
+
+    expect(selected).toEqual(['ada'])
+    testApp.destroy()
+  })
+
+  it('passes dynamic command keys from map templates', async () => {
+    document.body.innerHTML = `
+      <div id="app">
+        <ul data-simply-map="contacts">
+          <template>
+            <li>
+              <button data-simply-command="select" data-simply-value=":key">Select</button>
+              <span data-simply-field="name"></span>
+            </li>
+          </template>
+        </ul>
+      </div>`
+    const container = document.getElementById('app')
+    const selected = []
+    const testApp = app({
+      container,
+      data: {
+        contacts: {
+          ada: { name: 'Ada' },
+          grace: { name: 'Grace' }
+        }
+      },
+      commands: {
+        select(el, value) {
+          selected.push(value)
+        }
+      }
+    })
+
+    await wait()
+    container.querySelectorAll('button')[1].click()
+
+    expect(selected).toEqual(['grace'])
+    testApp.destroy()
+  })
+
 })

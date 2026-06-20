@@ -63,6 +63,21 @@ commands: {
 }
 ```
 
+Inside list and map templates, command values can refer to the current item:
+
+```html
+<ul data-simply-list="todos">
+  <template>
+    <li>
+      <button data-simply-command="remove" data-simply-value=":value.id">Remove</button>
+      <span data-simply-field="text"></span>
+    </li>
+  </template>
+</ul>
+```
+
+`data-simply-value=":value"` passes the current item, `:value.id` passes a property of the current item, `:key` passes the current map/list key, and `:root.path` reads from the app data root.
+
 Inside a command, `this` is the app instance.
 
 ### `actions`
@@ -230,7 +245,7 @@ The app API uses `data-simply-*` attributes. They map directly to the lower-leve
 - `data-simply-list="path"` repeats an array.
 - `data-simply-map="path"` repeats an object or map.
 - `data-simply-command="name"` runs a command.
-- `data-simply-value="value"` passes a value to a command.
+- `data-simply-value="value"` passes a value to a command. In templates, `:value`, `:value.name`, `:key` and `:root.name` pass dynamic values from `app.data`.
 - `data-simply-behavior="name"` attaches a reusable behavior to an element.
 - `<link rel="simply-include" href="file.html">` includes HTML inside the app container.
 

@@ -1,4 +1,5 @@
 import { closest } from './suggest.mjs'
+import path from './path.mjs'
 const COMMAND_OPTIONS = [
     'commands',
     'handlers',
@@ -21,7 +22,7 @@ class SimplyCommands {
         }
 
 		const commandHandler = (evt) => {
-			const command = getCommand(evt, this.$handlers)
+			const command = getCommand(evt, this.$handlers, this.app)
 			if (!command) {
 				return
 			}
@@ -71,7 +72,7 @@ export function commands(options={}) {
 	return new SimplyCommands(options)
 }
 
-function getCommand(evt, handlers) {
+function getCommand(evt, handlers, app) {
     var el = evt.target.closest('[data-simply-command]')
     if (el) {
         for (let handler of handlers) {
@@ -80,7 +81,7 @@ function getCommand(evt, handlers) {
                     return {
                         name:   el.dataset.simplyCommand,
                         source: el,
-                        value:  handler.get(el)
+                        value:  handler.get(el, app)
                     }
                 }
                 return null
@@ -90,10 +91,30 @@ function getCommand(evt, handlers) {
     return null
 }
 
+
+function getConfiguredCommandValue(el, app)
+{
+    const pathAttribute = 'simplyValuePath'
+    if (Object.hasOwn(el.dataset, pathAttribute)) {
+        return {
+            found: true,
+            value: path.get(app?.data, el.dataset[pathAttribute])
+        }
+    }
+    if (Object.hasOwn(el.dataset, 'simplyValue')) {
+        return { found: true, value: el.dataset.simplyValue }
+    }
+    return { found: false, value: undefined }
+}
+
 const defaultHandlers = [
     {
         match: 'input,select,textarea',
-        get: function(el) {
+        get: function(el, app) {
+            const configuredValue = getConfiguredCommandValue(el, app)
+            if (configuredValue.found) {
+                return configuredValue.value
+            }
             if (el.tagName==='SELECT' && el.multiple) {
                 let values = []
                 for (let option of el.options) {
@@ -103,7 +124,7 @@ const defaultHandlers = [
                 }
                 return values
             }
-            return el.dataset.simplyValue || el.value
+            return el.value
         },
         check: function(el, evt) {
             return evt.type=='change' || (el.dataset.simplyImmediate && evt.type=='input')
@@ -111,8 +132,12 @@ const defaultHandlers = [
     },
     {
         match: 'a,button',
-        get: function(el) {
-            return el.dataset.simplyValue || el.href || el.value
+        get: function(el, app) {
+            const configuredValue = getConfiguredCommandValue(el, app)
+            if (configuredValue.found) {
+                return configuredValue.value
+            }
+            return el.href || el.value
         },
         check: function(el,evt) {
             return evt.type=='click' && evt.ctrlKey==false && evt.button==0
@@ -147,8 +172,8 @@ const defaultHandlers = [
     },
     {
     	match: '*',
-        get: function(el) {
-            return el.dataset.simplyValue
+        get: function(el, app) {
+            return getConfiguredCommandValue(el, app).value
         },
         check: function(el, evt) {
             return evt.type=='click' && evt.ctrlKey==false && evt.button==0

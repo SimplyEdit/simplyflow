@@ -38,6 +38,19 @@ For editable values, use `data-simply-edit`:
 
 The page updates automatically whenever `app.data` changes. Use `data-simply-edit` on form fields when the user should be able to edit a value directly.
 
+Buttons inside list templates can pass the current item or one of its fields to a command:
+
+```html
+<ul data-simply-list="todos">
+  <template>
+    <li>
+      <button data-simply-command="removeTodo" data-simply-value=":value.id">Remove</button>
+      <span data-simply-field="text"></span>
+    </li>
+  </template>
+</ul>
+```
+
 Custom top-level options become app properties, so you can add services without extra ceremony:
 
 ```javascript

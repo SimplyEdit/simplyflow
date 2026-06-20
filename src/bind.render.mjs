@@ -154,7 +154,7 @@ export function setValueByPath(root, path, value)
 export function arrayByTemplates(context)
 {
     const attribute      = this.options.attribute
-    const attributes     = [attribute+'-field',attribute+'-list',attribute+'-map']
+    const attributes     = [attribute+'-field',attribute+'-edit',attribute+'-list',attribute+'-map',attribute+'-value-path']
     const attrQuery      = '['+attributes.join('],[')+']'
     const keyAttribute   = attribute+'-key'
     const items          = Array.from(context.element.querySelectorAll(':scope > ['+keyAttribute+']'))
@@ -271,7 +271,7 @@ function updateItemKey(item, key, path, keyAttribute, attributes, attrQuery)
 export function objectByTemplates(context)
 {
     const attribute      = this.options.attribute
-    const attributes     = [attribute+'-field',attribute+'-list',attribute+'-map']
+    const attributes     = [attribute+'-field',attribute+'-edit',attribute+'-list',attribute+'-map',attribute+'-value-path']
     const attrQuery      = '['+attributes.join('],[')+']'
     const keyAttribute   = attribute+'-key'
     const items          = Array.from(context.element.querySelectorAll(':scope > ['+keyAttribute+']'))

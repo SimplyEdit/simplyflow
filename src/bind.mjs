@@ -261,6 +261,7 @@ class SimplyBind
                 binding.setAttribute(attr, parent+bind)
             }
         }
+        this.applyTemplateCommandValues(clone, template.links, path, index)
         if (typeof index !== 'undefined') {
             clone.children[0].setAttribute(attribute+'-key',index)
         }
@@ -271,6 +272,29 @@ class SimplyBind
 
         // return clone, not the firstChild, so that all whitespace is cloned as well
         return clone
+    }
+
+    applyTemplateCommandValues(fragment, links, path, index)
+    {
+        const valueAttribute     = this.options.attribute+'-value'
+        const valuePathAttribute = this.options.attribute+'-value-path'
+        const valueSelector      = '['+valueAttribute+']'
+        const elements           = Array.from(fragment.querySelectorAll(valueSelector))
+
+        for (const element of elements) {
+            let value = element.getAttribute(valueAttribute)
+            value = this.applyLinks(links, value)
+            const resolved = templateCommandValue(value, path, index)
+            if (!resolved) {
+                continue
+            }
+            if (Object.hasOwn(resolved, 'path')) {
+                element.setAttribute(valuePathAttribute, resolved.path)
+            } else {
+                element.setAttribute(valueAttribute, resolved.value)
+                element.removeAttribute(valuePathAttribute)
+            }
+        }
     }
 
     parseLinks(links)
@@ -425,6 +449,43 @@ function untrack(el, path) {
     })
 }
 
+
+
+function templateCommandValue(value, path, index)
+{
+    if (!value || value[0] !== ':') {
+        return null
+    }
+    if (value === ':key') {
+        return { value: ''+index }
+    }
+    if (value === ':value') {
+        return { path: templateItemPath(path, index) }
+    }
+    if (value.startsWith(':value.')) {
+        return { path: joinPath(templateItemPath(path, index), value.substring(':value'.length)) }
+    }
+    if (value.startsWith(':root.')) {
+        return { path: value.substring(':root.'.length) }
+    }
+    return null
+}
+
+function templateItemPath(path, index)
+{
+    if (typeof index === 'undefined') {
+        return path
+    }
+    return joinPath(path, '.'+index)
+}
+
+function joinPath(path, suffix)
+{
+    if (!path) {
+        return suffix.replace(/^\./, '')
+    }
+    return path+suffix
+}
 
 /**
  * Returns the value by walking the given path as a json pointer, starting at root
