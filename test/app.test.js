@@ -1,9 +1,15 @@
-import simply, { app, commands, actions, routes, path, findAttribute } from '../src/flow.mjs'
+import { app } from '../src/app.mjs'
 
 const wait = (ms = 80) => new Promise(resolve => setTimeout(resolve, ms))
 
+beforeEach(() => {
+  document.body.innerHTML = ''
+  history.replaceState({}, '', '/')
+})
+
 afterEach(() => {
   document.body.innerHTML = ''
+  history.replaceState({}, '', '/')
 })
 
 describe('app API', () => {
@@ -130,27 +136,85 @@ describe('app API', () => {
   })
 })
 
-describe('merged app-layer exports', () => {
-  it('exports the app layer from the SimplyFlow entrypoint', () => {
-    expect(simply.app).toBe(app)
-    expect(simply.command).toBe(commands)
-    expect(simply.action).toBe(actions)
-    expect(simply.routes).toBe(routes)
-    expect(simply.path).toBe(path)
-    expect(simply.findAttribute).toBe(findAttribute)
+
+describe('app integration details', () => {
+  it('installs inline html and css templates', () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+
+    const testApp = app({
+      container,
+      bind: false,
+      html: {
+        greeting: '<span>Hello</span>'
+      },
+      css: {
+        base: '.greeting { color: black; }'
+      }
+    })
+
+    expect(container.querySelector('template#greeting').innerHTML).toContain('<span>Hello</span>')
+    expect(container.querySelector('style#base\\.css').innerHTML).toContain('.greeting')
+    expect(testApp.app).toBe(testApp)
   })
 
-  it('finds inherited data-simply attributes', () => {
-    document.body.innerHTML = `<div data-simply-example="value"><button>Run</button></div>`
-    expect(findAttribute(document.querySelector('button'), 'data-simply-example')).toBe('value')
-  })
-})
+  it('merges components before app options and ignores prototype-polluting options', () => {
+    const container = document.createElement('div')
+    document.body.append(container)
 
-describe('path API', () => {
-  it('gets and sets dotted paths', () => {
-    const data = { person: { name: 'Ada' } }
-    expect(path.get(data, 'person.name')).toBe('Ada')
-    path.set(data, 'person.name', 'Grace')
-    expect(data.person.name).toBe('Grace')
+    const testApp = app({
+      container,
+      bind: false,
+      components: {
+        base: {
+          data: { fromComponent: true, overridden: false },
+          actions: {
+            componentAction() { return 'component' }
+          }
+        }
+      },
+      data: { overridden: true },
+      actions: {
+        appAction() { return 'app' }
+      },
+      __proto__: { polluted: true }
+    })
+
+    expect(testApp.data.fromComponent).toBe(true)
+    expect(testApp.data.overridden).toBe(true)
+    expect(testApp.actions.componentAction()).toBe('component')
+    expect(testApp.actions.appAction()).toBe('app')
+    expect({}.polluted).toBeUndefined()
+  })
+
+  it('waits for an async start hook before initializing routes', async () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const calls = []
+
+    app({
+      container,
+      bind: false,
+      baseURL: '/',
+      hooks: {
+        start: async function() {
+          calls.push('start')
+          await wait(0)
+          history.replaceState({}, '', '/ready')
+          calls.push('started')
+        }
+      },
+      routes: {
+        '/ready': function() {
+          calls.push(['route', true])
+        }
+      }
+    })
+
+    // Route initialization is scheduled after the async start hook settles.
+    await wait()
+    expect(calls[0]).toBe('start')
+    expect(calls).toContain('started')
+    expect(calls.some(call => Array.isArray(call) && call[0] === 'route')).toBe(true)
   })
 })
