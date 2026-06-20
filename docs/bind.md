@@ -23,13 +23,13 @@ The above page will display a page with a H1 element with 'The real title' as co
 
 ## How it works
 
-The databinding layer implemented here parses the DOM to see if any of the `data-flow-field`,`data-flow-list` or `data-flow-map` attributes are used. If so, it will add an effect for each that listens for any changes. When the referenced data is changed, the effect is called, and that updates the DOM, but only for the data that is changed. This is called fine-grained updates.
+The databinding layer implemented here parses the DOM to see if any of the `data-flow-field`, `data-flow-edit`, `data-flow-list` or `data-flow-map` attributes are used. If so, it will add an effect for each that listens for any changes. When the referenced data is changed, the effect is called, and that updates the DOM, but only for the data that is changed. This is called fine-grained updates.
 
 
 ## Relation to `app()`
 
 The beginner-facing `app()` API uses this binding layer internally with
-`attribute: 'data-simply'`, `root: app.data` and `container: app.container`.
+`attribute: 'data-simply'`, `root: app.data` and `container: app.container`. `app()` uses one-way binding by default; fields marked with `data-simply-edit` can write user edits back to `app.data`.
 Use the lower-level `bind()` API directly when you want a custom binding setup
 or a different attribute prefix.
 
@@ -49,6 +49,9 @@ or a different attribute prefix.
 ## Attributes
 
 - data-flow-field
+  Shows a value from the root object.
+- data-flow-edit
+  Shows a value from the root object and writes user edits back for that element. This reuses field rendering and opts in to reverse updates without enabling two-way binding for every binding.
 - data-flow-list
 - data-flow-map
 	These reference a JSON path inside the root object, to bind to.
@@ -109,7 +112,7 @@ Finally the default transformer will always be run. These are provided by the li
 
 ## Templates
 
-Any field, list or map can use one or more templates:
+Any field, edit field, list or map can use one or more templates:
 
 ```html
 <ul data-flow-list="menu">
@@ -150,7 +153,7 @@ You can add more than one template, if you use `data-flow-match`. The first temp
 
 - :key
 - :value
-	These attribute values can be used for `data-flow-field`, `data-flow-list` and `data-flow-map`, when inside a template used with a `data-flow-list` or `data-flow-map`.
+	These attribute values can be used for `data-flow-field`, `data-flow-edit`, `data-flow-list` and `data-flow-map`, when inside a template used with a `data-flow-list` or `data-flow-map`.
 	The template is rendered for each entry in the list or map. For each entry, `:key` will reference the current property name or number, and `:value` the current property value.
 	You can add subpaths to these values by adding `.subproperty`, just like a normal JSON path.
 	```
@@ -169,3 +172,16 @@ You can add more than one template, if you use `data-flow-match`. The first temp
 - :root
 	Whenever you specify this value, you will always reference the root data object. You can add subpaths to this value, just like a normal JSON path.
  	
+
+## Editable fields
+
+`data-flow-edit` is the explicit editable version of `data-flow-field`:
+
+```html
+<input data-flow-edit="person.name">
+<span data-flow-field="person.name"></span>
+```
+
+The input displays `person.name`. When the user changes the input, the value is written back to the data and the normal field updates follow from that data change.
+
+`bind({ twoway: true })` remains available for advanced/editor use cases where all field and list bindings should observe DOM changes. For normal apps, prefer one-way fields plus explicit editable fields.

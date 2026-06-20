@@ -1201,6 +1201,9 @@
   }
 
   // src/bind.render.mjs
+  function writesFromDom(binding, context) {
+    return binding.options.twoway || context.edit;
+  }
   function field(context) {
     if (context.templates?.length) {
       fieldByTemplates.call(this, context);
@@ -1485,7 +1488,7 @@
     } else if (!matchValue(el.value, value)) {
       el.value = "" + value;
     }
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
       trackDomField.call(this, context.element, ["value"], true, "value");
     }
   }
@@ -1518,9 +1521,12 @@
         setSelectOptions(el, value.options);
       }
       if (typeof value.selected !== "undefined") {
-        select(Object.assign({}, context, { value: value.selected }));
+        select.call(this, Object.assign({}, context, { value: value.selected }));
       }
       setProperties(el, value, "name", "id", "selectedIndex", "className");
+    }
+    if (writesFromDom(this, context)) {
+      trackDomField.call(this, context.element, ["value"], true, "value");
     }
   }
   function addOption(select2, option) {
@@ -1549,7 +1555,7 @@
   }
   function anchor(context) {
     element.call(this, context, "target", "href", "name", "newwindow", "nofollow");
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
       batch(() => {
         updateProperties.call(this, context, ["target", "href", "name", "newwindow", "nofollow"]);
       });
@@ -1557,7 +1563,7 @@
   }
   function image(context) {
     setProperties(context.element, context.value, "title", "alt", "src", "id");
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
       batch(() => {
         updateProperties.call(this, context, ["title", "alt", "src", "id"]);
       });
@@ -1565,7 +1571,7 @@
   }
   function iframe(context) {
     setProperties(context.element, context.value, "title", "src", "id");
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
       batch(() => {
         updateProperties.call(this, context, ["title", "src", "id"]);
       });
@@ -1573,7 +1579,7 @@
   }
   function meta(context) {
     setProperties(context.element, context.value, "content", "id");
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
       batch(() => {
         updateProperties.call(this, context, ["content", "id"]);
       });
@@ -1592,7 +1598,7 @@
     }
     const props = ["innerHTML", "title", "id", "className"].concat(extraprops);
     setProperties(el, value, ...props);
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
       trackDomField.call(this, context.element, props, valueIsString);
     }
   }
@@ -1647,9 +1653,9 @@
      * @param Object options - a set of options for this instance, options may include:
      *  - root (signal) (required) - the root data object that contains al signals that can be bound
      *  - container (HTMLElement) - the dom element to use as the root for all bindings
-     *  - attribute (string) - the prefix for the field, list and map attributes, e.g. 'data-bind'
+     *  - attribute (string) - the prefix for the field, edit, list and map attributes, e.g. 'data-bind'
      *  - transformers (object name:function) - a map of transformer names and functions
-     *  - render (object with field, list and map properties)
+     *  - render (object with field, list and map properties); edit uses field renderers
      */
     constructor(options) {
       this.bindings = /* @__PURE__ */ new Map();
@@ -1688,7 +1694,7 @@
         this.options.transformers = Object.assign({}, defaultTransformers, options?.transformers);
       }
       const attribute = this.options.attribute;
-      const bindAttributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
+      const bindAttributes = [attribute + "-field", attribute + "-edit", attribute + "-list", attribute + "-map"];
       const transformAttribute = attribute + "-transform";
       const getBindingAttribute = (el) => {
         const foundAttribute = bindAttributes.find((attr) => el.hasAttribute(attr));
@@ -1712,6 +1718,7 @@
             templates: el.querySelectorAll(":scope > template"),
             attribute: getBindingAttribute(el)
           };
+          context.edit = context.attribute === this.options.attribute + "-edit";
           context.path = this.getBindingPath(el);
           context.value = getValueByPath(this.options.root, context.path);
           context.element = el;
@@ -1723,6 +1730,7 @@
         let transformers;
         switch (context.attribute) {
           case this.options.attribute + "-field":
+          case this.options.attribute + "-edit":
             transformers = Array.from(this.options.render.field);
             break;
           case this.options.attribute + "-list":
@@ -1762,7 +1770,7 @@
         }
       };
       const updateBindings = (changes) => {
-        const selector = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`;
+        const selector = `[${attribute}-field],[${attribute}-edit],[${attribute}-list],[${attribute}-map]`;
         for (const change of changes) {
           if (change.type == "childList" && change.addedNodes) {
             for (let node of change.addedNodes) {
@@ -1787,7 +1795,7 @@
         childList: true
       });
       const bindings = this.options.container.querySelectorAll(
-        ":is([" + this.options.attribute + "-field],[" + this.options.attribute + "-list],[" + this.options.attribute + "-map]):not(template)"
+        ":is([" + this.options.attribute + "-field],[" + this.options.attribute + "-edit],[" + this.options.attribute + "-list],[" + this.options.attribute + "-map]):not(template)"
       );
       try {
         if (bindings.length) {
@@ -1825,8 +1833,8 @@
         throw new Error("template must contain a single root node", { cause: template });
       }
       const attribute = this.options.attribute;
-      const attributes = [attribute + "-field", attribute + "-list", attribute + "-map"];
-      const bindings = clone2.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`);
+      const attributes = [attribute + "-field", attribute + "-edit", attribute + "-list", attribute + "-map"];
+      const bindings = clone2.querySelectorAll(`[${attribute}-field],[${attribute}-edit],[${attribute}-list],[${attribute}-map]`);
       for (let binding of bindings) {
         if (binding.tagName == "TEMPLATE") {
           continue;
@@ -1878,6 +1886,7 @@
     getBindingPath(el) {
       const attributes = [
         this.options.attribute + "-field",
+        this.options.attribute + "-edit",
         this.options.attribute + "-list",
         this.options.attribute + "-map"
       ];
@@ -2796,7 +2805,6 @@
   var APP_OPTIONS = [
     "container",
     "data",
-    "bind",
     "html",
     "css",
     "hooks",
@@ -2828,13 +2836,13 @@
         switch (key) {
           case "container":
           case "data":
-          case "bind":
           case "html":
           case "css":
           case "hooks":
           case "components":
           case "baseURL":
           case "root":
+          case "bind":
             break;
           case "commands":
             this.commands = commands({ app: this, container: this.container, commands: options.commands });
@@ -2866,18 +2874,11 @@
             break;
         }
       }
-      if (options.bind !== false) {
-        const bindOptions = typeof options.bind === "object" ? options.bind : {};
-        this.binding = bind(Object.assign({
-          root: this.data,
-          container: this.container,
-          attribute: "data-simply",
-          twoway: true
-        }, bindOptions, {
-          root: this.data,
-          container: this.container
-        }));
-      }
+      this.binding = bind({
+        root: this.data,
+        container: this.container,
+        attribute: "data-simply"
+      });
       accesskeys({ app: this });
     }
     get app() {

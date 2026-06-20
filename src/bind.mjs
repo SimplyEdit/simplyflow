@@ -16,9 +16,9 @@ class SimplyBind
      * @param Object options - a set of options for this instance, options may include:
      *  - root (signal) (required) - the root data object that contains al signals that can be bound
      *  - container (HTMLElement) - the dom element to use as the root for all bindings
-     *  - attribute (string) - the prefix for the field, list and map attributes, e.g. 'data-bind'
+     *  - attribute (string) - the prefix for the field, edit, list and map attributes, e.g. 'data-bind'
      *  - transformers (object name:function) - a map of transformer names and functions
-     *  - render (object with field, list and map properties)
+     *  - render (object with field, list and map properties); edit uses field renderers
      */
     constructor(options)
     {
@@ -65,7 +65,7 @@ class SimplyBind
             this.options.transformers = Object.assign({}, defaultTransformers, options?.transformers)
         }
         const attribute      = this.options.attribute
-        const bindAttributes = [attribute+'-field',attribute+'-list',attribute+'-map']
+        const bindAttributes = [attribute+'-field',attribute+'-edit',attribute+'-list',attribute+'-map']
         const transformAttribute = attribute+'-transform'
 
         const getBindingAttribute = (el) => {
@@ -97,6 +97,7 @@ class SimplyBind
                     templates: el.querySelectorAll(':scope > template'),
                     attribute: getBindingAttribute(el)
                 }
+                context.edit = context.attribute === this.options.attribute+'-edit'
                 context.path = this.getBindingPath(el)
                 context.value = getValueByPath(this.options.root, context.path)
                 context.element = el
@@ -113,6 +114,7 @@ class SimplyBind
             let transformers
             switch(context.attribute) {
                 case this.options.attribute+'-field':
+                case this.options.attribute+'-edit':
                     transformers = Array.from(this.options.render.field)
                     break
                 case this.options.attribute+'-list':
@@ -161,7 +163,7 @@ class SimplyBind
         // if any element is added, and has a data bind attribute
         // it applies that data binding
         const updateBindings = (changes) => {
-            const selector = `[${attribute}-field],[${attribute}-list],[${attribute}-map]`
+            const selector = `[${attribute}-field],[${attribute}-edit],[${attribute}-list],[${attribute}-map]`
             for (const change of changes) {
                 if (change.type=="childList" && change.addedNodes) {
                     for (let node of change.addedNodes) {
@@ -195,6 +197,7 @@ class SimplyBind
         // won't trigger their own bindings
         const bindings = this.options.container.querySelectorAll(
             ':is(['+this.options.attribute+'-field]'+
+            ',['+this.options.attribute+'-edit]'+
             ',['+this.options.attribute+'-list]'+
             ',['+this.options.attribute+'-map]):not(template)'
         )
@@ -239,8 +242,8 @@ class SimplyBind
         }
         const attribute = this.options.attribute
 
-        const attributes = [attribute+'-field',attribute+'-list',attribute+'-map']
-        const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-list],[${attribute}-map]`)
+        const attributes = [attribute+'-field',attribute+'-edit',attribute+'-list',attribute+'-map']
+        const bindings = clone.querySelectorAll(`[${attribute}-field],[${attribute}-edit],[${attribute}-list],[${attribute}-map]`)
         for (let binding of bindings) {
             if (binding.tagName=='TEMPLATE') {
                 continue
@@ -302,6 +305,7 @@ class SimplyBind
     {
         const attributes = [
             this.options.attribute+'-field', 
+            this.options.attribute+'-edit',
             this.options.attribute+'-list',
             this.options.attribute+'-map'
         ]

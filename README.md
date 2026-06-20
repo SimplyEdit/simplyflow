@@ -29,7 +29,14 @@ const counter = app({
 </div>
 ```
 
-The page updates automatically whenever `app.data` changes.
+For editable values, use `data-simply-edit`:
+
+```html
+<input data-simply-edit="name">
+<span data-simply-field="name"></span>
+```
+
+The page updates automatically whenever `app.data` changes. Use `data-simply-edit` on form fields when the user should be able to edit a value directly.
 
 Custom top-level options become app properties, so you can add services without extra ceremony:
 

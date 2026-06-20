@@ -37,7 +37,7 @@ describe('app API', () => {
     testApp.destroy()
   })
 
-  it('uses data-simply bindings with two-way form fields by default', async () => {
+  it('uses data-simply-field as one-way binding by default', async () => {
     document.body.innerHTML = `<div id="app"><input data-simply-field="name"></div>`
     const container = document.getElementById('app')
     const testApp = app({
@@ -54,7 +54,34 @@ describe('app API', () => {
     input.value = 'Grace'
     input.dispatchEvent(new Event('input', { bubbles: true }))
     await wait()
+    expect(testApp.data.name).toBe('Ada')
+    testApp.destroy()
+  })
+
+  it('uses data-simply-edit for editable fields', async () => {
+    document.body.innerHTML = `<div id="app"><input data-simply-edit="name"><textarea data-simply-edit="note"></textarea></div>`
+    const container = document.getElementById('app')
+    const testApp = app({
+      container,
+      data: {
+        name: 'Ada',
+        note: 'hello'
+      }
+    })
+
+    await wait()
+    const input = container.querySelector('input')
+    const textarea = container.querySelector('textarea')
+    expect(input.value).toBe('Ada')
+    expect(textarea.value).toBe('hello')
+
+    input.value = 'Grace'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    textarea.value = 'updated'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await wait()
     expect(testApp.data.name).toBe('Grace')
+    expect(testApp.data.note).toBe('updated')
     testApp.destroy()
   })
 
@@ -119,21 +146,19 @@ describe('app API', () => {
     testApp.destroy()
   })
 
-  it('can disable automatic binding for app-level tests or custom binding', () => {
-    const container = document.createElement('div')
-    container.innerHTML = `<span data-simply-field="title"></span>`
-    document.body.append(container)
-
+  it('ignores the historical app-level bind option', async () => {
+    document.body.innerHTML = `<div id="app"><span data-simply-field="name"></span></div>`
+    const container = document.getElementById('app')
     const testApp = app({
       container,
-      bind: false,
-      data: {
-        title: 'not rendered'
-      }
+      data: { name: 'Ada' },
+      bind: false
     })
 
-    expect(testApp.binding).toBeUndefined()
-    expect(container.querySelector('span').innerHTML).toBe('')
+    await wait()
+    expect(container.querySelector('span').innerHTML).toBe('Ada')
+    expect(testApp.bind).toBeUndefined()
+    testApp.destroy()
   })
 })
 
@@ -145,7 +170,6 @@ describe('app integration details', () => {
 
     const testApp = app({
       container,
-      bind: false,
       html: {
         greeting: '<span>Hello</span>'
       },
@@ -157,6 +181,7 @@ describe('app integration details', () => {
     expect(container.querySelector('template#greeting').innerHTML).toContain('<span>Hello</span>')
     expect(container.querySelector('style#base\\.css').innerHTML).toContain('.greeting')
     expect(testApp.app).toBe(testApp)
+    testApp.destroy()
   })
 
   it('merges components before app options and ignores prototype-polluting options', () => {
@@ -165,7 +190,6 @@ describe('app integration details', () => {
 
     const testApp = app({
       container,
-      bind: false,
       components: {
         base: {
           data: { fromComponent: true, overridden: false },
@@ -186,6 +210,7 @@ describe('app integration details', () => {
     expect(testApp.actions.componentAction()).toBe('component')
     expect(testApp.actions.appAction()).toBe('app')
     expect({}.polluted).toBeUndefined()
+    testApp.destroy()
   })
 
   it('waits for an async start hook before initializing routes', async () => {
@@ -193,9 +218,8 @@ describe('app integration details', () => {
     document.body.append(container)
     const calls = []
 
-    app({
+    const testApp = app({
       container,
-      bind: false,
       baseURL: '/',
       hooks: {
         start: async function() {
@@ -217,6 +241,7 @@ describe('app integration details', () => {
     expect(calls[0]).toBe('start')
     expect(calls).toContain('started')
     expect(calls.some(call => Array.isArray(call) && call[0] === 'route')).toBe(true)
+    testApp.destroy()
   })
   it('copies custom app options without warning so actions can use app services', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
@@ -227,7 +252,6 @@ describe('app integration details', () => {
     }
 
     const testApp = app({
-      bind: false,
       data: {
         item: null
       },
@@ -244,6 +268,7 @@ describe('app integration details', () => {
     expect(testApp.api).toBe(api)
     expect(testApp.data.item).toEqual({ path: 'foo.json', title: 'Loaded' })
     expect(warn).not.toHaveBeenCalled()
+    testApp.destroy()
     warn.mockRestore()
   })
 
@@ -251,7 +276,6 @@ describe('app integration details', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
 
     const testApp = app({
-      bind: false,
       data: {},
       commmands: {
         save() {}
@@ -261,6 +285,7 @@ describe('app integration details', () => {
     expect(testApp.commmands).toEqual({ save: expect.any(Function) })
     expect(testApp.commands).toBeUndefined()
     expect(warn).toHaveBeenCalledWith('simplyflow/app: unknown option "commmands". Did you mean "commands"? The option was still added to the app as "app.commmands".')
+    testApp.destroy()
     warn.mockRestore()
   })
 

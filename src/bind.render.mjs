@@ -7,6 +7,11 @@ import { throttledEffect, effect, untracked, batch } from './state.mjs'
 import { getValueByPath } from './bind.mjs'
 import { DEP } from './symbols.mjs'
 
+function writesFromDom(binding, context)
+{
+    return binding.options.twoway || context.edit
+}
+
 /**
  * This function is used by default to render dom elements with the `data-flow-field` attribute.
  * It will switch to only switching in template content if the context has any templates.
@@ -397,7 +402,7 @@ export function input(context)
         el.value = ''+value
     }
 
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
         trackDomField.call(this, context.element, ['value'], true, 'value')
     }
 }
@@ -442,9 +447,13 @@ export function select(context)
             setSelectOptions(el, value.options)
         }
         if (typeof value.selected !== 'undefined') {
-            select(Object.assign({}, context, {value:value.selected}))
+            select.call(this, Object.assign({}, context, {value:value.selected}))
         }
         setProperties(el, value, 'name', 'id', 'selectedIndex', 'className') // allow innerHTML? if so call element instead
+    }
+
+    if (writesFromDom(this, context)) {
+        trackDomField.call(this, context.element, ['value'], true, 'value')
     }
 }
 
@@ -491,7 +500,7 @@ export function setSelectOptions(select,options)
 export function anchor(context)
 {
     element.call(this, context, 'target', 'href', 'name', 'newwindow', 'nofollow')
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
         batch(() => {
             updateProperties.call(this, context, ['target', 'href', 'name', 'newwindow', 'nofollow'])
         })
@@ -504,7 +513,7 @@ export function anchor(context)
 export function image(context)
 {
     setProperties(context.element, context.value, 'title', 'alt', 'src', 'id')
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
         batch(() => {
             updateProperties.call(this, context, ['title', 'alt', 'src', 'id'])
         })
@@ -517,7 +526,7 @@ export function image(context)
 export function iframe(context)
 {
     setProperties(context.element, context.value, 'title', 'src', 'id')
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
         batch(() => {
             updateProperties.call(this, context, ['title','src','id'])
         })
@@ -530,7 +539,7 @@ export function iframe(context)
 export function meta(context)
 {
     setProperties(context.element, context.value, 'content', 'id')
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
         batch(() => {
             updateProperties.call(this, context, ['content','id'])
         })
@@ -554,7 +563,7 @@ export function element(context, ...extraprops)
     }
     const props = ['innerHTML','title','id','className'].concat(extraprops)
     setProperties(el, value, ...props)
-    if (this.options.twoway) {
+    if (writesFromDom(this, context)) {
         trackDomField.call(this, context.element, props, valueIsString)
     }
 }

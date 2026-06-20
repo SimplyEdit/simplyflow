@@ -28,7 +28,7 @@ const counter = app({
 </div>
 ```
 
-When `this.data.count` changes, every matching `data-simply-field` updates automatically.
+When `this.data.count` changes, every matching `data-simply-field` updates automatically. User edits are written back only for fields marked with `data-simply-edit`.
 
 ## Options
 
@@ -139,40 +139,32 @@ const contacts = app({
 
 SimplyFlow warns only when an unknown option looks like a typo of a built-in option. For example, `commmands` warns and suggests `commands`, but `api` is accepted without warning.
 
-### `bind`
+### Binding
 
-Binding options passed to the underlying `bind()` call. Set `bind: false` to disable automatic binding.
-
-```javascript
-app({
-  bind: {
-    transformers: {
-      uppercase(context, next) {
-        context.value = String(context.value).toUpperCase()
-        next(context)
-      }
-    }
-  }
-})
-```
-
-The app always uses:
-
-```javascript
-attribute: 'data-simply'
-root: app.data
-container: app.container
-```
+`app()` always creates a one-way `data-simply` binding for the app container and `app.data`.
+Use `data-simply-edit` for individual fields that should write user edits back to `app.data`. The historical `bind` app option is ignored.
 
 ## HTML binding attributes
 
 The app API uses `data-simply-*` attributes. They map directly to the lower-level `bind()` API:
 
-- `data-simply-field="path"` shows or edits one value.
+- `data-simply-field="path"` shows one value.
+- `data-simply-edit="path"` shows one value and writes user edits back.
 - `data-simply-list="path"` repeats an array.
 - `data-simply-map="path"` repeats an object or map.
 - `data-simply-command="name"` runs a command.
 - `data-simply-value="value"` passes a value to a command.
+
+Use `data-simply-edit` on ordinary editable controls such as text inputs, textareas and single selects:
+
+```html
+<input data-simply-edit="person.name">
+<textarea data-simply-edit="person.notes"></textarea>
+<select data-simply-edit="person.country">
+  <option value="nl">Netherlands</option>
+  <option value="be">Belgium</option>
+</select>
+```
 
 Example list:
 
@@ -180,7 +172,6 @@ Example list:
 <ul data-simply-list="todos">
   <template>
     <li>
-      <input type="checkbox" data-simply-field=":value.done">
       <span data-simply-field=":value.text"></span>
     </li>
   </template>

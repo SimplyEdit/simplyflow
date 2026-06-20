@@ -809,6 +809,59 @@ describe('bind API contract coverage', () => {
   })
 
 
+  it('uses data-flow-edit as an editable field without enabling global two-way binding', async () => {
+    document.body.innerHTML = `
+      <input id="name" data-flow-edit="name">
+      <select id="choice" data-flow-edit="choice"><option value="a">A</option><option value="b">B</option></select>
+      <div id="display" data-flow-field="name"></div>
+    `
+    const data = signal({ name: 'Ada', choice: 'a' })
+    const databind = bind({ container: document.body, root: data })
+
+    try {
+      await wait()
+      const input = document.getElementById('name')
+      const select = document.getElementById('choice')
+      expect(input.value).toBe('Ada')
+      expect(select.value).toBe('a')
+
+      input.value = 'Grace'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      select.value = 'b'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+      await wait()
+
+      expect(data.name).toBe('Grace')
+      expect(data.choice).toBe('b')
+      expect(document.getElementById('display').innerHTML).toBe('Grace')
+    } finally {
+      databind.destroy()
+    }
+  })
+
+  it('rewrites data-flow-edit paths inside list templates', async () => {
+    document.body.innerHTML = `<ul data-flow-list="people">
+      <template><li><input data-flow-edit="name"><span data-flow-field="name"></span></li></template>
+    </ul>`
+    const data = signal({ people: [{ name: 'Ada' }] })
+    const databind = bind({ container: document.body, root: data })
+
+    try {
+      await wait()
+      const input = document.querySelector('input')
+      expect(input.getAttribute('data-flow-edit')).toBe('people.0.name')
+      expect(input.value).toBe('Ada')
+
+      input.value = 'Grace'
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      await wait()
+      expect(data.people[0].name).toBe('Grace')
+      expect(document.querySelector('span').innerHTML).toBe('Grace')
+    } finally {
+      databind.destroy()
+    }
+  })
+
   it('does not rewrite binding attributes inside nested template declarations', async () => {
     document.body.innerHTML = `<div data-flow-list="rows">
       <template>

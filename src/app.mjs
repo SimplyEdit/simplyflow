@@ -10,7 +10,6 @@ import { findAttribute } from './dom.mjs'
 const APP_OPTIONS = [
     'container',
     'data',
-    'bind',
     'html',
     'css',
     'hooks',
@@ -35,6 +34,7 @@ class SimplyApp
             options = mergedOptions
         }
 
+
         this.container = options.container || document.body
         this.data = signal(options.data || {})
         this.hooks = options.hooks
@@ -48,13 +48,15 @@ class SimplyApp
             switch(key) {
                 case 'container':
                 case 'data':
-                case 'bind':
                 case 'html':
                 case 'css':
                 case 'hooks':
                 case 'components':
                 case 'baseURL':
                 case 'root':
+                case 'bind':
+                    // Historical experimental app option. App-level binding is
+                    // no longer configurable; use lower-level bind() directly.
                     break
                 case 'commands':
                     this.commands = commands({ app: this, container: this.container, commands: options.commands})
@@ -90,18 +92,11 @@ class SimplyApp
             }
         }
 
-        if (options.bind !== false) {
-            const bindOptions = typeof options.bind === 'object' ? options.bind : {}
-            this.binding = bind(Object.assign({
-                root: this.data,
-                container: this.container,
-                attribute: 'data-simply',
-                twoway: true
-            }, bindOptions, {
-                root: this.data,
-                container: this.container
-            }))
-        }
+        this.binding = bind({
+            root: this.data,
+            container: this.container,
+            attribute: 'data-simply'
+        })
 
         accesskeys({ app: this })
     }
