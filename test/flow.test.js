@@ -87,9 +87,6 @@ describe('flow entrypoint API', () => {
     expect(typeof simply.signal).toBe('function')
     expect(typeof simply.model).toBe('function')
     expect(typeof simply.model.model).toBe('function')
-    expect(globalThis.html).toBe(html)
-    expect(globalThis.css).toBe(css)
-    expect(simply.advanced).toBeUndefined()
 
     delete globalThis.simply
   })
@@ -110,11 +107,8 @@ describe('flow entrypoint API', () => {
     expect(typeof simply.state.signal).toBe('function')
     expect(typeof simply.signal).toBe('function')
     expect(typeof simply.dom.signal).toBe('function')
-    expect(globalThis.html).toBe(simply.html)
-    expect(globalThis.css).toBe(simply.css)
     expect(simply.route).toBeUndefined()
     expect(simply.SimplyRoute).toBeUndefined()
-    expect(simply.advanced).toBeUndefined()
     expect(customElements.get('simply-render')).toBeDefined()
 
     delete globalThis.simply

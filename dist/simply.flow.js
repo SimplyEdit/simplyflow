@@ -3565,9 +3565,6 @@
     get app() {
       return this;
     }
-    findAttribute(...params) {
-      return findAttribute.apply(this, params);
-    }
     destroy() {
       this.destroyed = true;
       if (this.binding) {
@@ -3776,9 +3773,7 @@
     includes,
     shortcuts,
     path: path_default,
-    routes,
-    html,
-    css
+    routes
   });
   delete globalThis.simply.advanced;
   var flow_default = globalThis.simply;

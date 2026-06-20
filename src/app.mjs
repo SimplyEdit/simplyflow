@@ -6,7 +6,6 @@ import { actions } from './action.mjs'
 import { shortcuts, destroyShortcuts, accesskeys, destroyAccesskeys } from './shortcut.mjs'
 import { behaviors } from './behavior.mjs'
 import { includes } from './include.mjs'
-import { findAttribute } from './dom.mjs'
 import { closest } from './suggest.mjs'
 
 const APP_OPTIONS = [
@@ -101,10 +100,6 @@ class SimplyApp
     get app()
     {
         return this
-    }
-
-    findAttribute(...params) {
-        return findAttribute.apply(this, params)
     }
 
     destroy()

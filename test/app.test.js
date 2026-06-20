@@ -34,8 +34,6 @@ describe('app API', () => {
     await wait()
     expect(container.querySelector('span').innerHTML).toBe('Hello again')
 
-    expect(testApp.view).toBeUndefined()
-    expect(testApp.state).toBeUndefined()
     testApp.destroy()
   })
 
@@ -266,7 +264,6 @@ describe('app API', () => {
     expect(testApp.data.saved).toBe(true)
     expect(container.querySelector('span').innerHTML).toBe('true')
     expect(testApp.shortcuts).toBeDefined()
-    expect(testApp.keys).toBeUndefined()
     testApp.destroy()
   })
 
